@@ -72,16 +72,107 @@ HMM_WIND_FEATURES  = ["wind_de_z"]   # z-scored wind GWh
 
 # ── Data loading helpers ─────────────────────────────────────────────────────
 
-def _load_spot(days: int) -> pd.DataFrame:
-    """Returns wide-format daily prices: date | NO1 | NO2 | SE3 | NL | FI."""
-    from data.spot_prices import fetch_spot_prices
-    df = fetch_spot_prices(days=days)
-    if df.empty:
+def _load_spot_entsoe(years: int) -> pd.DataFrame:
+    """
+    Fetch daily average day-ahead prices for NO2 and NL from ENTSO-E A44.
+    Queries in annual chunks (ENTSO-E limit) and concatenates.
+    Returns DataFrame with columns: date, NO2, NL.
+    """
+    import os
+    try:
+        from entsoe import EntsoePandasClient
+    except ImportError:
         return pd.DataFrame()
-    wide = df.pivot_table(index="date", columns="zone", values="price_eur_mwh", aggfunc="mean")
+
+    key = os.getenv("ENTSOE_API_KEY", "")
+    if not key:
+        return pd.DataFrame()
+
+    client = EntsoePandasClient(api_key=key)
+    end   = pd.Timestamp.now(tz="UTC").normalize()
+    start = end - pd.Timedelta(days=int(years * 365))
+
+    zones = {
+        "NO2": "10YNO-2--------T",
+        "NL":  "10YNL----------L",
+    }
+
+    results: dict[str, pd.Series] = {}
+    for zone_name, eic in zones.items():
+        chunks: list[pd.Series] = []
+        chunk_start = start
+        while chunk_start < end:
+            chunk_end = min(chunk_start + pd.Timedelta(days=365), end)
+            try:
+                s = client.query_day_ahead_prices(eic, start=chunk_start, end=chunk_end)
+                if s is not None and not s.empty:
+                    chunks.append(s)
+            except Exception:
+                pass
+            chunk_start = chunk_end
+        if chunks:
+            combined = pd.concat(chunks)
+            combined = combined[~combined.index.duplicated(keep="last")]
+            results[zone_name] = combined
+
+    if not results:
+        return pd.DataFrame()
+
+    frames = []
+    for zone_name, series in results.items():
+        daily = (
+            series
+            .tz_convert("UTC")
+            .resample("D")
+            .mean()
+            .rename(zone_name)
+        )
+        frames.append(daily)
+
+    wide = pd.concat(frames, axis=1)
+    wide.index = wide.index.tz_localize(None)
+    wide.index.name = "date"
+    wide = wide.reset_index()
+    wide["date"] = pd.to_datetime(wide["date"]).dt.normalize()
+    return wide.dropna(how="all", subset=["NO2", "NL"])
+
+
+def _load_spot(days: int) -> pd.DataFrame:
+    """
+    Returns wide-format daily prices: date | NO2 | NL.
+    Tries ENTSO-E A44 first (years of history); falls back to Nord Pool
+    for recent data or when no ENTSO-E key is available.
+    """
+    years = max(1, days // 365)
+
+    # Primary: ENTSO-E A44 — returns years of data in a few chunked calls
+    df = _load_spot_entsoe(years)
+    if not df.empty and len(df) > 100:
+        return df
+
+    # Fallback: Nord Pool public API (recent data only, ~30–90 days reliable)
+    from data.spot_prices import fetch_spot_prices
+    raw = fetch_spot_prices(days=min(days, 90))
+    if raw.empty:
+        return df  # return whatever ENTSO-E gave us, even if sparse
+
+    wide = raw.pivot_table(index="date", columns="zone", values="price_eur_mwh", aggfunc="mean")
     wide.index = pd.to_datetime(wide.index)
     wide.columns.name = None
-    return wide.reset_index().rename(columns={"index": "date"})
+    wide = wide.reset_index().rename(columns={"index": "date"})
+
+    # Merge ENTSO-E history with fresh Nord Pool rows
+    if not df.empty:
+        combined = pd.concat([df, wide], ignore_index=True)
+        combined = (
+            combined
+            .sort_values("date")
+            .drop_duplicates(subset=["date"], keep="last")
+            .reset_index(drop=True)
+        )
+        return combined
+
+    return wide
 
 
 def _load_ttf(years: int) -> pd.DataFrame:
