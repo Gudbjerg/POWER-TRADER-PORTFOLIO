@@ -1,0 +1,34 @@
+# Secrets — never commit these
+.env
+.streamlit/secrets.toml
+
+# Python
+__pycache__/
+*.pyc
+*.egg-info/
+.venv/
+venv/
+env/
+
+# macOS
+.DS_Store
+
+# IDE
+.vscode/
+.idea/
+
+# Runtime state (local only, accumulates on disk)
+.sentiment_history.csv
+models/data/features_cache.csv
+models/data/features_meta.json
+# model weights ARE committed (small files, required for live inference on Cloud)
+# models/weights/*.pt
+# models/weights/*.joblib
+# models/weights/*_meta.json
+
+# Project-specific notes (personal context files)
+.extra_context.md
+.prompt.md
+1st_prompt.md
+extra_context.md
+POWER\ TRADER\ PORTFOLIO.md

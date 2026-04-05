@@ -1,0 +1,86 @@
+[
+  {
+    "date": "2022-02-24",
+    "label": "Russia invades Ukraine",
+    "description": "Russian forces enter Ukraine. European gas markets enter sustained crisis; TTF surges from ~80 to over 200 EUR/MWh within weeks. EU begins emergency storage mandate discussions.",
+    "category": "geopolitical",
+    "impact": "critical"
+  },
+  {
+    "date": "2022-09-03",
+    "label": "Nord Stream indefinite shutdown",
+    "description": "Gazprom halts Nord Stream 1 flows indefinitely, citing turbine maintenance. TTF peaks near 350 EUR/MWh. Germany declares gas emergency. EU begins demand reduction measures.",
+    "category": "supply",
+    "impact": "critical"
+  },
+  {
+    "date": "2023-07-01",
+    "label": "EU storage mandate enters force",
+    "description": "EU Regulation 2022/1032 requires member states to fill gas storage to 90% by November 1 each year. Structural floor placed under injection-season demand.",
+    "category": "policy",
+    "impact": "warn"
+  },
+  {
+    "date": "2024-01-01",
+    "label": "Ukraine-Russia transit agreement expires",
+    "description": "Five-year Ukraine-Russia gas transit agreement expires. Remaining Russian pipeline volumes via Ukraine cease. Small residual flows to Slovakia, Austria, Hungary affected.",
+    "category": "supply",
+    "impact": "warn"
+  },
+  {
+    "date": "2025-01-20",
+    "label": "US tariff threats on EU imports",
+    "description": "US administration signals broad tariffs on European goods. Market concern over retaliatory measures affecting US LNG export agreements and cargo diversion.",
+    "category": "geopolitical",
+    "impact": "warn"
+  },
+  {
+    "date": "2025-09-15",
+    "label": "Norwegian Asgard/Troll maintenance",
+    "description": "Scheduled maintenance on Norwegian Asgard transport system and Troll field reduces Norwegian pipeline export capacity by approximately 15% for three weeks.",
+    "category": "supply",
+    "impact": "warn"
+  },
+  {
+    "date": "2026-01-08",
+    "label": "Cold spell: Northern Europe",
+    "description": "Sustained cold weather across Scandinavia and Northern Europe drives heating demand above seasonal norms. Norwegian hydro reservoir drawdown accelerates.",
+    "category": "weather",
+    "impact": "warn"
+  },
+  {
+    "date": "2026-01-20",
+    "label": "US tariff escalation",
+    "description": "US formalises 25% tariffs on European steel and aluminium. EU considers counter-measures including LNG offtake reviews. TTF reacts to uncertainty over US LNG cargo commitments.",
+    "category": "geopolitical",
+    "impact": "warn"
+  },
+  {
+    "date": "2026-02-05",
+    "label": "Norwegian Troll outage",
+    "description": "Unplanned outage at Troll field reduces Norwegian gas exports by approximately 50 mcm/day for ten days. One of the largest unplanned reductions since 2022.",
+    "category": "supply",
+    "impact": "warn"
+  },
+  {
+    "date": "2026-02-28",
+    "label": "US-Iran escalation ('Epic Fury')",
+    "description": "US military operation in the Strait of Hormuz region triggers fears over LNG transit disruption. TTF rises approximately 40% in three days on supply shock concerns. Qatar and Australian LNG cargoes rerouted. Markets reassess Hormuz transit risk premium.",
+    "category": "geopolitical",
+    "impact": "critical"
+  },
+  {
+    "date": "2026-03-12",
+    "label": "Qatar LNG diversion",
+    "description": "Qatar Petroleum diverts three LNG cargoes from Europe to Asia following JKM-TTF spread widening. European LNG sendout falls 12% week-on-week.",
+    "category": "supply",
+    "impact": "warn"
+  },
+  {
+    "date": "2026-03-28",
+    "label": "EU storage mandate confirmed at 90%",
+    "description": "EU regulation extended requiring member states to reach 90% storage fill by November 1. The 80% target under EU 2022/1032 was raised to 90% for the 2023-2025+ period. In 2025, EU storage reached 83% by October 1 and met the 90% mandate by November 1.",
+    "category": "policy",
+    "impact": "warn"
+  }
+]
