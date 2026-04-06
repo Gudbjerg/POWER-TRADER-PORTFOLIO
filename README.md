@@ -1,6 +1,6 @@
 ---
 title: European Power and Gas Analysis Platform
-emoji: E
+emoji: ⚡
 colorFrom: blue
 colorTo: green
 sdk: streamlit
