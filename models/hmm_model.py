@@ -81,51 +81,62 @@ def _label_regimes(model, feature_cols: list[str]) -> dict[int, str]:
     Assign a human-readable label to each HMM state by inspecting the state
     mean vector (centroid).
 
-    Logic (using z-scored features):
-      - Hydro-driven:       high hydro_pct, negative nl_z (low NL prices), negative spread_z (NO cheap vs NL)
-      - Gas-driven:         high ttf_z, high nl_z, moderate storage
-      - Renewables-driven:  low no2_vol5_z, low nl_z, (high wind_de_z if available)
-      - Geopolitical stress:negative storage_dev (low storage), high ttf_z, high no2_vol5_z
+    All features are normalised to [-1, 1] relative to their range across
+    states before scoring, so scale differences (hydro_pct in 0-100 vs
+    z-scored features in ±2) do not distort the regime assignment.
+
+    Regime signatures (higher = more characteristic):
+      - Hydro-driven:       high hydro, low NL price, wide negative spread
+      - Gas-driven:         high TTF, high NL, low hydro
+      - Renewables-driven:  high wind, low volatility, low NL price
+      - Geopolitical stress:high volatility, high TTF, low storage
     """
     means = model.means_   # shape (n_states, n_features)
     col_idx = {c: i for i, c in enumerate(feature_cols)}
 
-    def _get(state_means, col, default=0.0):
-        if col in col_idx:
-            return float(state_means[col_idx[col]])
-        return default
+    def _norm(col) -> np.ndarray:
+        """Normalise a feature across state means to [-1, 1]."""
+        if col not in col_idx:
+            return np.zeros(N_STATES)
+        vals = means[:, col_idx[col]].astype(float)
+        vmin, vmax = vals.min(), vals.max()
+        rng = vmax - vmin
+        if rng < 1e-9:
+            return np.zeros(N_STATES)
+        return (vals - vmin) / rng * 2 - 1  # [-1, 1]
 
-    labels = {}
-    # Score each state on regime signatures
-    for s in range(N_STATES):
-        m = means[s]
+    hydro_n  = _norm("hydro_pct")
+    ttf_n    = _norm("ttf_z")
+    nl_n     = _norm("nl_z")
+    spread_n = _norm("spread_z")
+    stor_n   = _norm("storage_dev")
+    vol_n    = _norm("no2_vol5_z")
+    wind_n   = _norm("wind_de_z")
 
-        ttf_z     = _get(m, "ttf_z")
-        nl_z      = _get(m, "nl_z")
-        no2_z     = _get(m, "no2_z")
-        spread_z  = _get(m, "spread_z")
-        hydro_pct = _get(m, "hydro_pct", 50)
-        stor_dev  = _get(m, "storage_dev", 0)
-        vol_z     = _get(m, "no2_vol5_z")
-        wind_z    = _get(m, "wind_de_z", 0)
+    REGIME_ORDER = ["Hydro-driven", "Gas-driven", "Renewables-driven", "Geopolitical stress"]
 
-        scores = {
-            "Hydro-driven":        hydro_pct * 0.4 - spread_z * 0.3 - nl_z * 0.3,
-            "Gas-driven":          ttf_z * 0.4 + nl_z * 0.3 - hydro_pct * 0.01,
-            "Renewables-driven":   wind_z * 0.4 - vol_z * 0.3 - nl_z * 0.3,
-            "Geopolitical stress": -stor_dev * 0.3 + ttf_z * 0.3 + vol_z * 0.4,
+    def _scores(s: int) -> dict[str, float]:
+        return {
+            "Hydro-driven":        hydro_n[s] * 0.5 - nl_n[s] * 0.3 - spread_n[s] * 0.2,
+            "Gas-driven":          ttf_n[s] * 0.4 + nl_n[s] * 0.3 - hydro_n[s] * 0.3,
+            "Renewables-driven":   wind_n[s] * 0.4 - vol_n[s] * 0.3 - nl_n[s] * 0.3,
+            "Geopolitical stress": vol_n[s] * 0.4 + ttf_n[s] * 0.3 - stor_n[s] * 0.3,
         }
-        labels[s] = max(scores, key=scores.get)
 
-    # Resolve ties — each regime label should be unique across states
-    used = set()
-    final = {}
-    for s, label in sorted(labels.items(), key=lambda x: -abs(means[x[0]]).sum()):
-        if label not in used:
-            final[s] = label
-            used.add(label)
+    # Assign each state its preferred label
+    labels = {s: max(_scores(s), key=_scores(s).get) for s in range(N_STATES)}
+
+    # Resolve ties: state with the strongest top-score wins its preferred regime
+    used: set[str] = set()
+    final: dict[int, str] = {}
+    order = sorted(range(N_STATES), key=lambda s: -max(_scores(s).values()))
+    for s in order:
+        preferred = labels[s]
+        if preferred not in used:
+            final[s] = preferred
+            used.add(preferred)
         else:
-            remaining = [r for r in REGIME_COLORS if r != "Unknown" and r not in used]
+            remaining = [r for r in REGIME_ORDER if r not in used]
             final[s] = remaining[0] if remaining else "Unknown"
             if remaining:
                 used.add(remaining[0])
@@ -231,11 +242,13 @@ def predict_regime(features_df: pd.DataFrame) -> dict | None:
     X = df[feature_cols].values.astype(np.float64)
 
     try:
-        _, state_seq  = model.decode(X, algorithm="viterbi")
-        # Posterior probabilities for the latest observation
-        log_posteriors = model.predict_proba(X[-1:])
-        latest_state   = int(state_seq[-1])
-        confidence     = float(log_posteriors[0, latest_state])
+        _, state_seq     = model.decode(X, algorithm="viterbi")
+        # Forward-backward posteriors over the full sequence, then take the
+        # last step.  Running predict_proba on a single observation omits
+        # transition context and can give 0% for the Viterbi-decoded state.
+        posteriors_full  = model.predict_proba(X)    # shape (n_obs, n_states)
+        latest_state     = int(state_seq[-1])
+        confidence       = float(posteriors_full[-1, latest_state])
     except Exception:
         return None
 
