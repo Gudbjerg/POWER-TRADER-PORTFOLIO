@@ -77,8 +77,23 @@ def _meta_path() -> str:
     return os.path.join(_WEIGHTS_DIR, "lstm_meta.json")
 
 
+def _test_results_path() -> str:
+    return os.path.join(_WEIGHTS_DIR, "lstm_test_results.csv")
+
+
 def is_trained() -> bool:
     return os.path.exists(_weights_path()) and os.path.exists(_meta_path())
+
+
+def load_test_results() -> pd.DataFrame:
+    """Load saved test-set predictions. Returns DataFrame with date, no2_actual,
+    no2_pred, nl_actual, nl_pred — or empty DataFrame if not available."""
+    try:
+        if os.path.exists(_test_results_path()):
+            return pd.read_csv(_test_results_path(), parse_dates=["date"])
+    except Exception:
+        pass
+    return pd.DataFrame()
 
 
 def load_meta() -> dict:
@@ -450,4 +465,19 @@ def train_lstm_full(features_df: pd.DataFrame, feature_cols: list[str],
         "y_std":          y_std.tolist(),
     }
     _save(model, mean.tolist(), std.tolist(), feature_cols, info)
+
+    # Save test set predictions for post-training chart
+    try:
+        test_dates = df["date"].iloc[SEQ_LEN + nt + nv : SEQ_LEN + nt + nv + len(y_pred)].values
+        results_df = pd.DataFrame({
+            "date":       test_dates,
+            "no2_actual": y_true[:, 0].round(2),
+            "no2_pred":   y_pred[:, 0].round(2),
+            "nl_actual":  y_true[:, 1].round(2),
+            "nl_pred":    y_pred[:, 1].round(2),
+        })
+        results_df.to_csv(_test_results_path(), index=False)
+    except Exception:
+        pass
+
     return info

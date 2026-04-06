@@ -42,7 +42,7 @@ from models.feature_assembly import (
 )
 from models.lstm_model import (
     is_trained as lstm_is_trained, load_meta as lstm_load_meta,
-    train_lstm_full, predict_next,
+    train_lstm_full, predict_next, load_test_results,
 )
 from models.hmm_model import (
     is_trained as hmm_is_trained, load_meta as hmm_load_meta,
@@ -203,6 +203,51 @@ with st.expander("Live Model 1: Train and Predict", expanded=lstm_is_trained()):
                     )
                 else:
                     st.info(_pred.get("note", "Retrain model for live predictions."))
+
+        # Actual vs predicted chart
+        _test_df = load_test_results()
+        if not _test_df.empty:
+            _fig_pred = go.Figure()
+            _fig_pred.add_trace(go.Scatter(
+                x=_test_df["date"], y=_test_df["no2_actual"],
+                name="NO2 actual", line=dict(color="#4cc9f0", width=1.5),
+                hovertemplate="NO2 actual: €%{y:.1f}<extra></extra>",
+            ))
+            _fig_pred.add_trace(go.Scatter(
+                x=_test_df["date"], y=_test_df["no2_pred"],
+                name="NO2 predicted", line=dict(color="#4cc9f0", width=1.5, dash="dot"),
+                hovertemplate="NO2 predicted: €%{y:.1f}<extra></extra>",
+            ))
+            _fig_pred.add_trace(go.Scatter(
+                x=_test_df["date"], y=_test_df["nl_actual"],
+                name="NL actual", line=dict(color="#f4a261", width=1.5),
+                hovertemplate="NL actual: €%{y:.1f}<extra></extra>",
+            ))
+            _fig_pred.add_trace(go.Scatter(
+                x=_test_df["date"], y=_test_df["nl_pred"],
+                name="NL predicted", line=dict(color="#f4a261", width=1.5, dash="dot"),
+                hovertemplate="NL predicted: €%{y:.1f}<extra></extra>",
+            ))
+            _fig_pred.update_layout(
+                template="plotly_dark", paper_bgcolor="#0d1117", plot_bgcolor="#161b22",
+                font=dict(color="#c9d1d9", size=12),
+                margin=dict(l=10, r=10, t=10, b=10),
+                legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+                xaxis=dict(showgrid=True, gridcolor="rgba(255,255,255,0.06)"),
+                yaxis=dict(title="EUR/MWh", showgrid=True, gridcolor="rgba(255,255,255,0.06)"),
+                hovermode="x unified",
+            )
+            st.markdown("**Test set: actual vs predicted**")
+            st.plotly_chart(_fig_pred, width="stretch")
+            _lm2 = lstm_load_meta()
+            st.caption(
+                f"Solid lines: actual day-ahead prices. Dotted lines: LSTM predictions. "
+                f"Test period: {len(_test_df)} days. "
+                f"MAE above naive baseline reflects high price volatility in the test window "
+                f"(Q1 2025 to Q1 2026 included the post-crisis normalisation period). "
+                f"The model captures directional trends; large spikes are systematically "
+                f"underestimated — a known limitation of MAE-trained sequence models."
+            )
 
         # Train button
         _btn_label = "Retrain Model 1 (LSTM)" if lstm_is_trained() else "Train Model 1 (LSTM)"
