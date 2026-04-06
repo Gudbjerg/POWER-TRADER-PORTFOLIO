@@ -22,6 +22,7 @@ from data.solar           import get_solar_data
 from data.lng_terminals   import get_lng_data
 from data.hydro           import get_hydro_data
 from data.forward_curve   import get_forward_curve_data
+from data.generation      import get_generation_data
 from components.storage_chart        import render_storage_chart
 from components.prices_chart         import render_ttf_chart
 from components.flows_chart          import render_flows_chart
@@ -30,6 +31,7 @@ from components.solar_chart          import render_solar_chart
 from components.lng_chart            import render_lng_chart
 from components.hydro_chart          import render_hydro_chart
 from components.forward_curve_chart  import render_forward_curve_chart
+from components.coal_chart           import render_coal_chart
 from utils.helpers   import (
     has_entsoe_key, has_agsi_key, apply_dark_theme,
     pill, commentary, kpi_card, delta_span,
@@ -45,13 +47,14 @@ apply_dark_theme()
 
 # ── Load all data (cached) ─────────────────────────────────────────────────
 with st.spinner(""):
-    storage = get_storage_data()
-    ttf     = get_ttf_data()
-    flows   = get_flow_data()
-    spots   = get_spot_price_data()
-    solar   = get_solar_data()
-    lng     = get_lng_data()
-    hydro   = get_hydro_data()
+    storage    = get_storage_data()
+    ttf        = get_ttf_data()
+    flows      = get_flow_data()
+    spots      = get_spot_price_data()
+    solar      = get_solar_data()
+    lng        = get_lng_data()
+    hydro      = get_hydro_data()
+    generation = get_generation_data()
 
 _ttf_spot = float(ttf["prices"]["price"].iloc[-1]) if not ttf["prices"].empty else 0.0
 fwd = get_forward_curve_data(_ttf_spot)
@@ -208,12 +211,13 @@ st.divider()
 
 
 # ── Tabs ───────────────────────────────────────────────────────────────────
-tab_overview, tab_gas, tab_lng, tab_prices, tab_flows, tab_solar, tab_hydro = st.tabs([
+tab_overview, tab_gas, tab_lng, tab_prices, tab_flows, tab_generation, tab_solar, tab_hydro = st.tabs([
     "Overview",
     "Gas Storage",
     "LNG Terminals",
     "Prices",
     "Power Flows",
+    "Generation",
     "Solar",
     "Hydro Reservoirs",
 ])
@@ -280,7 +284,7 @@ with tab_overview:
     with w1:
         st.markdown("**Storage refill pace**")
         if eu_pct is not None:
-            _required_pp = max(0.0, 80.0 - eu_pct)
+            _required_pp = max(0.0, 90.0 - eu_pct)
             _pace = "above" if _required_pp > 52 else "in line with"
             if ttf_price is not None and ttf_price > 35:
                 _lng_note = f"TTF at €{ttf_price:.0f}/MWh supports LNG cargo diversion to Europe over Asia."
@@ -291,7 +295,7 @@ with tab_overview:
             else:
                 _lng_note = ""
             st.caption(
-                f"EU regulation requires 80% fill by November 1. "
+                f"EU regulation requires 90% fill by November 1. "
                 f"With EU storage at {eu_pct:.1f}% and {_days_to_nov} days remaining, "
                 f"the required net injection is approximately {_required_pp:.0f}pp, "
                 f"{_pace} the 5-year average injection pace. "
@@ -299,7 +303,7 @@ with tab_overview:
             )
         else:
             st.caption(
-                f"EU regulation requires 80% fill by November 1. "
+                f"EU regulation requires 90% fill by November 1. "
                 f"{_days_to_nov} days remaining. Add AGSI_API_KEY to see current storage level."
             )
     with w2:
@@ -510,7 +514,48 @@ with tab_flows:
 
 
 # ═══════════════════════════════════════════════════════════════════════════
-# TAB 6: SOLAR
+# TAB 6: GENERATION (GERMAN COAL / FUEL SWITCHING)
+# ═══════════════════════════════════════════════════════════════════════════
+with tab_generation:
+    if not has_entsoe_key():
+        st.info(
+            "ENTSO-E API key required. Register free at transparency.entsoe.eu, "
+            "then add ENTSOE_API_KEY to .env."
+        )
+    else:
+        render_coal_chart(generation, ttf_price=ttf_price)
+
+        with st.expander("Coal as a fuel switching indicator", expanded=True):
+            st.markdown("""
+            **The merit order and fuel switching:**
+            Germany's power system dispatches generation in order of marginal cost: nuclear and renewables
+            run first, then lignite, then hard coal, then gas, with oil peakers last.
+            When gas prices rise above approximately EUR 50/MWh, coal-fired generation
+            becomes cheaper at the margin, causing utilities to switch from gas to coal.
+            This process is called fuel switching and is a primary mechanism linking gas prices to power prices.
+
+            **Lignite versus hard coal:**
+            - Lignite (brunkull): domestic German brown coal, very low fuel cost but high CO2 intensity.
+              Plants are mostly located in the Rhineland and Lusatia mining regions. Nearly always dispatched
+              when available due to near-zero variable fuel cost.
+            - Hard coal (sort kull): imported steam coal, marginal cost more sensitive to global coal prices
+              and carbon (EUA) costs. More responsive to the gas-coal switching dynamic.
+
+            **What the 2021-2022 energy crisis showed:**
+            When TTF exceeded EUR 100/MWh in August 2022, German coal generation surged to levels
+            not seen since the mid-2010s. Both hard coal and lignite output reached approximately
+            40 TWh per quarter. As gas prices normalised in 2023-2024, coal dispatch fell sharply.
+            Renewed gas price pressure in 2025-2026 is now causing a partial reversal.
+
+            **Relevance for Norwegian hydro:**
+            High German coal generation signals that gas is expensive and therefore Continental power
+            prices are elevated. This improves the economics of exporting Norwegian hydro via NordLink
+            and NorNed, increasing the flow incentive to Germany and the Netherlands.
+            """)
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# TAB 7: SOLAR
 # ═══════════════════════════════════════════════════════════════════════════
 with tab_solar:
     if not has_entsoe_key():

@@ -12,6 +12,7 @@ PAIR_COLORS = {
     "NO2->DK1": "#3a0ca3",
     "NO2->DE":  "#7209b7",
     "NO2->NL":  "#c1666b",
+    "NO2->GB":  "#f4a261",   # NSN cable — highlighted for handelsbalanse context
     "NO1->GB":  "#2a9d8f",
 }
 
@@ -75,6 +76,26 @@ def render_flows_chart(flow_data: dict):
     )
 
     st.plotly_chart(fig, width="stretch")
+
+    # NO2→GB handelsbalanse metric (year-to-date export/import ratio)
+    no2_gb = df[df["pair"] == "NO2->GB"].copy()
+    if not no2_gb.empty:
+        no2_gb["date"] = pd.to_datetime(no2_gb["date"])
+        ytd = no2_gb[no2_gb["date"].dt.year == date.today().year]
+        if not ytd.empty:
+            export_days = (ytd["net_flow_mwh"] < 0).sum()   # negative = Norway exporting
+            import_days = (ytd["net_flow_mwh"] > 0).sum()
+            total_days  = len(ytd)
+            export_pct  = export_days / total_days * 100 if total_days > 0 else 0
+            import_pct  = 100 - export_pct
+            gross_exp   = ytd[ytd["net_flow_mwh"] < 0]["net_flow_mwh"].abs().sum() / 1_000_000  # TWh
+            gross_imp   = ytd[ytd["net_flow_mwh"] > 0]["net_flow_mwh"].sum() / 1_000_000
+            st.info(
+                f"NO2 to GB trade balance (year to date {date.today().year}): "
+                f"{export_pct:.0f}% export days / {import_pct:.0f}% import days. "
+                f"Gross export: {gross_exp:.2f} TWh. Gross import: {gross_imp:.2f} TWh. "
+                f"Historical norm is approximately 95% export / 5% import."
+            )
 
     # 7-day dominant corridor insight
     if not df.empty:

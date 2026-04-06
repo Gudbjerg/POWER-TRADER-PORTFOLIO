@@ -31,6 +31,7 @@ FLOW_PAIRS = [
     ("NO2", "DK1"),
     ("NO2", "DE"),
     ("NO2", "NL"),
+    ("NO2", "GB"),   # NSN cable (Kvilldal–Blyth, 1.4 GW) — Marius's handelsbalanse corridor
     ("NO1", "GB"),
 ]
 
