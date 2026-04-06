@@ -21,6 +21,7 @@ env/
 .sentiment_history.csv
 models/data/features_cache.csv
 models/data/features_meta.json
+data/generation_cache.csv
 # model weights ARE committed (small files, required for live inference on Cloud)
 # models/weights/*.pt
 # models/weights/*.joblib
