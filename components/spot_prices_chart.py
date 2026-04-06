@@ -109,7 +109,7 @@ def render_spot_prices_chart(spot_data: dict):
         hovermode="x unified",
     )
 
-    st.plotly_chart(fig, width="stretch")
+    st.plotly_chart(fig, use_container_width=True)
 
     # Insight on latest date
     if not df.empty:

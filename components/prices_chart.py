@@ -103,7 +103,7 @@ def render_ttf_chart(ttf_data: dict, events: list | None = None):
         hovermode="x unified",
     )
 
-    st.plotly_chart(fig, width="stretch")
+    st.plotly_chart(fig, use_container_width=True)
 
     latest_price = df["price"].iloc[-1] if not df.empty else None
     ma30_latest  = df["ma30"].iloc[-1]  if not df.empty else None

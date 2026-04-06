@@ -94,7 +94,7 @@ def render_solar_chart(solar_data: dict):
         hovermode="x unified",
     )
 
-    st.plotly_chart(fig, width="stretch")
+    st.plotly_chart(fig, use_container_width=True)
 
     # Duck curve insight
     if not df.empty and "price" in df.columns and "solar_mw" in df.columns:

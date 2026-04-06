@@ -37,6 +37,14 @@ def fetch_ttf_prices(days: int = 120) -> pd.DataFrame:
             df = df.reset_index()
             df["date"] = pd.to_datetime(df["date"]).dt.tz_localize(None)
             df = df.sort_values("date").reset_index(drop=True)
+            # Sanity check: TTF has never traded below €5/MWh in recent years.
+            # If yfinance returns garbage (e.g. cumulative changes, wrong units),
+            # the latest price will be near-zero. Reject and retry.
+            if df["price"].iloc[-1] < 5:
+                if attempt < 2:
+                    time.sleep(3 * (attempt + 1))
+                    continue
+                return pd.DataFrame()
             df["ma30"] = df["price"].rolling(30, min_periods=1).mean()
             df["ma90"] = df["price"].rolling(90, min_periods=1).mean()
             df["pct_change"] = df["price"].pct_change() * 100

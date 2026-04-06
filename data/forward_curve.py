@@ -44,7 +44,11 @@ def _fetch_ttf_long() -> pd.DataFrame:
         df.index.name = "date"
         df = df.reset_index()
         df["date"] = pd.to_datetime(df["date"]).dt.tz_localize(None)
-        return df.sort_values("date").reset_index(drop=True)
+        df = df.sort_values("date").reset_index(drop=True)
+        # Reject obviously wrong data (wrong units or cumulative returns)
+        if df["price"].median() < 5:
+            return pd.DataFrame()
+        return df
     except Exception:
         return pd.DataFrame()
 

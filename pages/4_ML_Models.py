@@ -238,7 +238,7 @@ with st.expander("Live Model 1: Train and Predict", expanded=lstm_is_trained()):
                 hovermode="x unified",
             )
             st.markdown("**Test set: actual vs predicted**")
-            st.plotly_chart(_fig_pred, width="stretch")
+            st.plotly_chart(_fig_pred, use_container_width=True)
             _lm2 = lstm_load_meta()
             st.caption(
                 f"Solid lines: actual day-ahead prices. Dotted lines: LSTM predictions. "
@@ -391,7 +391,7 @@ with st.expander("Live Model 2: Train and Classify", expanded=hmm_is_trained()):
                         yaxis=dict(showgrid=False, title=None),
                         hovermode="x unified",
                     )
-                    st.plotly_chart(_fig_r, width="stretch")
+                    st.plotly_chart(_fig_r, use_container_width=True)
 
             # Regime statistics
             if _hm.get("state_pcts"):
@@ -582,7 +582,7 @@ else:
             hovermode="x unified",
             height=260,
         )
-        st.plotly_chart(fig_s, width="stretch")
+        st.plotly_chart(fig_s, use_container_width=True)
 
     # Granger causality (requires ≥21 days)
     if not daily.empty and not ttf["prices"].empty and len(daily) >= 21:
@@ -628,7 +628,7 @@ else:
             ].copy()
             display["net_sentiment"] = display["net_sentiment"].round(3)
             display.columns = ["Date", "Source", "Net sentiment", "Headline"]
-            st.dataframe(display.set_index("Date"), width="stretch")
+            st.dataframe(display.set_index("Date"), use_container_width=True)
 
     if sent["fetched_at"]:
         st.caption(f"Last updated: {sent['fetched_at'].strftime('%Y-%m-%d %H:%M UTC')} · "

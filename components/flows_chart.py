@@ -75,7 +75,7 @@ def render_flows_chart(flow_data: dict):
         hovermode="x unified",
     )
 
-    st.plotly_chart(fig, width="stretch")
+    st.plotly_chart(fig, use_container_width=True)
 
     # NO2→GB handelsbalanse metric (year-to-date export/import ratio)
     no2_gb = df[df["pair"] == "NO2->GB"].copy()

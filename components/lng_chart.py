@@ -93,7 +93,7 @@ def render_lng_chart(lng_data: dict):
         hovermode="x unified",
     )
 
-    st.plotly_chart(fig, width="stretch")
+    st.plotly_chart(fig, use_container_width=True)
 
     if missing_countries:
         st.caption(

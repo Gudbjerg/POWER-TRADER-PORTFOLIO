@@ -138,7 +138,7 @@ def render_storage_chart(storage_data: dict, region: str = "europe"):
         hovermode="x unified",
     )
 
-    st.plotly_chart(fig, width="stretch")
+    st.plotly_chart(fig, use_container_width=True)
 
     # Inline insight
     latest = df_current.dropna(subset=["full"]).iloc[-1] if not df_current.empty else None

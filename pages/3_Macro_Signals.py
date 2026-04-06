@@ -170,7 +170,7 @@ with tab_mix:
                    gridcolor=C["grid"], range=[0, 105]),
         hovermode="x unified",
     )
-    st.plotly_chart(fig_mix, width="stretch")
+    st.plotly_chart(fig_mix, use_container_width=True)
 
     st.markdown(
         commentary(
@@ -244,7 +244,7 @@ with tab_spill:
             yaxis=dict(title="Index (100 = start date)", showgrid=True, gridcolor=C["grid"]),
             hovermode="x unified",
         )
-        st.plotly_chart(fig_comm, width="stretch")
+        st.plotly_chart(fig_comm, use_container_width=True)
 
         # Rolling correlations
         st.markdown("#### Rolling 90-Day Pearson Correlations")
@@ -284,7 +284,7 @@ with tab_spill:
                 hovermode="x unified",
                 height=250,
             )
-            st.plotly_chart(fig_corr, width="stretch")
+            st.plotly_chart(fig_corr, use_container_width=True)
 
             # Latest KPIs
             c1, c2, c3 = st.columns(3)
