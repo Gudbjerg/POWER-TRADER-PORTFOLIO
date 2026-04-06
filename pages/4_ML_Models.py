@@ -30,11 +30,10 @@ st.caption(
 _TORCH_AVAILABLE = has_torch()
 if not _TORCH_AVAILABLE:
     st.info(
-        "PyTorch and the Transformers library are not installed in the deployed environment. "
-        "The LSTM forecaster, HMM regime classifier, and FinBERT sentiment signal require local setup. "
-        "To run Layer 4 locally: install the full dependencies with "
-        "`pip install torch transformers`, then run `streamlit run app.py`. "
-        "Layer 4 architecture, specifications, and training setup are shown below."
+        "Layer 4 ML models require PyTorch and Transformers, which are excluded from this "
+        "deployment due to memory constraints on the free hosting tier. "
+        "The full pipeline runs locally and on GPU-enabled platforms (e.g. Hugging Face Spaces). "
+        "Architecture, feature specifications, and training setup are shown below."
     )
 
 from models.feature_assembly import (
