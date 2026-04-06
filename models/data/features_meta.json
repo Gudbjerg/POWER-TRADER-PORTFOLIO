@@ -1,0 +1,30 @@
+{
+  "updated_at": "2026-04-06T15:56:13.978327",
+  "n_rows": 751,
+  "date_min": "2023-04-10",
+  "date_max": "2026-04-02",
+  "columns": [
+    "date",
+    "no2",
+    "nl",
+    "ttf",
+    "storage_fill",
+    "hydro_twh",
+    "de_wind_gwh",
+    "no_nl_spread",
+    "ttf_nl_ratio",
+    "no2_vol5",
+    "nl_vol5",
+    "dow",
+    "month",
+    "week",
+    "storage_dev",
+    "hydro_pct",
+    "no2_z",
+    "nl_z",
+    "spread_z",
+    "ttf_z",
+    "no2_vol5_z",
+    "wind_de_z"
+  ]
+}

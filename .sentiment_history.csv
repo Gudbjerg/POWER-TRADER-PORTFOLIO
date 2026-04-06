@@ -1,0 +1,23 @@
+date,title,source,pos,neg,neu,net_sentiment
+2026-03-19,How Finnish supermarkets are central to the country's defence,BBC Business,0.0697660744190216,0.0208660662174224,0.9093679189682008,0.0489000082015991
+2026-03-27,UK’s Crown Estate plans offshore wind leasing round for 2027,Energy Monitor,0.0857634618878364,0.0105308545753359,0.9037056565284728,0.0752326073125004
+2026-03-30,"Philippines DOE targets 1,471MW grid boost by April 2026",Energy Monitor,0.317124992609024,0.0112496241927146,0.6716253757476807,0.3058753684163093
+2026-03-30,"Africa’s clean energy story is being rewritten by grids, not gigawatts",Energy Monitor,0.0432483255863189,0.0156204057857394,0.9411312937736512,0.0276279198005795
+2026-03-31,New episode: What’s next for Australia’s iron ore sector?,Energy Monitor,0.0328652560710907,0.0543671026825904,0.9127675890922546,-0.0215018466114997
+2026-03-31,King’s state visit to US will take place in April despite calls to delay amid Iran war – UK politics live,Guardian Energy,0.076319582760334,0.188202902674675,0.7354775071144104,-0.1118833199143409
+2026-03-31,Oil nears highest price since start of Iran war,BBC Business,0.7129160761833191,0.0932630971074104,0.193820834159851,0.6196529790759087
+2026-04-01,Asia ramps up use of dirty fuels to cover energy shortfall triggered by Iran war,Guardian Energy,0.8674580454826355,0.0122179547324776,0.12032400816679,0.8552400907501578
+2026-04-01,Invisible plumes and ‘terrible pollution’: the reality of the US gas sites rated ‘grade A’,Guardian Energy,0.0515039637684822,0.051302470266819,0.8971935510635376,0.0002014935016632
+2026-04-01,Energy crisis: why ‘keep calm but cut down’ may be a better message for Labour,Guardian Energy,0.5205176472663879,0.0576936043798923,0.4217887818813324,0.4628240428864956
+2026-04-01,This is what a fossil-fuel shock looks like. The UK must adapt its energy system – and quickly | Chaitanya Kumar,Guardian Energy,0.1995056569576263,0.0095805888995528,0.7909137010574341,0.1899250680580735
+2026-04-01,Albanese says Australia vulnerable before fuel crisis as he announces $1bn in new loans for struggling businesses,Guardian Energy,0.6706254482269287,0.2548036277294159,0.0745709463953971,0.4158218204975128
+2026-04-01,Oil briefly falls below $100 and shares jump on Trump Iran war pledge,BBC Business,0.0605155788362026,0.826320469379425,0.1131639406085014,-0.7658048905432224
+2026-04-01,Reeves criticises Trump for starting Iran war with no ‘clear plan’ to get out of it – as it happened,Guardian Energy,0.0372730121016502,0.7922494411468506,0.1704775691032409,-0.7549764290452003
+2026-04-02,"Drive slower, work from home and ditch the tie: the world responds to Iran war energy crisis",Guardian Energy,0.0577185042202472,0.0427013933658599,0.8995801210403442,0.0150171108543872
+2026-04-02,"Starmer must call energy summit akin to 2008 crisis response, Labour MP says",Guardian Energy,0.0869626849889755,0.0251619275659322,0.8878754377365112,0.0618007574230432
+2026-04-02,Google to tap into gas plant for AI datacenter in sharp turn from climate goals,Guardian Energy,0.278937429189682,0.0080386009067296,0.7130239605903625,0.2708988282829523
+2026-04-02,Oil prices jump and shares drop after Trump threatens more Iran strikes,BBC Business,0.0108781354501843,0.9499881267547609,0.0391338281333446,-0.9391099913045764
+2026-04-03,Of course we shouldn’t drill for more oil in the North Sea – we cancelled further exploitation for a reason | Bill McGuire,Guardian Energy,0.0746655985713005,0.177041694521904,0.7482926845550537,-0.1023760959506034
+2026-04-03,French-owned ship passes through Strait of Hormuz,BBC Business,0.1313703954219818,0.016988031566143,0.8516415357589722,0.1143823638558387
+2026-04-05,How Trump’s Iran war could make the world more reliant on coal,Guardian Energy,0.1700930297374725,0.0337329059839248,0.7961741089820862,0.1363601237535476
+2026-04-06,Oil prices choppy after expletive-laden Trump threat to Iran,BBC Business,0.0422299727797508,0.8442566394805908,0.1135133877396583,-0.80202666670084
