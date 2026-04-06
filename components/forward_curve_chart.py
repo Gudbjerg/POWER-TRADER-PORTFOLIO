@@ -134,7 +134,7 @@ def render_forward_curve_chart(fwd_data: dict):
         hovermode="x unified",
     )
 
-    st.plotly_chart(fig, width="stretch")
+    st.plotly_chart(fig, use_container_width=True)
 
     # KPI row
     k1, k2, k3, k4 = st.columns(4)

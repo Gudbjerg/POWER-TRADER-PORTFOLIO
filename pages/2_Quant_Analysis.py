@@ -202,7 +202,7 @@ with tab_mc:
                        range=[max(0, current_pct - 5), 102]),
             hovermode="x unified",
         )
-        st.plotly_chart(fig, width="stretch")
+        st.plotly_chart(fig, use_container_width=True)
 
         if not has_empirical:
             st.info(
@@ -365,7 +365,7 @@ with tab_reg:
                 yaxis=dict(title="NL day-ahead (EUR/MWh)", showgrid=True, gridcolor=C["grid"]),
                 height=340,
             )
-            st.plotly_chart(fig_sc, width="stretch")
+            st.plotly_chart(fig_sc, use_container_width=True)
 
         # Residuals time series
         with col_resid:
@@ -396,7 +396,7 @@ with tab_reg:
                 hovermode="x unified",
                 height=340,
             )
-            st.plotly_chart(fig_res, width="stretch")
+            st.plotly_chart(fig_res, use_container_width=True)
 
         # Signal interpretation
         if abs(latest_z) >= 2.0:
@@ -582,7 +582,7 @@ with tab_spike:
             yaxis=dict(title="z-score (30-day rolling)", showgrid=True, gridcolor=C["grid"]),
             hovermode="x unified",
         )
-        st.plotly_chart(fig_z, width="stretch")
+        st.plotly_chart(fig_z, use_container_width=True)
 
         with st.expander("Methodology", expanded=False):
             st.markdown(f"""
@@ -729,7 +729,7 @@ with tab_bt:
             hovermode="x unified",
             height=300,
         )
-        st.plotly_chart(fig_bt, width="stretch")
+        st.plotly_chart(fig_bt, use_container_width=True)
 
         # ── Cumulative P&L line ──────────────────────────────────────────────
         fig_cum = go.Figure()
@@ -755,7 +755,7 @@ with tab_bt:
             hovermode="x",
             height=220,
         )
-        st.plotly_chart(fig_cum, width="stretch")
+        st.plotly_chart(fig_cum, use_container_width=True)
 
         # ── Crisis context note ──────────────────────────────────────────────
         exc = stats.get("avg_pnl_ex_crisis")
@@ -779,7 +779,7 @@ with tab_bt:
             display = bt[["label", "summer_avg", "winter_avg", "spread", "pnl"]].copy()
             display.columns = ["Gas Year", "Summer avg (€/MWh)", "Winter avg (€/MWh)",
                                 "Spread (€/MWh)", f"P&L net of €{storage_cost:.1f} cost (€/MWh)"]
-            st.dataframe(display.set_index("Gas Year"), width="stretch")
+            st.dataframe(display.set_index("Gas Year"), use_container_width=True)
 
         # ── Signal: current gas year injection economics ──────────────────────
         if not ttf_hist.empty:

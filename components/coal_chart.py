@@ -71,7 +71,7 @@ def render_coal_chart(gen_data: dict, ttf_price: float | None = None):
         hovermode="x unified",
     )
 
-    st.plotly_chart(fig, width="stretch")
+    st.plotly_chart(fig, use_container_width=True)
 
     # ── Fuel switching insight ───────────────────────────────────────────────
     if not quarterly.empty and len(quarterly) >= 4:
@@ -143,7 +143,7 @@ def render_coal_chart(gen_data: dict, ttf_price: float | None = None):
             yaxis=dict(title="GWh/day", showgrid=True, gridcolor=COLORS["grid"]),
             hovermode="x unified",
         )
-        st.plotly_chart(fig2, width="stretch")
+        st.plotly_chart(fig2, use_container_width=True)
 
     if fetched_at:
         st.caption(f"Last updated: {fetched_at.strftime('%Y-%m-%d %H:%M UTC')}")
