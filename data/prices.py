@@ -1,6 +1,7 @@
 """
 TTF gas price fetcher via yfinance (TTF futures = 'TTF=F' on Yahoo Finance).
 """
+import time
 import pandas as pd
 import streamlit as st
 from datetime import datetime, timedelta
@@ -15,32 +16,38 @@ except ImportError:
 TTF_TICKER = "TTF=F"
 
 
-@st.cache_data(ttl=3600)
+@st.cache_data(ttl=7200)   # 2-hour cache — reduces Yahoo Finance request frequency
 def fetch_ttf_prices(days: int = 120) -> pd.DataFrame:
-    """Fetch TTF front-month futures price history."""
+    """Fetch TTF front-month futures price history. Retries up to 3 times on rate limit."""
     if not YFINANCE_AVAILABLE:
         return pd.DataFrame()
 
-    end = datetime.utcnow().date()
+    end   = datetime.utcnow().date()
     start = end - timedelta(days=days)
 
-    try:
-        ticker = yf.Ticker(TTF_TICKER)
-        df = ticker.history(start=start.strftime("%Y-%m-%d"), end=end.strftime("%Y-%m-%d"))
-        if df.empty:
-            return pd.DataFrame()
-        df = df[["Close"]].rename(columns={"Close": "price"})
-        df.index.name = "date"
-        df = df.reset_index()
-        df["date"] = pd.to_datetime(df["date"]).dt.tz_localize(None)
-        df = df.sort_values("date").reset_index(drop=True)
-        df["ma30"] = df["price"].rolling(30, min_periods=1).mean()
-        df["ma90"] = df["price"].rolling(90, min_periods=1).mean()
-        df["pct_change"] = df["price"].pct_change() * 100
-        return df
-    except Exception as e:
-        st.warning(f"TTF price fetch failed: {e}")
-        return pd.DataFrame()
+    last_exc = None
+    for attempt in range(3):
+        try:
+            ticker = yf.Ticker(TTF_TICKER)
+            df = ticker.history(start=start.strftime("%Y-%m-%d"), end=end.strftime("%Y-%m-%d"))
+            if df.empty:
+                return pd.DataFrame()
+            df = df[["Close"]].rename(columns={"Close": "price"})
+            df.index.name = "date"
+            df = df.reset_index()
+            df["date"] = pd.to_datetime(df["date"]).dt.tz_localize(None)
+            df = df.sort_values("date").reset_index(drop=True)
+            df["ma30"] = df["price"].rolling(30, min_periods=1).mean()
+            df["ma90"] = df["price"].rolling(90, min_periods=1).mean()
+            df["pct_change"] = df["price"].pct_change() * 100
+            return df
+        except Exception as e:
+            last_exc = e
+            if attempt < 2:
+                time.sleep(3 * (attempt + 1))   # 3s, then 6s
+
+    st.warning(f"TTF price data temporarily unavailable (Yahoo Finance rate limit). Will retry on next refresh.")
+    return pd.DataFrame()
 
 
 def get_ttf_data() -> dict:
