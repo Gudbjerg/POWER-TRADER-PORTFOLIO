@@ -2,7 +2,7 @@
 
 A four-layer market intelligence platform for European power and gas markets, built to mirror the analytical workflow of a physical energy trader. All data from public APIs. All models built from scratch in Python.
 
-**Live demo:** [share.streamlit.io — add your URL here]
+**Live demo:** [power-trader-portfolio.streamlit.app](https://power-trader-portfolio.streamlit.app)
 
 ---
 
