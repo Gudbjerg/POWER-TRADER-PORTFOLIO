@@ -9,7 +9,11 @@ entsoe-py>=0.6.0
 scikit-learn>=1.4.0
 statsmodels>=0.14.0
 feedparser>=6.0.0
-transformers>=4.38.0
-torch>=2.2.0
 hmmlearn>=0.3.0
 joblib>=1.3.0
+
+# ML dependencies — install locally for Layer 4 training and FinBERT sentiment.
+# Excluded from Cloud deployment (combined ~700 MB, exceeds free tier memory).
+# pip install torch transformers
+# torch>=2.2.0
+# transformers>=4.38.0

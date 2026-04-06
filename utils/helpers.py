@@ -29,6 +29,16 @@ def has_agsi_key() -> bool:
     return bool(os.getenv("AGSI_API_KEY", "").strip())
 
 
+def has_torch() -> bool:
+    """Check if PyTorch and transformers are installed (required for Layer 4 ML models)."""
+    try:
+        import torch          # noqa: F401
+        import transformers   # noqa: F401
+        return True
+    except ImportError:
+        return False
+
+
 def apply_dark_theme():
     """Inject consistent dark theme CSS. Call once per page, after set_page_config."""
     import streamlit as st

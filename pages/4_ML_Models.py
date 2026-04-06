@@ -16,9 +16,27 @@ st.set_page_config(
     initial_sidebar_state="collapsed",
 )
 
-from utils.helpers import apply_dark_theme, commentary, kpi_card, delta_span
+from utils.helpers import apply_dark_theme, commentary, kpi_card, delta_span, has_torch
 from data.sentiment import get_sentiment_data
 from data.prices import get_ttf_data
+
+apply_dark_theme()
+
+st.markdown("## Layer 4: Machine Learning and Advanced Models")
+st.caption(
+    "Machine learning applied to European power and gas market forecasting and regime classification."
+)
+
+_TORCH_AVAILABLE = has_torch()
+if not _TORCH_AVAILABLE:
+    st.info(
+        "PyTorch and the Transformers library are not installed in the deployed environment. "
+        "The LSTM forecaster, HMM regime classifier, and FinBERT sentiment signal require local setup. "
+        "To run Layer 4 locally: install the full dependencies with "
+        "`pip install torch transformers`, then run `streamlit run app.py`. "
+        "Layer 4 architecture, specifications, and training setup are shown below."
+    )
+
 from models.feature_assembly import (
     assemble_features, get_feature_meta, get_available_feature_sets,
     get_lstm_feature_cols, get_hmm_feature_cols,
@@ -30,13 +48,6 @@ from models.lstm_model import (
 from models.hmm_model import (
     is_trained as hmm_is_trained, load_meta as hmm_load_meta,
     train_hmm, predict_regime, get_regime_history, REGIME_COLORS,
-)
-
-apply_dark_theme()
-
-st.markdown("## Layer 4: Machine Learning and Advanced Models")
-st.caption(
-    "Machine learning applied to European power and gas market forecasting and regime classification."
 )
 st.divider()
 
