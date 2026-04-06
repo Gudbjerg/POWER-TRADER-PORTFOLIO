@@ -1,3 +1,14 @@
+---
+title: European Power and Gas Analysis Platform
+emoji: E
+colorFrom: blue
+colorTo: green
+sdk: streamlit
+sdk_version: "1.32.0"
+app_file: app.py
+pinned: false
+---
+
 # European Power and Gas Analysis Platform
 
 A four-layer market intelligence platform for European power and gas markets, built to mirror the analytical workflow of a physical energy trader. All data from public APIs. All models built from scratch in Python.
