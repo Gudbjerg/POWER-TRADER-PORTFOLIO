@@ -27,7 +27,7 @@ except ImportError:
 DE_EIC     = "10Y1001A1001A83F"
 START_YEAR = 2019
 _CACHE_CSV  = os.path.join(os.path.dirname(__file__), "generation_cache.csv")
-_CHUNK_TIMEOUT = 20   # seconds per annual ENTSO-E chunk before giving up
+_CHUNK_TIMEOUT = 30   # seconds per annual ENTSO-E chunk before giving up
 
 HARD_COAL_NAMES = {"Fossil Hard coal", "Hard coal"}
 LIGNITE_NAMES   = {"Fossil Brown coal/Lignite", "Brown coal/Lignite", "Lignite"}
@@ -42,7 +42,7 @@ def _client():
 
 def _extract_coal_columns(df: pd.DataFrame) -> tuple:
     if isinstance(df.columns, pd.MultiIndex):
-        df.columns = [col[1] if isinstance(col, tuple) else col for col in df.columns]
+        df.columns = [col[0] if isinstance(col, tuple) else col for col in df.columns]
     hard_coal = lignite = None
     for col in df.columns:
         if str(col) in HARD_COAL_NAMES:
