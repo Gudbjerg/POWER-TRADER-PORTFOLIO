@@ -8,3 +8,6 @@ textColor = "#c9d1d9"
 [server]
 headless = true
 fileWatcherType = "none"
+
+[logger]
+level = "error"
