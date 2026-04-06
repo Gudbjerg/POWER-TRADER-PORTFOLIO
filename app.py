@@ -27,6 +27,12 @@ st.markdown(
     "</p>",
     unsafe_allow_html=True,
 )
+st.info(
+    "First page load fetches live data from ENTSO-E, GIE AGSI+, Nord Pool, and Yahoo Finance. "
+    "Allow 1–2 minutes for all panels to populate, particularly on Layer 1 and Layer 4. "
+    "Subsequent loads are cached and near-instant.",
+    icon="⏱",
+)
 
 st.divider()
 
@@ -109,7 +115,7 @@ with c4:
     Machine learning applied to energy market forecasting: LSTM next-day power price forecaster,
     Hidden Markov Model market regime classifier (hydro, gas, wind, stress states),
     and NLP news sentiment signal using FinBERT on energy headlines.
-    <em>In development.</em>
+    Train buttons included — models run on available hardware.
   </div>
 </div>
 """, unsafe_allow_html=True)
