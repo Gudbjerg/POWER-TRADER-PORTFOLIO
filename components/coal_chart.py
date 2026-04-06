@@ -47,7 +47,7 @@ def render_coal_chart(gen_data: dict, ttf_price: float | None = None):
         y=quarterly["lignite_twh"],
         name="Lignite (brunkull)",
         marker_color=COLORS["lignite"],
-        hovertemplate="%{x|%Y Q%q}<br>Lignite: %{y:.1f} TWh<extra></extra>",
+        hovertemplate="%{x|%Y-%m}<br>Lignite: %{y:.1f} TWh<extra></extra>",
     ))
 
     fig.add_trace(go.Bar(
@@ -55,7 +55,7 @@ def render_coal_chart(gen_data: dict, ttf_price: float | None = None):
         y=quarterly["hard_coal_twh"],
         name="Hard coal (sort kull)",
         marker_color=COLORS["hard_coal"],
-        hovertemplate="%{x|%Y Q%q}<br>Hard coal: %{y:.1f} TWh<extra></extra>",
+        hovertemplate="%{x|%Y-%m}<br>Hard coal: %{y:.1f} TWh<extra></extra>",
     ))
 
     fig.update_layout(
