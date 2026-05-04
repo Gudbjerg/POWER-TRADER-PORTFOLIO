@@ -55,10 +55,11 @@ def _run_ols_cached(reg_df: pd.DataFrame):
     return run_full_ols(reg_df)
 
 with st.spinner(""):
-    storage    = get_storage_data()
-    ttf        = get_ttf_data()
-    spot_df    = fetch_spot_prices(days=150)   # extended history for regression
-    features_df = _get_features_l2()
+    storage = get_storage_data()
+    ttf     = get_ttf_data()
+    spot_df = fetch_spot_prices(days=150)   # extended history for regression
+    # features_df is lazy-loaded inside the tabs that need it (Nordic Decomp, Wind)
+    # so the default tab (Storage MC) renders without waiting for ENTSO-E feature assembly
 
 eu_df = storage["europe"]
 
@@ -68,6 +69,27 @@ if not eu_df.empty and "full" in eu_df.columns:
 
 monthly_stats = compute_monthly_stats(eu_df)
 has_empirical = bool(monthly_stats)
+
+# ── Sidebar: data freshness ───────────────────────────────────────────────────
+with st.sidebar:
+    st.markdown("#### Data freshness")
+    _fmt = "%H:%M UTC"
+    _st_at  = storage.get("fetched_at")
+    _ttf_at = ttf.get("fetched_at")
+    st.caption(f"Storage: {_st_at.strftime(_fmt) if _st_at else 'n/a'}")
+    st.caption(f"TTF prices: {_ttf_at.strftime(_fmt) if _ttf_at else 'n/a'}")
+    if not spot_df.empty:
+        _spot_latest = pd.to_datetime(spot_df["date"]).max().strftime("%Y-%m-%d")
+        st.caption(f"Spot prices: through {_spot_latest}")
+    else:
+        st.caption("Spot prices: unavailable")
+    _fm = st.session_state.get("features_l2")
+    if _fm is not None and not _fm.empty:
+        _fm_latest = pd.to_datetime(_fm["date"]).max().strftime("%Y-%m-%d")
+        st.caption(f"Feature matrix: {len(_fm)} rows through {_fm_latest}")
+    else:
+        st.caption("Feature matrix: loads on first visit to Nordic Decomp or Wind tab")
+    st.divider()
 
 # ── Header ───────────────────────────────────────────────────────────────────
 st.markdown("## Layer 2: Quantitative Analysis")
@@ -1084,6 +1106,12 @@ with tab_decomp:
         "are directly comparable across drivers."
     )
 
+    # Lazy-load feature matrix: only assembled when this tab is first visited
+    if "features_l2" not in st.session_state:
+        with st.spinner("Assembling feature matrix (first visit — subsequent loads are instant)…"):
+            st.session_state["features_l2"] = _get_features_l2()
+    features_df = st.session_state["features_l2"]
+
     _avail_l2 = get_available_feature_sets(features_df)
     _n_rows_l2 = len(features_df)
 
@@ -1259,7 +1287,13 @@ with tab_wind:
         "coincide with elevated intraday price volatility."
     )
 
-    # ── Load data ─────────────────────────────────────────────────────────────
+    # ── Load feature matrix (lazy — only when this tab is visited) ───────────
+    if "features_l2" not in st.session_state:
+        with st.spinner("Assembling feature matrix (first visit — subsequent loads are instant)…"):
+            st.session_state["features_l2"] = _get_features_l2()
+    features_df = st.session_state["features_l2"]
+
+    # ── Load wind data ────────────────────────────────────────────────────────
     @st.cache_data(ttl=3600, show_spinner=False, persist="disk")
     def _get_wind_forecast():
         return fetch_wind_forecast(days=90)
