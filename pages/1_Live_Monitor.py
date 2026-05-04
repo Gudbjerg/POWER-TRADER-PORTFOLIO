@@ -17,7 +17,7 @@ st.set_page_config(
 from data.gas_storage     import get_storage_data, build_seasonal_bands
 from data.prices          import get_ttf_data
 from data.power_flows     import get_flow_data
-from data.spot_prices     import get_spot_price_data
+from data.spot_prices     import get_spot_price_data, fetch_spot_prices
 from data.solar           import get_solar_data
 from data.lng_terminals   import get_lng_data
 from data.hydro           import get_hydro_data
@@ -462,6 +462,88 @@ with tab_prices:
     render_spot_prices_chart(spots)
     if sp_detail:
         st.markdown(commentary(sp_detail, sp_stat), unsafe_allow_html=True)
+
+    # ── B6: Nordic-Continental spread history ─────────────────────────────────
+    st.divider()
+    st.markdown("#### Nordic–Continental Spread History (NO2 – NL)")
+    st.caption(
+        "NL day-ahead minus NO2 day-ahead (EUR/MWh). Positive = Continental premium: "
+        "Norway has an export incentive and NordLink/NorNed flow toward the Continent."
+    )
+
+    @st.cache_data(ttl=3600, persist="disk", show_spinner=False)
+    def _get_spot_history_l1():
+        return fetch_spot_prices(days=365)
+
+    _spread_df = _get_spot_history_l1()
+    if not _spread_df.empty:
+        _no2  = _spread_df[_spread_df["zone"] == "NO2"][["date", "price_eur_mwh"]].rename(
+            columns={"price_eur_mwh": "no2"}
+        )
+        _nl   = _spread_df[_spread_df["zone"] == "NL"][["date", "price_eur_mwh"]].rename(
+            columns={"price_eur_mwh": "nl"}
+        )
+        _sp   = _no2.merge(_nl, on="date", how="inner").sort_values("date")
+        _sp["spread"] = _sp["nl"] - _sp["no2"]   # NL - NO2: positive = export incentive
+
+        if not _sp.empty:
+            _current_spread = float(_sp["spread"].iloc[-1])
+            _sp_color = "red" if _current_spread > 20 else ("green" if _current_spread < -20 else "blue")
+            _sp_label = (
+                "strong NL premium — NordLink near capacity" if _current_spread > 20
+                else "Nordic premium — atypical, check reservoirs" if _current_spread < -20
+                else "balanced"
+            )
+            st.markdown(
+                kpi_card(
+                    "Current NL–NO2 spread",
+                    f"€{_current_spread:+.1f}/MWh",
+                    delta_span(_sp_label, _sp_color),
+                ),
+                unsafe_allow_html=True,
+            )
+
+            import plotly.graph_objects as _go
+            _fig_sp = _go.Figure()
+            _fig_sp.add_trace(_go.Scatter(
+                x=_sp["date"], y=_sp["spread"],
+                mode="lines",
+                name="NL − NO2 spread",
+                line=dict(color="#58a6ff", width=1.5),
+                fill="tozeroy",
+                fillcolor="rgba(88,166,255,0.08)",
+                hovertemplate="NL−NO2: €%{y:.1f}/MWh<extra></extra>",
+            ))
+            _fig_sp.add_hline(y=0, line=dict(color="rgba(255,255,255,0.25)", width=1))
+            _fig_sp.add_hline(
+                y=20, line=dict(color="#d4ac3a", width=1, dash="dot"),
+                annotation_text="  +€20 (NordLink historically >90% utilised)",
+                annotation_font=dict(color="#d4ac3a", size=10),
+                annotation_position="right",
+            )
+            _fig_sp.add_hline(
+                y=-20, line=dict(color="#3fb950", width=1, dash="dot"),
+                annotation_text="  −€20 (Nordic premium, atypical)",
+                annotation_font=dict(color="#3fb950", size=10),
+                annotation_position="right",
+            )
+            _fig_sp.update_layout(
+                template="plotly_dark",
+                paper_bgcolor="#0d1117",
+                plot_bgcolor="#161b22",
+                height=220,
+                margin=dict(l=50, r=140, t=10, b=35),
+                xaxis=dict(gridcolor="rgba(255,255,255,0.06)", tickfont=dict(size=10, color="#8b949e")),
+                yaxis=dict(
+                    title="EUR/MWh",
+                    gridcolor="rgba(255,255,255,0.06)",
+                    tickfont=dict(size=10, color="#8b949e"),
+                    zeroline=False,
+                ),
+                showlegend=False,
+                hovermode="x unified",
+            )
+            st.plotly_chart(_fig_sp, use_container_width=True)
 
     with st.expander("Price interpretation reference", expanded=True):
         st.markdown("""
