@@ -25,7 +25,7 @@ def _client():
     return EntsoePandasClient(api_key=key)
 
 
-@st.cache_data(ttl=3600)
+@st.cache_data(ttl=3600, persist="disk")
 def fetch_hydro_reservoirs(years: int = 6) -> pd.DataFrame:
     """
     Fetch weekly Norwegian hydro reservoir filling levels.

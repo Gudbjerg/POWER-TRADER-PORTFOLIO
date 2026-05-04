@@ -86,7 +86,7 @@ def _energy_charts_wind(days: int) -> pd.Series:
     return pd.concat(parts, axis=1).sum(axis=1)
 
 
-@st.cache_data(ttl=3600)
+@st.cache_data(ttl=3600, persist="disk")
 def fetch_wind_daily(days: int = 730) -> dict:
     """
     Fetch daily wind generation totals for DE and NO.
@@ -138,3 +138,85 @@ def get_wind_data() -> dict:
     result = fetch_wind_daily()
     result["fetched_at"] = datetime.utcnow()
     return result
+
+
+# ── Wind forecast (ENTSO-E A69) ───────────────────────────────────────────────
+
+# Bidding zones for forecast — EIC codes
+_FORECAST_ZONES = {
+    "DE":  "10Y1001A1001A83F",
+    "DK1": "10YDK-1--------W",
+    "NO":  "10YNO-0--------C",
+    "GB":  "10YGB----------A",
+}
+
+
+def _entsoe_wind_forecast(client, eic: str, start, end) -> pd.Series:
+    """
+    Fetch ENTSO-E A69 day-ahead wind generation forecast for one zone.
+    Queries onshore (B19) + offshore (B18) and returns daily GWh forecast total.
+    """
+    parts = []
+    for psr in ("B19", "B18"):
+        try:
+            fc = client.query_wind_and_solar_forecast(
+                eic, start=start, end=end, psr_type=psr,
+            )
+            if fc is None or (hasattr(fc, "empty") and fc.empty):
+                continue
+            if isinstance(fc, pd.DataFrame):
+                series = fc.iloc[:, 0]
+            else:
+                series = fc
+            series = pd.to_numeric(series, errors="coerce").tz_convert("UTC")
+            daily  = series.resample("D").sum() / 1000   # MWh → GWh
+            parts.append(daily)
+        except Exception:
+            continue
+    if not parts:
+        return pd.Series(dtype=float)
+    total = pd.concat(parts, axis=1).sum(axis=1)
+    total.index = total.index.tz_localize(None)
+    return total
+
+
+@st.cache_data(ttl=3600, persist="disk")
+def fetch_wind_forecast(days: int = 90) -> dict:
+    """
+    Fetch ENTSO-E A69 day-ahead wind generation forecasts for DE, DK1, NO, GB.
+
+    Returns
+    -------
+    dict:
+        forecast : pd.DataFrame — columns: date, <zone>_forecast_gwh per zone
+        zones    : list[str] — zones that returned data
+        source   : str — data source label
+    """
+    client = _client()
+    if client is None:
+        return {"forecast": pd.DataFrame(), "zones": [], "source": "unavailable"}
+
+    today  = pd.Timestamp.now(tz="UTC").normalize()
+    start  = today - pd.Timedelta(days=days)
+
+    results: dict[str, pd.Series] = {}
+    for zone, eic in _FORECAST_ZONES.items():
+        series = _entsoe_wind_forecast(client, eic, start, today)
+        if not series.empty:
+            results[zone] = series
+
+    if not results:
+        return {"forecast": pd.DataFrame(), "zones": [], "source": "unavailable"}
+
+    # Build wide DataFrame
+    df = pd.DataFrame({f"{z}_forecast_gwh": s for z, s in results.items()})
+    df.index.name = "date"
+    df = df.reset_index()
+    df["date"] = pd.to_datetime(df["date"]).dt.date
+    df = df.sort_values("date").reset_index(drop=True)
+
+    return {
+        "forecast": df,
+        "zones":    list(results.keys()),
+        "source":   "ENTSO-E A69",
+    }

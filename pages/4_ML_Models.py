@@ -51,12 +51,15 @@ from models.hmm_model import (
 st.divider()
 
 # ── Load feature matrix (cached) ─────────────────────────────────────────────
-@st.cache_data(ttl=3600, show_spinner=False)
+@st.cache_data(ttl=3600, show_spinner=False, persist="disk")
 def _get_features():
     return assemble_features(years=3)
 
+import time as _time
+_t0 = _time.perf_counter()
 with st.spinner("Loading feature matrix…"):
     _features_df = _get_features()
+_load_ms = (_time.perf_counter() - _t0) * 1000
 
 _avail = get_available_feature_sets(_features_df)
 _n_rows = len(_features_df)
@@ -68,10 +71,11 @@ for label, key in [("Prices", "core"), ("Storage", "storage"), ("Hydro", "hydro"
     status = "available" if _avail.get(key) else "pending"
     _status_parts.append(f"{label}: {status}")
 _ready = _avail.get("core") and _n_rows >= 50
+_load_tag = f"disk cache" if _load_ms < 500 else f"live fetch"
 
 st.markdown(
     commentary(
-        f"Feature matrix: {_n_rows} trading days assembled. "
+        f"Feature matrix: {_n_rows} trading days assembled ({_load_tag}, {_load_ms/1000:.1f}s). "
         f"{' | '.join(_status_parts)}. "
         + ("Models can be trained: use the Train buttons in each model section below."
            if _ready else

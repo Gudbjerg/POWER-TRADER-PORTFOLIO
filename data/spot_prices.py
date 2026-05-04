@@ -56,7 +56,7 @@ def _fetch_day(date_str: str) -> list[dict]:
     return records
 
 
-@st.cache_data(ttl=3600)
+@st.cache_data(ttl=3600, persist="disk")
 def fetch_spot_prices(days: int = 30) -> pd.DataFrame:
     """Fetch daily average day-ahead prices for the last `days` days."""
     today = datetime.utcnow().date()

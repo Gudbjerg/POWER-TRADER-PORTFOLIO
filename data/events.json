@@ -64,23 +64,72 @@
   },
   {
     "date": "2026-02-28",
-    "label": "US-Iran escalation ('Epic Fury')",
-    "description": "US military operation in the Strait of Hormuz region triggers fears over LNG transit disruption. TTF rises approximately 40% in three days on supply shock concerns. Qatar and Australian LNG cargoes rerouted. Markets reassess Hormuz transit risk premium.",
+    "label": "Operation Epic Fury — US/Israel strikes on Iran",
+    "description": "US and Israeli forces conduct strikes on Iranian nuclear and military infrastructure. Supreme Leader Khamenei killed. TTF surges ~40% in 72 hours. Markets immediately reprice Strait of Hormuz transit risk. Goldman Sachs and IEA begin modelling LNG supply disruption scenarios.",
+    "category": "geopolitical",
+    "impact": "critical"
+  },
+  {
+    "date": "2026-03-02",
+    "label": "Iranian drones strike Ras Laffan LNG",
+    "description": "Iranian drone strike on QatarEnergy's Ras Laffan industrial complex. Approximately 17% of Qatar's 77 Mt/yr LNG export capacity taken offline. QatarEnergy declares force majeure. Multi-year repair timeline confirmed. Largest LNG supply disruption since 2022 Russian shock.",
+    "category": "supply",
+    "impact": "critical"
+  },
+  {
+    "date": "2026-03-04",
+    "label": "Strait of Hormuz officially closed",
+    "description": "Iran formally closes the Strait of Hormuz to all non-Iranian vessel traffic. Approximately 20% of global LNG trade transits the strait. JKM-TTF spread collapses as Asian cargoes cannot reroute to Europe. LNG insurance premiums increase from 0.125% to 0.2–0.4% per transit.",
     "category": "geopolitical",
     "impact": "critical"
   },
   {
     "date": "2026-03-12",
     "label": "Qatar LNG diversion",
-    "description": "Qatar Petroleum diverts three LNG cargoes from Europe to Asia following JKM-TTF spread widening. European LNG sendout falls 12% week-on-week.",
+    "description": "QatarEnergy diverts three surviving LNG cargoes from Europe to Asia following JKM-TTF spread widening. European LNG sendout falls 12% week-on-week. Gate and Dunkirk terminal utilisation drops sharply.",
     "category": "supply",
     "impact": "warn"
   },
   {
+    "date": "2026-03-20",
+    "label": "Ras Laffan damage — 3–5 year repair confirmed",
+    "description": "QatarEnergy confirms structural damage to two LNG trains at Ras Laffan; repair timeline 3–5 years. Implies structural loss of ~20 Mt/yr LNG supply to Europe through 2027–2028. EU storage injection season begins with reserves at ~30%, lowest since 2022. ECB revises 2026 inflation projections upward.",
+    "category": "supply",
+    "impact": "critical"
+  },
+  {
     "date": "2026-03-28",
     "label": "EU storage mandate confirmed at 90%",
-    "description": "EU regulation extended requiring member states to reach 90% storage fill by November 1. The 80% target under EU 2022/1032 was raised to 90% for the 2023-2025+ period. In 2025, EU storage reached 83% by October 1 and met the 90% mandate by November 1.",
+    "description": "EU regulation extended requiring member states to reach 90% storage fill by November 1. Post-Hormuz LNG disruption means injection targets are at serious risk without demand-side measures or US LNG diversions.",
     "category": "policy",
     "impact": "warn"
+  },
+  {
+    "date": "2026-04-08",
+    "label": "Hormuz ceasefire — first truce",
+    "description": "Fragile ceasefire announced following US-Iran diplomatic contacts. Strait partially reopens. TTF pulls back from peak of approximately €70/MWh. Markets remain cautious; no restoration of Ras Laffan export capacity.",
+    "category": "geopolitical",
+    "impact": "warn"
+  },
+  {
+    "date": "2026-04-13",
+    "label": "US naval blockade of Iranian ports",
+    "description": "US announces naval blockade of Iranian export terminals as part of dual-pressure strategy. Effectively prevents any Iranian crude or gas condensate exports. Geopolitical premium re-enters TTF as blockade risks escalation.",
+    "category": "geopolitical",
+    "impact": "warn"
+  },
+  {
+    "date": "2026-04-17",
+    "label": "Strait of Hormuz reopens under truce",
+    "description": "Iran reopens the Strait under a monitored truce agreement. Commercial LNG transit resumes under US naval escort. JKM-TTF spread widens modestly as Asian cargoes compete for Qatari volumes. European gas markets remain structurally undersupplied for the 2026 injection season.",
+    "category": "geopolitical",
+    "impact": "warn"
+  },
+  {
+    "date": "2026-04-19",
+    "label": "Strait of Hormuz re-closed",
+    "description": "Iran re-closes the Strait following breakdown of truce talks. TTF re-rallies. EU energy ministers convene emergency session to assess injection-season risk. Demand-side measures and US LNG diversion programmes accelerated.",
+    "category": "geopolitical",
+    "impact": "critical"
   }
 ]

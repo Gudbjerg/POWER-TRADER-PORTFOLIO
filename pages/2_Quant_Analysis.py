@@ -25,14 +25,31 @@ from models.storage_monte_carlo import compute_monthly_stats, run_monte_carlo
 from models.gas_power_regression import prepare_data, run_full_ols
 from models.spike_detector import compute_zscores, latest_signals, ALERT_Z, WARNING_Z
 from models.ttf_backtest import fetch_ttf_history, compute_seasonal_strategy, compute_strategy_stats
+from models.supply_stack import build_stack, identify_marginal_fuel, make_merit_order_figure, fetch_eua_price
+from models.nordic_decomp import (
+    run_rolling_decomposition, current_contributions, dominant_driver,
+    make_beta_chart, make_contribution_bar, FACTOR_LABELS,
+)
+from models.feature_assembly import assemble_features, get_available_feature_sets
+from models.wind_forecast_error import (
+    compute_errors, compute_rolling_rmse, compute_price_correlation,
+    make_error_bar_chart, make_rmse_chart, make_correlation_scatter,
+    ZONE_LABELS as WIND_ZONE_LABELS,
+)
+from data.wind import fetch_wind_daily, fetch_wind_forecast
 
 apply_dark_theme()
 
 # ── Load data ────────────────────────────────────────────────────────────────
+@st.cache_data(ttl=3600, show_spinner=False, persist="disk")
+def _get_features_l2():
+    return assemble_features(years=3)
+
 with st.spinner(""):
-    storage = get_storage_data()
-    ttf     = get_ttf_data()
-    spot_df = fetch_spot_prices(days=150)   # extended history for regression
+    storage    = get_storage_data()
+    ttf        = get_ttf_data()
+    spot_df    = fetch_spot_prices(days=150)   # extended history for regression
+    features_df = _get_features_l2()
 
 eu_df = storage["europe"]
 
@@ -56,19 +73,22 @@ with st.expander("Model overview", expanded=False):
     | Gas-to-Power OLS Regression (NL proxy) | Active |
     | Price Spike Detector | Active |
     | TTF Seasonal Injection-Withdrawal Backtest | Active |
-    | Nordic price decomposition | Awaiting ENTSO-E key (hydro data) |
-    | Wind forecast error | Awaiting ENTSO-E key |
-    | Merit order / supply stack | In development |
+    | Nordic price decomposition | Active |
+    | Wind forecast error | Active |
+    | Merit order / supply stack | Active |
     """)
 
 st.divider()
 
 # ── Model tabs ───────────────────────────────────────────────────────────────
-tab_mc, tab_reg, tab_spike, tab_bt = st.tabs([
+tab_mc, tab_reg, tab_spike, tab_bt, tab_stack, tab_decomp, tab_wind = st.tabs([
     "Storage Monte Carlo",
     "Gas-to-Power Regression",
     "Price Spike Detector",
     "TTF Seasonal Strategy",
+    "Supply Stack",
+    "Nordic Decomposition",
+    "Wind Forecast Error",
 ])
 
 
@@ -856,6 +876,545 @@ with tab_bt:
             """)
 
         st.caption("Source: ICE/Yahoo Finance (TTF=F) | agsi.gie.eu")
+
+
+# ════════════════════════════════════════════════════════════════════════════
+# TAB 5: MERIT ORDER / SUPPLY STACK
+# ════════════════════════════════════════════════════════════════════════════
+with tab_stack:
+    st.markdown("### German Merit Order — Supply Stack")
+    st.caption(
+        "German generation fleet ordered by short-run marginal cost (SRMC). "
+        "Demand line shows where on the merit order current consumption clears. "
+        "The intersecting fuel sets the theoretical clearing price. "
+        "Capacities from Bundesnetzagentur 2024 survey; gas SRMC is live TTF-derived."
+    )
+
+    # ── Inputs ───────────────────────────────────────────────────────────────
+    ttf_prices = ttf.get("prices", pd.DataFrame())
+    ttf_latest = float(ttf_prices["price"].iloc[-1]) if not ttf_prices.empty else 50.0
+
+    col_left, col_right = st.columns([2, 1])
+    with col_left:
+        demand_gw = st.slider(
+            "Modelled demand (GW)",
+            min_value=30.0, max_value=90.0, value=60.0, step=1.0,
+            help=(
+                "German grid load varies from ~35 GW (summer weekend night) to ~85 GW "
+                "(cold winter peak). Slide to see which fuel sets the clearing price at "
+                "different demand levels. ENTSO-E A65 live load data will be added in a "
+                "future update."
+            ),
+        )
+    with col_right:
+        st.markdown(
+            commentary(
+                f"TTF input: €{ttf_latest:.1f}/MWh (live). "
+                "EUA carbon price fetched below.",
+                "ok",
+            ),
+            unsafe_allow_html=True,
+        )
+
+    # ── Fetch EUA, build stack ────────────────────────────────────────────────
+    @st.cache_data(ttl=3600, show_spinner=False, persist="disk")
+    def _get_eua():
+        return fetch_eua_price()
+
+    eua_price, eua_source = _get_eua()
+    stack_df  = build_stack(ttf_latest, eua_price)
+    marginal  = identify_marginal_fuel(stack_df, demand_gw)
+
+    # ── KPI row ──────────────────────────────────────────────────────────────
+    k1, k2, k3, k4, k5 = st.columns(5)
+
+    nl_latest: float | None = None
+    if not spot_df.empty:
+        nl_row = spot_df[spot_df["zone"] == "NL"].sort_values("date")
+        if not nl_row.empty:
+            nl_latest = float(nl_row["price_eur_mwh"].iloc[-1])
+
+    gas_srmc = ttf_latest / 0.55 + eua_price * 0.37
+    coal_srmc = 11.0 / 0.40 + eua_price * 0.85
+
+    with k1:
+        st.markdown(
+            kpi_card("TTF gas", f"€{ttf_latest:.1f}/MWh",
+                     delta_span("live front-month", "blue")),
+            unsafe_allow_html=True,
+        )
+    with k2:
+        st.markdown(
+            kpi_card("EUA carbon", f"€{eua_price:.0f}/t CO₂",
+                     delta_span(eua_source, "blue")),
+            unsafe_allow_html=True,
+        )
+    with k3:
+        st.markdown(
+            kpi_card("Gas CCGT SRMC", f"€{gas_srmc:.1f}/MWh",
+                     delta_span("TTF÷0.55 + EUA×0.37", "amber")),
+            unsafe_allow_html=True,
+        )
+    with k4:
+        st.markdown(
+            kpi_card("Marginal fuel", marginal["label"].split("/")[0].strip(),
+                     delta_span(f"€{marginal['marginal_cost']:.1f}/MWh implied", "amber")),
+            unsafe_allow_html=True,
+        )
+    with k5:
+        if nl_latest is not None:
+            premium = nl_latest - marginal["marginal_cost"]
+            color   = "red" if premium > 10 else ("green" if premium < -10 else "blue")
+            label   = "scarcity premium" if premium > 0 else "below implied"
+            st.markdown(
+                kpi_card("NL vs implied", f"€{nl_latest:.1f}/MWh",
+                         delta_span(f"{premium:+.1f} EUR/MWh {label}", color)),
+                unsafe_allow_html=True,
+            )
+        else:
+            st.markdown(
+                kpi_card("NL actual", "n/a",
+                         delta_span("spot data unavailable", "amber")),
+                unsafe_allow_html=True,
+            )
+
+    st.divider()
+
+    # ── Merit order chart ─────────────────────────────────────────────────────
+    fig_stack = make_merit_order_figure(
+        stack_df, demand_gw, marginal, actual_power_price=nl_latest,
+    )
+    st.plotly_chart(fig_stack, use_container_width=True)
+
+    # ── Commentary ───────────────────────────────────────────────────────────
+    if marginal["fuel"] == "gas":
+        prose = (
+            f"At {demand_gw:.0f} GW demand, the marginal fuel is gas CCGT at an implied clearing price of "
+            f"€{marginal['marginal_cost']:.1f}/MWh (TTF €{ttf_latest:.1f}÷0.55 + EUA €{eua_price:.0f}×0.37). "
+            f"Gas CCGT fleet is approximately {marginal['utilisation_pct']:.0f}% utilised within its capacity block. "
+            "This is the gas-marginal regime: power prices and TTF are highly correlated, and the clean-spark "
+            "spread is the key signal for generation economics."
+        )
+        status = "warn"
+    elif marginal["fuel"] == "coal":
+        prose = (
+            f"At {demand_gw:.0f} GW demand, the marginal fuel is hard coal at an implied clearing price of "
+            f"€{marginal['marginal_cost']:.1f}/MWh. Gas CCGT SRMC (€{gas_srmc:.1f}/MWh) is above coal, "
+            "meaning gas plant is off the margin — a coal-marginal regime. The clean-dark spread is the "
+            "relevant signal for generation economics in this demand scenario."
+        )
+        status = "warn"
+    elif marginal["fuel"] in ("wind", "solar"):
+        prose = (
+            f"At {demand_gw:.0f} GW demand, the marginal fuel is renewable (zero SRMC). "
+            "Negative or near-zero power prices are possible when renewable output is high and demand is low. "
+            "This is a structural feature of high-renewables markets with inflexible baseload."
+        )
+        status = "ok"
+    else:
+        prose = (
+            f"At {demand_gw:.0f} GW demand, the marginal fuel is {marginal['label']} at "
+            f"€{marginal['marginal_cost']:.1f}/MWh."
+        )
+        status = "ok"
+
+    st.markdown(commentary(prose, status), unsafe_allow_html=True)
+
+    # ── Methodology ──────────────────────────────────────────────────────────
+    with st.expander("Methodology and assumptions", expanded=False):
+        st.markdown(f"""
+        **Model:** Static merit order. Generation sources are ranked by short-run marginal cost (SRMC)
+        and stacked left-to-right. The demand line intersects the stack at the marginal fuel, whose
+        SRMC sets the theoretical day-ahead clearing price.
+
+        **Dynamic inputs:**
+        - Gas CCGT SRMC = TTF ÷ 0.55 + EUA × 0.37 (live TTF: **€{ttf_latest:.1f}/MWh**, EUA: **€{eua_price:.0f}/t**)
+        - Hard coal SRMC = 11 EUR/MWh_th ÷ 0.40 + EUA × 0.85 ≈ **€{coal_srmc:.1f}/MWh** at current EUA
+
+        **Static inputs (Bundesnetzagentur 2024):**
+        - Wind: 66 GW installed | Solar: 73 GW | Hydro: 4.5 GW | Biomass: 8.5 GW
+        - Lignite: 17 GW (€20/MWh) | Hard coal: 23 GW | Gas CCGT/OCGT: 30 GW | Oil peakers: 2.5 GW
+        - Nuclear: 0 GW (all plants retired April 2023)
+
+        **EUA source:** {eua_source}
+
+        **Key simplifications:**
+        - This model shows installed capacity, not available capacity. Typical thermal availability
+          is 85-90%; renewables depend on weather conditions.
+        - Wind and solar produce at weather-dependent output levels — their effective capacity at any
+          given hour is not 66/73 GW. The stack shows the structural position, not real-time dispatch.
+        - No cross-border imports or exports. Germany regularly imports from France and Scandinavia,
+          which can suppress the clearing price below the domestic marginal fuel SRMC.
+        - No must-run obligations, ramp constraints, or reserve requirements.
+        - Hard coal fuel cost is a market-average estimate (~API2 reference). Actual bilateral
+          contract prices may differ.
+
+        **Scarcity premium:** Difference between NL actual day-ahead price and the model-implied
+        clearing price. A persistent positive premium indicates factors not captured by the pure
+        merit order (scarcity, congestion, forward risk premium). A persistent negative premium
+        indicates renewable surplus, strong imports, or weak demand relative to installed capacity.
+
+        **Data sources:** Bundesnetzagentur Kraftwerksliste 2024 | ICE/Yahoo Finance (TTF=F, CO2.L) |
+        Nord Pool Data Portal (NL day-ahead)
+        """)
+
+    st.caption(
+        "Sources: Bundesnetzagentur 2024 | ICE/Yahoo Finance (TTF, EUA) | Nord Pool (NL day-ahead)"
+    )
+
+
+# ════════════════════════════════════════════════════════════════════════════
+# TAB 6: NORDIC PRICE DECOMPOSITION
+# ════════════════════════════════════════════════════════════════════════════
+with tab_decomp:
+    st.markdown("### Nordic Price Decomposition")
+    st.caption(
+        "Rolling 90-day multivariate OLS decomposes the NO2 day-ahead price into contributions "
+        "from continental price (NL), gas price (TTF), and — where available — Norwegian hydro "
+        "reservoir level and German wind output. Regressors are standardised so beta magnitudes "
+        "are directly comparable across drivers."
+    )
+
+    _avail_l2 = get_available_feature_sets(features_df)
+    _n_rows_l2 = len(features_df)
+
+    if features_df.empty or _n_rows_l2 < 100:
+        st.warning(
+            "Insufficient feature data for decomposition. "
+            "Requires at least 100 trading days of NO2, NL, and TTF prices."
+        )
+    else:
+        # Run rolling decomposition
+        with st.spinner("Running rolling OLS decomposition…"):
+            decomp_results, feat_cols, model_label = run_rolling_decomposition(
+                features_df, window=90,
+            )
+
+        # Model mode banner
+        if len(feat_cols) < 4:
+            st.info(
+                f"Active: **{model_label}**. "
+                + ("Hydro and wind data unavailable — ENTSO-E key required for full 4-factor model."
+                   if len(feat_cols) == 2 else
+                   "Wind data unavailable — ENTSO-E key or Fraunhofer fallback required for 4-factor model."),
+                icon="ℹ️",
+            )
+        else:
+            st.success(f"Active: **{model_label}**.", icon="✅")
+
+        if decomp_results.empty:
+            st.warning("Rolling OLS could not converge. Check that statsmodels is installed.")
+        else:
+            # ── KPI row ──────────────────────────────────────────────────────
+            driver_key, driver_beta = dominant_driver(decomp_results, feat_cols)
+            contribs   = current_contributions(features_df, decomp_results, feat_cols)
+
+            latest_no2 = float(features_df.sort_values("date")["no2"].dropna().iloc[-1])
+            latest_r2  = float(decomp_results["r2"].dropna().iloc[-1])
+
+            k1, k2, k3, k4 = st.columns(4)
+            with k1:
+                st.markdown(
+                    kpi_card("NO2 latest", f"€{latest_no2:.1f}/MWh",
+                             delta_span("day-ahead price", "blue")),
+                    unsafe_allow_html=True,
+                )
+            with k2:
+                st.markdown(
+                    kpi_card("Model R²", f"{latest_r2:.2f}",
+                             delta_span(f"90-day rolling window", "blue")),
+                    unsafe_allow_html=True,
+                )
+            with k3:
+                driver_label = FACTOR_LABELS.get(driver_key, driver_key)
+                st.markdown(
+                    kpi_card("Dominant driver", driver_label.split("(")[0].strip(),
+                             delta_span(f"β = {driver_beta:.2f} EUR/MWh per σ", "amber")),
+                    unsafe_allow_html=True,
+                )
+            with k4:
+                total_explained = sum(abs(v) for v in contribs.values())
+                st.markdown(
+                    kpi_card("Total driver signal", f"€{total_explained:.1f}/MWh",
+                             delta_span("sum of |contributions|", "blue")),
+                    unsafe_allow_html=True,
+                )
+
+            st.divider()
+
+            # ── Beta time series chart ────────────────────────────────────────
+            st.markdown("#### Rolling 90-Day Beta Coefficients")
+            st.caption(
+                "Each line shows how strongly that factor is driving NO2 over the trailing 90-day window. "
+                "Positive β: factor pushing prices up. Negative β: factor suppressing prices. "
+                "Unit: EUR/MWh per one standard deviation of the factor."
+            )
+            fig_beta = make_beta_chart(decomp_results, feat_cols, window=90)
+            st.plotly_chart(fig_beta, use_container_width=True)
+
+            # ── Today's contribution bar ──────────────────────────────────────
+            if contribs:
+                st.markdown("#### Today's Factor Contributions")
+                st.caption(
+                    "Each bar shows β_i × z_i — how much that driver is currently adding or subtracting "
+                    "from the model-implied NO2 price, in EUR/MWh."
+                )
+                fig_contrib = make_contribution_bar(contribs, no2_actual=latest_no2)
+                st.plotly_chart(fig_contrib, use_container_width=True)
+
+            # ── Interpretation ────────────────────────────────────────────────
+            if driver_key in contribs:
+                driver_contrib = contribs[driver_key]
+                direction = "upward" if driver_contrib > 0 else "downward"
+                st.markdown(
+                    commentary(
+                        f"Current dominant driver: {FACTOR_LABELS.get(driver_key, driver_key)}. "
+                        f"Over the trailing 90-day window, a one-standard-deviation move in this factor "
+                        f"corresponds to a {driver_beta:.2f} EUR/MWh move in NO2. "
+                        f"At current levels, it is exerting {abs(driver_contrib):.1f} EUR/MWh of "
+                        f"{direction} price pressure. "
+                        f"Rolling R² = {latest_r2:.2f} — the {model_label} explains "
+                        f"{latest_r2*100:.0f}% of NO2 variance over the trailing window.",
+                        "ok",
+                    ),
+                    unsafe_allow_html=True,
+                )
+
+            # ── Methodology ───────────────────────────────────────────────────
+            with st.expander("Methodology", expanded=False):
+                factor_list = " | ".join(
+                    f"`{c}` ({FACTOR_LABELS.get(c, c)})" for c in feat_cols
+                )
+                st.markdown(f"""
+                **Model:** Rolling ordinary least squares (OLS), 90-day window.
+
+                `NO2 = α + β₁·NL + β₂·TTF{' + β₃·hydro_pct' if 'hydro_pct' in feat_cols else ''}{' + β₄·de_wind_gwh' if 'de_wind_gwh' in feat_cols else ''} + ε`
+
+                **Active factors:** {factor_list}
+
+                **Standardisation:** All regressors are globally standardised (mean 0, std 1 over
+                the full sample) before fitting, so beta magnitudes represent EUR/MWh per one-
+                standard-deviation change. This makes the coefficients directly comparable across
+                factors with different units (EUR/MWh for NL/TTF, % for hydro, GWh for wind).
+
+                **Rolling window:** 90 trading days (~4.5 months). Shorter windows capture recent
+                regime shifts; longer windows are more stable. The window was chosen to balance
+                responsiveness with statistical stability. Minimum 45 observations required.
+
+                **Interpretation of betas:**
+                - NL β > 0: When continental European prices are high, Nordic prices track higher
+                  (price coupling via NordLink, NorNed, Viking Link).
+                - TTF β > 0: Gas-price pass-through to Nordic prices (gas-fired peakers set the
+                  marginal price when hydro is tight or demand is high).
+                - hydro β < 0: Higher reservoir levels → more hydro dispatch → lower prices.
+                  Negative beta is expected and confirms hydro as a supply-side depressant.
+                - wind β < 0: Higher German wind → lower continental prices via spillover →
+                  lower NO2 via interconnector coupling.
+
+                **Factor contributions:** β_i × z_i, where z_i = (x_i − μ_i) / σ_i at today's
+                value. Represents the model-implied price contribution of each driver given current
+                conditions. Contributions do not sum to the actual price level (the intercept term
+                and unexplained residual account for the remainder).
+
+                **Feature data:** {_n_rows_l2} trading days assembled.
+                Feature availability: {"hydro ✅" if _avail_l2.get("hydro") else "hydro ❌"} |
+                {"wind ✅" if _avail_l2.get("wind") else "wind ❌ (ENTSO-E key required)"}.
+
+                **Forward link — Phase D cointegration scanner:** The same rolling regression
+                mechanism, extended with Engle-Granger cointegration tests, will underpin the
+                NO2–NL pair-trading signal (expected spread mean-reversion speed and entry
+                z-score thresholds).
+
+                **Data sources:** ENTSO-E A44 (NO2, NL day-ahead prices) | ICE/Yahoo Finance (TTF) |
+                ENTSO-E B31 (hydro reservoirs) | Fraunhofer ISE energy-charts.info (DE wind)
+                """)
+
+            st.caption(
+                "Sources: ENTSO-E A44 (day-ahead prices) | ICE/Yahoo Finance (TTF) | "
+                "ENTSO-E B31 (hydro) | Fraunhofer ISE (wind)"
+            )
+
+
+# ════════════════════════════════════════════════════════════════════════════
+# TAB 7: WIND FORECAST ERROR TRACKER
+# ════════════════════════════════════════════════════════════════════════════
+with tab_wind:
+    st.markdown("### Wind Forecast Error Tracker")
+    st.caption(
+        "ENTSO-E A69 day-ahead wind generation forecast versus actual generation. "
+        "Tracks how well TSO wind forecasts perform and whether large forecast misses "
+        "coincide with elevated intraday price volatility."
+    )
+
+    # ── Load data ─────────────────────────────────────────────────────────────
+    @st.cache_data(ttl=3600, show_spinner=False, persist="disk")
+    def _get_wind_forecast():
+        return fetch_wind_forecast(days=90)
+
+    @st.cache_data(ttl=3600, show_spinner=False, persist="disk")
+    def _get_wind_actual():
+        return fetch_wind_daily(days=90)
+
+    with st.spinner("Loading wind forecast and actual data…"):
+        fc_data  = _get_wind_forecast()
+        act_data = _get_wind_actual()
+
+    fc_df     = fc_data.get("forecast", pd.DataFrame())
+    fc_zones  = fc_data.get("zones", [])
+    fc_source = fc_data.get("source", "unavailable")
+    act_df    = act_data.get("daily", pd.DataFrame())
+
+    # ── Source banners ────────────────────────────────────────────────────────
+    if fc_source == "unavailable":
+        st.warning(
+            "Wind forecast data (ENTSO-E A69) is unavailable. "
+            "Possible causes: no ENTSOE_API_KEY set, or ENTSO-E server instability "
+            "(A69 wind forecast endpoint may be affected by the ongoing platform issues "
+            "also affecting B16/B19 actual generation). Check API key in settings.",
+            icon="⚠️",
+        )
+    else:
+        _zones_str = ", ".join(WIND_ZONE_LABELS.get(z, z) for z in fc_zones)
+        st.success(
+            f"Forecast data loaded from {fc_source}. "
+            f"Zones with data: {_zones_str}.",
+            icon="✅",
+        )
+
+    if fc_df.empty or act_df.empty or not fc_zones:
+        st.info(
+            "Both forecast (ENTSO-E A69) and actual (ENTSO-E B18/B19 or Fraunhofer ISE) "
+            "data are required for error computation. Actual DE wind is available via "
+            "Fraunhofer ISE fallback — forecast data requires an active ENTSO-E API key.",
+            icon="ℹ️",
+        )
+    else:
+        # ── Compute errors ────────────────────────────────────────────────────
+        error_df = compute_errors(fc_df, act_df, fc_zones)
+        rmse_df  = compute_rolling_rmse(error_df, fc_zones, window=7)
+
+        if error_df.empty:
+            st.warning(
+                "Could not compute forecast errors — no overlapping dates between "
+                "forecast and actual data. This typically means the zones with "
+                "forecast data (e.g. DK1, NO, GB) do not have corresponding actual "
+                "generation data available via the current fallback chain."
+            )
+        else:
+            # ── KPI row ───────────────────────────────────────────────────────
+            kpi_cols = st.columns(len(fc_zones) + 1)
+            with kpi_cols[0]:
+                latest_date = error_df["date"].max()
+                st.markdown(
+                    kpi_card("Latest data", str(latest_date),
+                             delta_span(f"{len(error_df)} days", "blue")),
+                    unsafe_allow_html=True,
+                )
+            for i, zone in enumerate(fc_zones):
+                col = f"{zone}_error_gwh"
+                if col not in error_df.columns:
+                    continue
+                latest_err = float(error_df[col].dropna().iloc[-1]) if not error_df[col].dropna().empty else 0.0
+                mean_abs   = float(error_df[col].abs().mean()) if not error_df[col].dropna().empty else 0.0
+                color = "red" if abs(latest_err) > mean_abs * 1.5 else "blue"
+                with kpi_cols[i + 1]:
+                    st.markdown(
+                        kpi_card(
+                            WIND_ZONE_LABELS.get(zone, zone),
+                            f"{latest_err:+.1f} GWh",
+                            delta_span(f"mean |err| {mean_abs:.1f} GWh", color),
+                        ),
+                        unsafe_allow_html=True,
+                    )
+
+            st.divider()
+
+            # ── Error bar chart ───────────────────────────────────────────────
+            st.markdown("#### Daily Forecast Error (last 60 days)")
+            st.caption("Red = over-forecast (forecast > actual). Green = under-forecast.")
+            fig_err = make_error_bar_chart(error_df, fc_zones, last_n_days=60)
+            st.plotly_chart(fig_err, use_container_width=True)
+
+            # ── RMSE chart ────────────────────────────────────────────────────
+            if not rmse_df.empty:
+                st.markdown("#### Rolling 7-Day RMSE by Country")
+                st.caption(
+                    "Lower RMSE = more accurate wind forecast. "
+                    "RMSE spikes typically coincide with rapid weather pattern changes."
+                )
+                fig_rmse = make_rmse_chart(rmse_df, fc_zones)
+                st.plotly_chart(fig_rmse, use_container_width=True)
+
+            # ── Correlation scatter ───────────────────────────────────────────
+            primary_zone = fc_zones[0] if fc_zones else "DE"
+            corr_df = compute_price_correlation(error_df, features_df, zone=primary_zone, window=30)
+
+            if not corr_df.empty:
+                st.markdown(f"#### Forecast Error vs Price Volatility — {WIND_ZONE_LABELS.get(primary_zone, primary_zone)}")
+                st.caption(
+                    "Tests whether large wind forecast misses coincide with large next-day price moves. "
+                    "Rolling 30-day Pearson correlation annotated. Significant positive correlation "
+                    "implies wind forecast error is a viable intraday volatility predictor."
+                )
+                fig_corr = make_correlation_scatter(corr_df, zone=primary_zone)
+                st.plotly_chart(fig_corr, use_container_width=True)
+
+                latest_rho = corr_df["rolling_corr"].dropna().iloc[-1] if not corr_df["rolling_corr"].dropna().empty else float("nan")
+                if not np.isnan(latest_rho):
+                    if abs(latest_rho) > 0.3:
+                        interpretation = (
+                            f"Rolling 30-day correlation ρ = {latest_rho:.2f} — statistically meaningful. "
+                            "Large wind forecast misses are co-moving with elevated power price volatility in "
+                            "the current period. This is consistent with the theory that wind forecast errors "
+                            "create imbalances that require expensive real-time correction."
+                        )
+                        status = "warn" if latest_rho > 0.3 else "ok"
+                    else:
+                        interpretation = (
+                            f"Rolling 30-day correlation ρ = {latest_rho:.2f} — weak relationship. "
+                            "Wind forecast errors are not strongly co-moving with price volatility in the "
+                            "current period. Other drivers (storage levels, gas price, continental flows) "
+                            "are likely dominating price formation."
+                        )
+                        status = "ok"
+                    st.markdown(commentary(interpretation, status), unsafe_allow_html=True)
+
+    # ── Methodology ───────────────────────────────────────────────────────────
+    with st.expander("Methodology", expanded=False):
+        st.markdown("""
+        **Wind forecast data:** ENTSO-E A69 (Day-Ahead Aggregated Generation — Wind and Solar),
+        queried via `query_wind_and_solar_forecast()` in `entsoe-py`. Onshore (B19) + offshore
+        (B18) PSR types are summed to daily GWh.
+
+        **Actual wind data:** ENTSO-E B18/B19 for non-DE zones. Germany (DE) actual wind is
+        sourced from Fraunhofer ISE energy-charts.info as primary (more reliable than ENTSO-E
+        B18/B19 which are subject to ongoing server instability).
+
+        **Error definition:** `forecast_error = forecast_gwh − actual_gwh`
+        - Positive error = TSO over-predicted wind (more dispatch available than expected)
+        - Negative error = TSO under-predicted wind (less dispatch than expected)
+
+        **Error percentage:** `forecast_error / actual_gwh × 100`. Undefined when actual = 0 (shown as n/a).
+
+        **Rolling RMSE:** `sqrt( mean( error² ) )` over a 7-day trailing window.
+
+        **Price correlation:** Pearson correlation between `|forecast_error_gwh|` and
+        `|day-over-day NO2 price change (EUR/MWh)|` over a 30-day trailing window.
+        The NO2 price change is used as a proxy for intraday/next-day market volatility —
+        a direct intraday continuous price series requires REMIT / Epex intraday data.
+
+        **ENTSO-E A69 vs B16/B19 availability:** A69 (forecasts) and B16/B19 (actuals) are
+        separate document types that may be served from different ENTSO-E platform components.
+        If A69 is unavailable, the tab shows a clear error banner rather than silent null data.
+
+        **Countries:** DE (Fraunhofer actuals, A69 forecast), DK1 (ENTSO-E both), NO (ENTSO-E both),
+        GB (ENTSO-E both — availability may vary post-Brexit).
+        """)
+
+    st.caption(
+        "Sources: ENTSO-E A69 (wind forecast) | ENTSO-E B18/B19 (actuals) | "
+        "Fraunhofer ISE energy-charts.info (DE actuals fallback)"
+    )
 
 
 # ── Footer ────────────────────────────────────────────────────────────────────

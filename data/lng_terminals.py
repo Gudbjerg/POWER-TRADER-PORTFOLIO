@@ -59,7 +59,7 @@ def _to_df(records: list[dict], country: str) -> pd.DataFrame:
     return df
 
 
-@st.cache_data(ttl=3600)
+@st.cache_data(ttl=3600, persist="disk")
 def fetch_lng_country(country: str, date_from: str, date_to: str) -> pd.DataFrame:
     if not os.getenv("AGSI_API_KEY", ""):
         return pd.DataFrame()

@@ -50,7 +50,7 @@ def _fetch_pages(url: str, params: dict) -> list[dict]:
     return records
 
 
-@st.cache_data(ttl=3600)
+@st.cache_data(ttl=3600, persist="disk")
 def fetch_storage_eu(date_from: str, date_to: str) -> pd.DataFrame:
     """Fetch EU aggregate gas storage history."""
     if not os.getenv("AGSI_API_KEY", ""):
@@ -59,7 +59,7 @@ def fetch_storage_eu(date_from: str, date_to: str) -> pd.DataFrame:
     return _to_df(records)
 
 
-@st.cache_data(ttl=3600)
+@st.cache_data(ttl=3600, persist="disk")
 def fetch_storage_country(country: str, date_from: str, date_to: str) -> pd.DataFrame:
     """Fetch country-level gas storage history (e.g. country='DE')."""
     if not os.getenv("AGSI_API_KEY", ""):

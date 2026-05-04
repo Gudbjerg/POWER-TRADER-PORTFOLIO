@@ -126,7 +126,7 @@ def _fetch_energy_charts(days: int) -> pd.DataFrame:
     return merged.groupby("hour")[["price", "solar_mw"]].mean().reset_index()
 
 
-@st.cache_data(ttl=3600)
+@st.cache_data(ttl=3600, persist="disk")
 def fetch_solar_cannibalisation(days: int = 14) -> dict:
     """
     Fetch hourly solar cannibalisation data, trying ENTSO-E first.

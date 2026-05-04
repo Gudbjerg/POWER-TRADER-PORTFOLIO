@@ -16,7 +16,7 @@ except ImportError:
 TTF_TICKER = "TTF=F"
 
 
-@st.cache_data(ttl=7200)   # 2-hour cache — reduces Yahoo Finance request frequency
+@st.cache_data(ttl=7200, persist="disk")   # 2-hour cache — reduces Yahoo Finance request frequency
 def fetch_ttf_prices(days: int = 120) -> pd.DataFrame:
     """Fetch TTF front-month futures price history. Retries up to 3 times on rate limit."""
     if not YFINANCE_AVAILABLE:
