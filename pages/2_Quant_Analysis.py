@@ -25,6 +25,7 @@ from models.storage_monte_carlo import compute_monthly_stats, run_monte_carlo
 from models.gas_power_regression import prepare_data, run_full_ols
 from models.spike_detector import compute_zscores, latest_signals, ALERT_Z, WARNING_Z
 from models.ttf_backtest import fetch_ttf_history, compute_seasonal_strategy, compute_strategy_stats
+from models.supply_stack import build_stack, identify_marginal_fuel, make_merit_order_figure, fetch_eua_price
 
 apply_dark_theme()
 
@@ -58,17 +59,18 @@ with st.expander("Model overview", expanded=False):
     | TTF Seasonal Injection-Withdrawal Backtest | Active |
     | Nordic price decomposition | Awaiting ENTSO-E key (hydro data) |
     | Wind forecast error | Awaiting ENTSO-E key |
-    | Merit order / supply stack | In development |
+    | Merit order / supply stack | Active |
     """)
 
 st.divider()
 
 # ── Model tabs ───────────────────────────────────────────────────────────────
-tab_mc, tab_reg, tab_spike, tab_bt = st.tabs([
+tab_mc, tab_reg, tab_spike, tab_bt, tab_stack = st.tabs([
     "Storage Monte Carlo",
     "Gas-to-Power Regression",
     "Price Spike Detector",
     "TTF Seasonal Strategy",
+    "Supply Stack",
 ])
 
 
@@ -856,6 +858,191 @@ with tab_bt:
             """)
 
         st.caption("Source: ICE/Yahoo Finance (TTF=F) | agsi.gie.eu")
+
+
+# ════════════════════════════════════════════════════════════════════════════
+# TAB 5: MERIT ORDER / SUPPLY STACK
+# ════════════════════════════════════════════════════════════════════════════
+with tab_stack:
+    st.markdown("### German Merit Order — Supply Stack")
+    st.caption(
+        "German generation fleet ordered by short-run marginal cost (SRMC). "
+        "Demand line shows where on the merit order current consumption clears. "
+        "The intersecting fuel sets the theoretical clearing price. "
+        "Capacities from Bundesnetzagentur 2024 survey; gas SRMC is live TTF-derived."
+    )
+
+    # ── Inputs ───────────────────────────────────────────────────────────────
+    ttf_prices = ttf.get("prices", pd.DataFrame())
+    ttf_latest = float(ttf_prices["price"].iloc[-1]) if not ttf_prices.empty else 50.0
+
+    col_left, col_right = st.columns([2, 1])
+    with col_left:
+        demand_gw = st.slider(
+            "Modelled demand (GW)",
+            min_value=30.0, max_value=90.0, value=60.0, step=1.0,
+            help=(
+                "German grid load varies from ~35 GW (summer weekend night) to ~85 GW "
+                "(cold winter peak). Slide to see which fuel sets the clearing price at "
+                "different demand levels. ENTSO-E A65 live load data will be added in a "
+                "future update."
+            ),
+        )
+    with col_right:
+        st.markdown(
+            commentary(
+                f"TTF input: €{ttf_latest:.1f}/MWh (live). "
+                "EUA carbon price fetched below.",
+                "ok",
+            ),
+            unsafe_allow_html=True,
+        )
+
+    # ── Fetch EUA, build stack ────────────────────────────────────────────────
+    @st.cache_data(ttl=3600, show_spinner=False, persist="disk")
+    def _get_eua():
+        return fetch_eua_price()
+
+    eua_price, eua_source = _get_eua()
+    stack_df  = build_stack(ttf_latest, eua_price)
+    marginal  = identify_marginal_fuel(stack_df, demand_gw)
+
+    # ── KPI row ──────────────────────────────────────────────────────────────
+    k1, k2, k3, k4, k5 = st.columns(5)
+
+    nl_latest: float | None = None
+    if not spot_df.empty:
+        nl_row = spot_df[spot_df["zone"] == "NL"].sort_values("date")
+        if not nl_row.empty:
+            nl_latest = float(nl_row["price_eur_mwh"].iloc[-1])
+
+    gas_srmc = ttf_latest / 0.55 + eua_price * 0.37
+    coal_srmc = 11.0 / 0.40 + eua_price * 0.85
+
+    with k1:
+        st.markdown(
+            kpi_card("TTF gas", f"€{ttf_latest:.1f}/MWh",
+                     delta_span("live front-month", "blue")),
+            unsafe_allow_html=True,
+        )
+    with k2:
+        st.markdown(
+            kpi_card("EUA carbon", f"€{eua_price:.0f}/t CO₂",
+                     delta_span(eua_source, "blue")),
+            unsafe_allow_html=True,
+        )
+    with k3:
+        st.markdown(
+            kpi_card("Gas CCGT SRMC", f"€{gas_srmc:.1f}/MWh",
+                     delta_span("TTF÷0.55 + EUA×0.37", "amber")),
+            unsafe_allow_html=True,
+        )
+    with k4:
+        st.markdown(
+            kpi_card("Marginal fuel", marginal["label"].split("/")[0].strip(),
+                     delta_span(f"€{marginal['marginal_cost']:.1f}/MWh implied", "amber")),
+            unsafe_allow_html=True,
+        )
+    with k5:
+        if nl_latest is not None:
+            premium = nl_latest - marginal["marginal_cost"]
+            color   = "red" if premium > 10 else ("green" if premium < -10 else "blue")
+            label   = "scarcity premium" if premium > 0 else "below implied"
+            st.markdown(
+                kpi_card("NL vs implied", f"€{nl_latest:.1f}/MWh",
+                         delta_span(f"{premium:+.1f} EUR/MWh {label}", color)),
+                unsafe_allow_html=True,
+            )
+        else:
+            st.markdown(
+                kpi_card("NL actual", "n/a",
+                         delta_span("spot data unavailable", "amber")),
+                unsafe_allow_html=True,
+            )
+
+    st.divider()
+
+    # ── Merit order chart ─────────────────────────────────────────────────────
+    fig_stack = make_merit_order_figure(
+        stack_df, demand_gw, marginal, actual_power_price=nl_latest,
+    )
+    st.plotly_chart(fig_stack, use_container_width=True)
+
+    # ── Commentary ───────────────────────────────────────────────────────────
+    if marginal["fuel"] == "gas":
+        prose = (
+            f"At {demand_gw:.0f} GW demand, the marginal fuel is gas CCGT at an implied clearing price of "
+            f"€{marginal['marginal_cost']:.1f}/MWh (TTF €{ttf_latest:.1f}÷0.55 + EUA €{eua_price:.0f}×0.37). "
+            f"Gas CCGT fleet is approximately {marginal['utilisation_pct']:.0f}% utilised within its capacity block. "
+            "This is the gas-marginal regime: power prices and TTF are highly correlated, and the clean-spark "
+            "spread is the key signal for generation economics."
+        )
+        status = "warn"
+    elif marginal["fuel"] == "coal":
+        prose = (
+            f"At {demand_gw:.0f} GW demand, the marginal fuel is hard coal at an implied clearing price of "
+            f"€{marginal['marginal_cost']:.1f}/MWh. Gas CCGT SRMC (€{gas_srmc:.1f}/MWh) is above coal, "
+            "meaning gas plant is off the margin — a coal-marginal regime. The clean-dark spread is the "
+            "relevant signal for generation economics in this demand scenario."
+        )
+        status = "warn"
+    elif marginal["fuel"] in ("wind", "solar"):
+        prose = (
+            f"At {demand_gw:.0f} GW demand, the marginal fuel is renewable (zero SRMC). "
+            "Negative or near-zero power prices are possible when renewable output is high and demand is low. "
+            "This is a structural feature of high-renewables markets with inflexible baseload."
+        )
+        status = "ok"
+    else:
+        prose = (
+            f"At {demand_gw:.0f} GW demand, the marginal fuel is {marginal['label']} at "
+            f"€{marginal['marginal_cost']:.1f}/MWh."
+        )
+        status = "ok"
+
+    st.markdown(commentary(prose, status), unsafe_allow_html=True)
+
+    # ── Methodology ──────────────────────────────────────────────────────────
+    with st.expander("Methodology and assumptions", expanded=False):
+        st.markdown(f"""
+        **Model:** Static merit order. Generation sources are ranked by short-run marginal cost (SRMC)
+        and stacked left-to-right. The demand line intersects the stack at the marginal fuel, whose
+        SRMC sets the theoretical day-ahead clearing price.
+
+        **Dynamic inputs:**
+        - Gas CCGT SRMC = TTF ÷ 0.55 + EUA × 0.37 (live TTF: **€{ttf_latest:.1f}/MWh**, EUA: **€{eua_price:.0f}/t**)
+        - Hard coal SRMC = 11 EUR/MWh_th ÷ 0.40 + EUA × 0.85 ≈ **€{coal_srmc:.1f}/MWh** at current EUA
+
+        **Static inputs (Bundesnetzagentur 2024):**
+        - Wind: 66 GW installed | Solar: 73 GW | Hydro: 4.5 GW | Biomass: 8.5 GW
+        - Lignite: 17 GW (€20/MWh) | Hard coal: 23 GW | Gas CCGT/OCGT: 30 GW | Oil peakers: 2.5 GW
+        - Nuclear: 0 GW (all plants retired April 2023)
+
+        **EUA source:** {eua_source}
+
+        **Key simplifications:**
+        - This model shows installed capacity, not available capacity. Typical thermal availability
+          is 85-90%; renewables depend on weather conditions.
+        - Wind and solar produce at weather-dependent output levels — their effective capacity at any
+          given hour is not 66/73 GW. The stack shows the structural position, not real-time dispatch.
+        - No cross-border imports or exports. Germany regularly imports from France and Scandinavia,
+          which can suppress the clearing price below the domestic marginal fuel SRMC.
+        - No must-run obligations, ramp constraints, or reserve requirements.
+        - Hard coal fuel cost is a market-average estimate (~API2 reference). Actual bilateral
+          contract prices may differ.
+
+        **Scarcity premium:** Difference between NL actual day-ahead price and the model-implied
+        clearing price. A persistent positive premium indicates factors not captured by the pure
+        merit order (scarcity, congestion, forward risk premium). A persistent negative premium
+        indicates renewable surplus, strong imports, or weak demand relative to installed capacity.
+
+        **Data sources:** Bundesnetzagentur Kraftwerksliste 2024 | ICE/Yahoo Finance (TTF=F, CO2.L) |
+        Nord Pool Data Portal (NL day-ahead)
+        """)
+
+    st.caption(
+        "Sources: Bundesnetzagentur 2024 | ICE/Yahoo Finance (TTF, EUA) | Nord Pool (NL day-ahead)"
+    )
 
 
 # ── Footer ────────────────────────────────────────────────────────────────────
