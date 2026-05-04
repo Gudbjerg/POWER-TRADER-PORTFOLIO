@@ -30,9 +30,9 @@ Real-time fundamentals refreshed hourly across 10 panels:
 | NW EU LNG sendout | GIE ALSI | Daily sendout from Zeebrugge, Gate, South Hook, Dunkirk |
 | TTF gas price | ICE via Yahoo Finance | Spot price, 30/90-day MA, spike alerts |
 | TTF seasonal forward curve | Yahoo Finance | 18-month implied strip, Winter/Summer spread, Cal 26/27 |
-| Day-ahead spot prices | Nord Pool | NO1, NO2, SE3, NL, FI with Nordic-Continental spread |
+| Day-ahead spot prices | Nord Pool | NO1, NO2, SE3, NL, FI with Nordic-Continental spread + 365-day spread history |
 | Norwegian hydro reservoirs | ENTSO-E B31 | Weekly fill level vs P10/P50/P90 historical percentiles |
-| Nordic cross-border flows | ENTSO-E | NordLink, NorNed, NSN, Skagerrak + NO2-GB trade balance |
+| Nordic cross-border flows | ENTSO-E | NordLink, NorNed, NSN, Skagerrak + interconnector utilisation % |
 | Solar duck curve | ENTSO-E / Fraunhofer ISE | Germany intraday price vs solar output, 14-day average |
 | German coal generation | ENTSO-E A75 | Quarterly hard coal + lignite dispatch, fuel switching indicator |
 
@@ -47,6 +47,10 @@ Real-time fundamentals refreshed hourly across 10 panels:
 | German Supply Stack | Merit order, dynamic gas/coal SRMC | Marginal fuel identification, theoretical vs actual price |
 | Nordic Price Decomposition | Rolling 90-day multivariate OLS | Beta time series: NL, TTF, hydro, wind contributions to NO2 |
 | Wind Forecast Error Tracker | ENTSO-E A69 vs B18/B19 actuals | Daily error (GWh/%), 7-day RMSE, correlation with price volatility |
+| Sentiment → TTF Granger Causality | SSR F-test, lags 1–7d | p-value bar chart, significance verdict, sentiment/return overlay |
+| Storage–Price OLS Regression | Linear OLS, full history | Supply-risk premium = actual TTF − storage-implied fair value |
+| Hydro Reservoir Lead/Lag | Pearson cross-correlation, lags 0–21d | Peak lag, rolling 90d correlation, strength of hydro→price signal |
+| TTF Seasonal Norm Tracker | 5-year historical percentile bands | Current TTF vs 10th/25th/50th/75th/90th pct seasonal distribution |
 
 ### Layer 3: Geopolitical and Macro Signals
 
