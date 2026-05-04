@@ -86,7 +86,7 @@ def _energy_charts_wind(days: int) -> pd.Series:
     return pd.concat(parts, axis=1).sum(axis=1)
 
 
-@st.cache_data(ttl=3600)
+@st.cache_data(ttl=3600, persist="disk")
 def fetch_wind_daily(days: int = 730) -> dict:
     """
     Fetch daily wind generation totals for DE and NO.

@@ -26,7 +26,7 @@ _MONTH_NAMES = {
 _WINTER_MONTHS = {10, 11, 12, 1, 2, 3}
 
 
-@st.cache_data(ttl=3600)
+@st.cache_data(ttl=3600, persist="disk")
 def _fetch_ttf_long() -> pd.DataFrame:
     """Fetch 3 years of daily TTF prices for seasonal calibration."""
     if not YFINANCE_AVAILABLE:
@@ -113,7 +113,7 @@ def _seasonal_curve(hist: pd.DataFrame, spot: float) -> pd.DataFrame:
     return pd.DataFrame(rows)
 
 
-@st.cache_data(ttl=3600)
+@st.cache_data(ttl=3600, persist="disk")
 def get_forward_curve_data(spot_price: float) -> dict:
     """
     Return forward curve data dict:
