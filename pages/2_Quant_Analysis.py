@@ -26,14 +26,24 @@ from models.gas_power_regression import prepare_data, run_full_ols
 from models.spike_detector import compute_zscores, latest_signals, ALERT_Z, WARNING_Z
 from models.ttf_backtest import fetch_ttf_history, compute_seasonal_strategy, compute_strategy_stats
 from models.supply_stack import build_stack, identify_marginal_fuel, make_merit_order_figure, fetch_eua_price
+from models.nordic_decomp import (
+    run_rolling_decomposition, current_contributions, dominant_driver,
+    make_beta_chart, make_contribution_bar, FACTOR_LABELS,
+)
+from models.feature_assembly import assemble_features, get_available_feature_sets
 
 apply_dark_theme()
 
 # ── Load data ────────────────────────────────────────────────────────────────
+@st.cache_data(ttl=3600, show_spinner=False, persist="disk")
+def _get_features_l2():
+    return assemble_features(years=3)
+
 with st.spinner(""):
-    storage = get_storage_data()
-    ttf     = get_ttf_data()
-    spot_df = fetch_spot_prices(days=150)   # extended history for regression
+    storage    = get_storage_data()
+    ttf        = get_ttf_data()
+    spot_df    = fetch_spot_prices(days=150)   # extended history for regression
+    features_df = _get_features_l2()
 
 eu_df = storage["europe"]
 
@@ -57,7 +67,7 @@ with st.expander("Model overview", expanded=False):
     | Gas-to-Power OLS Regression (NL proxy) | Active |
     | Price Spike Detector | Active |
     | TTF Seasonal Injection-Withdrawal Backtest | Active |
-    | Nordic price decomposition | Awaiting ENTSO-E key (hydro data) |
+    | Nordic price decomposition | Active |
     | Wind forecast error | Awaiting ENTSO-E key |
     | Merit order / supply stack | Active |
     """)
@@ -65,12 +75,13 @@ with st.expander("Model overview", expanded=False):
 st.divider()
 
 # ── Model tabs ───────────────────────────────────────────────────────────────
-tab_mc, tab_reg, tab_spike, tab_bt, tab_stack = st.tabs([
+tab_mc, tab_reg, tab_spike, tab_bt, tab_stack, tab_decomp = st.tabs([
     "Storage Monte Carlo",
     "Gas-to-Power Regression",
     "Price Spike Detector",
     "TTF Seasonal Strategy",
     "Supply Stack",
+    "Nordic Decomposition",
 ])
 
 
@@ -1043,6 +1054,178 @@ with tab_stack:
     st.caption(
         "Sources: Bundesnetzagentur 2024 | ICE/Yahoo Finance (TTF, EUA) | Nord Pool (NL day-ahead)"
     )
+
+
+# ════════════════════════════════════════════════════════════════════════════
+# TAB 6: NORDIC PRICE DECOMPOSITION
+# ════════════════════════════════════════════════════════════════════════════
+with tab_decomp:
+    st.markdown("### Nordic Price Decomposition")
+    st.caption(
+        "Rolling 90-day multivariate OLS decomposes the NO2 day-ahead price into contributions "
+        "from continental price (NL), gas price (TTF), and — where available — Norwegian hydro "
+        "reservoir level and German wind output. Regressors are standardised so beta magnitudes "
+        "are directly comparable across drivers."
+    )
+
+    _avail_l2 = get_available_feature_sets(features_df)
+    _n_rows_l2 = len(features_df)
+
+    if features_df.empty or _n_rows_l2 < 100:
+        st.warning(
+            "Insufficient feature data for decomposition. "
+            "Requires at least 100 trading days of NO2, NL, and TTF prices."
+        )
+    else:
+        # Run rolling decomposition
+        with st.spinner("Running rolling OLS decomposition…"):
+            decomp_results, feat_cols, model_label = run_rolling_decomposition(
+                features_df, window=90,
+            )
+
+        # Model mode banner
+        if len(feat_cols) < 4:
+            st.info(
+                f"Active: **{model_label}**. "
+                + ("Hydro and wind data unavailable — ENTSO-E key required for full 4-factor model."
+                   if len(feat_cols) == 2 else
+                   "Wind data unavailable — ENTSO-E key or Fraunhofer fallback required for 4-factor model."),
+                icon="ℹ️",
+            )
+        else:
+            st.success(f"Active: **{model_label}**.", icon="✅")
+
+        if decomp_results.empty:
+            st.warning("Rolling OLS could not converge. Check that statsmodels is installed.")
+        else:
+            # ── KPI row ──────────────────────────────────────────────────────
+            driver_key, driver_beta = dominant_driver(decomp_results, feat_cols)
+            contribs   = current_contributions(features_df, decomp_results, feat_cols)
+
+            latest_no2 = float(features_df.sort_values("date")["no2"].dropna().iloc[-1])
+            latest_r2  = float(decomp_results["r2"].dropna().iloc[-1])
+
+            k1, k2, k3, k4 = st.columns(4)
+            with k1:
+                st.markdown(
+                    kpi_card("NO2 latest", f"€{latest_no2:.1f}/MWh",
+                             delta_span("day-ahead price", "blue")),
+                    unsafe_allow_html=True,
+                )
+            with k2:
+                st.markdown(
+                    kpi_card("Model R²", f"{latest_r2:.2f}",
+                             delta_span(f"90-day rolling window", "blue")),
+                    unsafe_allow_html=True,
+                )
+            with k3:
+                driver_label = FACTOR_LABELS.get(driver_key, driver_key)
+                st.markdown(
+                    kpi_card("Dominant driver", driver_label.split("(")[0].strip(),
+                             delta_span(f"β = {driver_beta:.2f} EUR/MWh per σ", "amber")),
+                    unsafe_allow_html=True,
+                )
+            with k4:
+                total_explained = sum(abs(v) for v in contribs.values())
+                st.markdown(
+                    kpi_card("Total driver signal", f"€{total_explained:.1f}/MWh",
+                             delta_span("sum of |contributions|", "blue")),
+                    unsafe_allow_html=True,
+                )
+
+            st.divider()
+
+            # ── Beta time series chart ────────────────────────────────────────
+            st.markdown("#### Rolling 90-Day Beta Coefficients")
+            st.caption(
+                "Each line shows how strongly that factor is driving NO2 over the trailing 90-day window. "
+                "Positive β: factor pushing prices up. Negative β: factor suppressing prices. "
+                "Unit: EUR/MWh per one standard deviation of the factor."
+            )
+            fig_beta = make_beta_chart(decomp_results, feat_cols, window=90)
+            st.plotly_chart(fig_beta, use_container_width=True)
+
+            # ── Today's contribution bar ──────────────────────────────────────
+            if contribs:
+                st.markdown("#### Today's Factor Contributions")
+                st.caption(
+                    "Each bar shows β_i × z_i — how much that driver is currently adding or subtracting "
+                    "from the model-implied NO2 price, in EUR/MWh."
+                )
+                fig_contrib = make_contribution_bar(contribs, no2_actual=latest_no2)
+                st.plotly_chart(fig_contrib, use_container_width=True)
+
+            # ── Interpretation ────────────────────────────────────────────────
+            if driver_key in contribs:
+                driver_contrib = contribs[driver_key]
+                direction = "upward" if driver_contrib > 0 else "downward"
+                st.markdown(
+                    commentary(
+                        f"Current dominant driver: {FACTOR_LABELS.get(driver_key, driver_key)}. "
+                        f"Over the trailing 90-day window, a one-standard-deviation move in this factor "
+                        f"corresponds to a {driver_beta:.2f} EUR/MWh move in NO2. "
+                        f"At current levels, it is exerting {abs(driver_contrib):.1f} EUR/MWh of "
+                        f"{direction} price pressure. "
+                        f"Rolling R² = {latest_r2:.2f} — the {model_label} explains "
+                        f"{latest_r2*100:.0f}% of NO2 variance over the trailing window.",
+                        "ok",
+                    ),
+                    unsafe_allow_html=True,
+                )
+
+            # ── Methodology ───────────────────────────────────────────────────
+            with st.expander("Methodology", expanded=False):
+                factor_list = " | ".join(
+                    f"`{c}` ({FACTOR_LABELS.get(c, c)})" for c in feat_cols
+                )
+                st.markdown(f"""
+                **Model:** Rolling ordinary least squares (OLS), 90-day window.
+
+                `NO2 = α + β₁·NL + β₂·TTF{' + β₃·hydro_pct' if 'hydro_pct' in feat_cols else ''}{' + β₄·de_wind_gwh' if 'de_wind_gwh' in feat_cols else ''} + ε`
+
+                **Active factors:** {factor_list}
+
+                **Standardisation:** All regressors are globally standardised (mean 0, std 1 over
+                the full sample) before fitting, so beta magnitudes represent EUR/MWh per one-
+                standard-deviation change. This makes the coefficients directly comparable across
+                factors with different units (EUR/MWh for NL/TTF, % for hydro, GWh for wind).
+
+                **Rolling window:** 90 trading days (~4.5 months). Shorter windows capture recent
+                regime shifts; longer windows are more stable. The window was chosen to balance
+                responsiveness with statistical stability. Minimum 45 observations required.
+
+                **Interpretation of betas:**
+                - NL β > 0: When continental European prices are high, Nordic prices track higher
+                  (price coupling via NordLink, NorNed, Viking Link).
+                - TTF β > 0: Gas-price pass-through to Nordic prices (gas-fired peakers set the
+                  marginal price when hydro is tight or demand is high).
+                - hydro β < 0: Higher reservoir levels → more hydro dispatch → lower prices.
+                  Negative beta is expected and confirms hydro as a supply-side depressant.
+                - wind β < 0: Higher German wind → lower continental prices via spillover →
+                  lower NO2 via interconnector coupling.
+
+                **Factor contributions:** β_i × z_i, where z_i = (x_i − μ_i) / σ_i at today's
+                value. Represents the model-implied price contribution of each driver given current
+                conditions. Contributions do not sum to the actual price level (the intercept term
+                and unexplained residual account for the remainder).
+
+                **Feature data:** {_n_rows_l2} trading days assembled.
+                Feature availability: {"hydro ✅" if _avail_l2.get("hydro") else "hydro ❌"} |
+                {"wind ✅" if _avail_l2.get("wind") else "wind ❌ (ENTSO-E key required)"}.
+
+                **Forward link — Phase D cointegration scanner:** The same rolling regression
+                mechanism, extended with Engle-Granger cointegration tests, will underpin the
+                NO2–NL pair-trading signal (expected spread mean-reversion speed and entry
+                z-score thresholds).
+
+                **Data sources:** ENTSO-E A44 (NO2, NL day-ahead prices) | ICE/Yahoo Finance (TTF) |
+                ENTSO-E B31 (hydro reservoirs) | Fraunhofer ISE energy-charts.info (DE wind)
+                """)
+
+            st.caption(
+                "Sources: ENTSO-E A44 (day-ahead prices) | ICE/Yahoo Finance (TTF) | "
+                "ENTSO-E B31 (hydro) | Fraunhofer ISE (wind)"
+            )
 
 
 # ── Footer ────────────────────────────────────────────────────────────────────
