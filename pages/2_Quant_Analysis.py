@@ -114,12 +114,13 @@ with st.expander("Model overview", expanded=False):
     | Merit order / supply stack | Active |
     | Sentiment → TTF Granger Causality | Active |
     | Storage–Price OLS Regression | Active |
+    | Hydro Reservoir Lead/Lag Analysis | Active |
     """)
 
 st.divider()
 
 # ── Model tabs ───────────────────────────────────────────────────────────────
-tab_mc, tab_reg, tab_spike, tab_bt, tab_stack, tab_decomp, tab_wind, tab_granger, tab_storage_reg = st.tabs([
+tab_mc, tab_reg, tab_spike, tab_bt, tab_stack, tab_decomp, tab_wind, tab_granger, tab_storage_reg, tab_hydro_lag = st.tabs([
     "Storage Monte Carlo",
     "Gas-to-Power Regression",
     "Price Spike Detector",
@@ -129,6 +130,7 @@ tab_mc, tab_reg, tab_spike, tab_bt, tab_stack, tab_decomp, tab_wind, tab_granger
     "Wind Forecast Error",
     "Granger Causality",
     "Storage–Price Regression",
+    "Hydro Lead/Lag",
 ])
 
 
@@ -2067,6 +2069,247 @@ with tab_storage_reg:
                 )
             except Exception as _e:
                 st.error(f"Storage regression failed: {_e}", icon="🚨")
+
+
+# ════════════════════════════════════════════════════════════════════════════
+# TAB 10: HYDRO RESERVOIR LEAD/LAG ANALYSIS
+# ════════════════════════════════════════════════════════════════════════════
+with tab_hydro_lag:
+    st.markdown("### Hydro Reservoir Lead/Lag Analysis")
+    st.caption(
+        "Cross-correlation of Norwegian hydro reservoir fill level (% of historical max) "
+        "with NO2 day-ahead price at lags 0–21 days. A negative correlation at lag k means "
+        "high reservoir fill k days ago is associated with lower prices today — quantifying "
+        "how far ahead hydro fundamentals lead the spot market."
+    )
+
+    # Lazy-load feature matrix
+    if "features_l2" not in st.session_state:
+        with st.spinner("Assembling feature matrix (first visit — subsequent loads are instant)…"):
+            st.session_state["features_l2"] = _get_features_l2()
+    _hydro_feat_df = st.session_state["features_l2"]
+
+    if _hydro_feat_df.empty:
+        st.warning("Feature matrix unavailable. Check ENTSO-E API key.", icon="⚠️")
+    elif "hydro_pct" not in _hydro_feat_df.columns or _hydro_feat_df["hydro_pct"].notna().sum() < 60:
+        st.info(
+            "Norwegian hydro reservoir data is not available in the current feature set. "
+            "This requires an active ENTSO-E API key (ENTSOE_API_KEY in .env). "
+            "Without hydro data, the lead/lag analysis cannot run.",
+            icon="ℹ️",
+        )
+    else:
+        _MAX_LAG = 21
+
+        _hdf = _hydro_feat_df[["date", "no2", "hydro_pct"]].dropna().copy()
+        _hdf["date"] = pd.to_datetime(_hdf["date"])
+        _hdf = _hdf.sort_values("date").reset_index(drop=True)
+
+        if len(_hdf) < _MAX_LAG + 30:
+            st.warning(
+                f"Insufficient overlapping hydro + NO2 data ({len(_hdf)} rows). "
+                f"Need at least {_MAX_LAG + 30}.",
+                icon="⚠️",
+            )
+        else:
+            # ── Compute cross-correlations ────────────────────────────────────
+            _lags  = list(range(0, _MAX_LAG + 1))
+            _corrs = []
+            for _lag in _lags:
+                _shifted = _hdf["hydro_pct"].shift(_lag)
+                _r = _shifted.corr(_hdf["no2"])
+                _corrs.append(float(_r) if not pd.isna(_r) else 0.0)
+
+            _abs_corrs  = [abs(c) for c in _corrs]
+            _peak_lag   = int(_lags[int(np.argmax(_abs_corrs))])
+            _peak_corr  = _corrs[_peak_lag]
+            _lag0_corr  = _corrs[0]
+
+            # ── KPI row ───────────────────────────────────────────────────────
+            _h1, _h2, _h3, _h4 = st.columns(4)
+            with _h1:
+                st.markdown(
+                    kpi_card("Peak lag", f"{_peak_lag} days",
+                             delta_span("strongest hydro → price signal", "blue")),
+                    unsafe_allow_html=True,
+                )
+            with _h2:
+                _corr_color = "red" if abs(_peak_corr) > 0.4 else ("amber" if abs(_peak_corr) > 0.2 else "blue")
+                st.markdown(
+                    kpi_card("Peak correlation", f"{_peak_corr:.3f}",
+                             delta_span("ρ(hydro[t−k], NO2[t])", _corr_color)),
+                    unsafe_allow_html=True,
+                )
+            with _h3:
+                st.markdown(
+                    kpi_card("Lag-0 correlation", f"{_lag0_corr:.3f}",
+                             delta_span("contemporaneous", "blue")),
+                    unsafe_allow_html=True,
+                )
+            with _h4:
+                st.markdown(
+                    kpi_card("Sample", f"{len(_hdf)} days",
+                             delta_span(f"max lag: {_MAX_LAG}d", "blue")),
+                    unsafe_allow_html=True,
+                )
+
+            st.divider()
+
+            # ── Cross-correlation bar chart ────────────────────────────────────
+            st.markdown("#### Cross-Correlation ρ(hydro_pct[t−k], NO2[t]) by Lag")
+            st.caption(
+                "Negative correlation (blue) means higher hydro fill at lag k is associated with lower "
+                "NO2 price today — the expected direction. The lag with the largest |ρ| is the point "
+                "where hydro has the most predictive power for NO2."
+            )
+
+            _bar_cols = [
+                "#f85149" if c > 0 else "#58a6ff"
+                for c in _corrs
+            ]
+            _fig_cc = go.Figure()
+            _fig_cc.add_trace(go.Bar(
+                x=_lags,
+                y=_corrs,
+                marker_color=_bar_cols,
+                text=[f"{c:.2f}" for c in _corrs],
+                textposition="outside",
+                hovertemplate="Lag %{x}d: ρ=%{y:.3f}<extra></extra>",
+            ))
+            # Highlight peak lag
+            _fig_cc.add_vline(
+                x=_peak_lag,
+                line=dict(color="rgba(240,224,64,0.6)", width=2, dash="dash"),
+                annotation_text=f"  Peak lag: {_peak_lag}d",
+                annotation_font=dict(color="#f0e040", size=10),
+                annotation_position="top right",
+            )
+            _fig_cc.add_hline(y=0, line=dict(color="rgba(255,255,255,0.2)", width=1))
+            _fig_cc.update_layout(
+                template="plotly_dark",
+                paper_bgcolor="#0d1117",
+                plot_bgcolor="#161b22",
+                xaxis=dict(title="Lag (days)", dtick=1,
+                           gridcolor="rgba(255,255,255,0.06)"),
+                yaxis=dict(title="Pearson correlation ρ",
+                           gridcolor="rgba(255,255,255,0.06)",
+                           range=[min(_corrs) * 1.2 - 0.05, max(_corrs) * 1.2 + 0.05]),
+                margin=dict(l=60, r=20, t=30, b=50),
+                height=380,
+                showlegend=False,
+            )
+            st.plotly_chart(_fig_cc, use_container_width=True)
+
+            # ── Rolling correlation time series ───────────────────────────────
+            _roll_win = 90
+            st.markdown(f"#### Rolling {_roll_win}-Day Correlation at Peak Lag ({_peak_lag}d)")
+            st.caption(
+                f"How has the hydro→NO2 lead relationship at lag {_peak_lag}d evolved over time? "
+                "Periods of near-zero rolling correlation indicate other drivers dominated."
+            )
+
+            _hdf_lag = _hdf.copy()
+            _hdf_lag["hydro_lagged"] = _hdf_lag["hydro_pct"].shift(_peak_lag)
+            _hdf_lag = _hdf_lag.dropna(subset=["hydro_lagged", "no2"])
+            _hdf_lag["rolling_corr"] = (
+                _hdf_lag["hydro_lagged"]
+                .rolling(_roll_win)
+                .corr(_hdf_lag["no2"])
+            )
+
+            _fig_roll = go.Figure()
+            _fig_roll.add_trace(go.Scatter(
+                x=_hdf_lag["date"],
+                y=_hdf_lag["rolling_corr"],
+                mode="lines",
+                name=f"Rolling {_roll_win}d ρ",
+                line=dict(color="#58a6ff", width=1.5),
+                hovertemplate="%{x|%Y-%m-%d}: ρ=%{y:.3f}<extra></extra>",
+            ))
+            _fig_roll.add_hline(y=0, line=dict(color="rgba(255,255,255,0.2)", width=1))
+            _fig_roll.add_hline(
+                y=-0.4, line=dict(color="rgba(248,81,73,0.3)", width=1, dash="dot"),
+                annotation_text="ρ=−0.4",
+                annotation_font=dict(color="rgba(248,81,73,0.5)", size=9),
+                annotation_position="bottom right",
+            )
+            _fig_roll.update_layout(
+                template="plotly_dark",
+                paper_bgcolor="#0d1117",
+                plot_bgcolor="#161b22",
+                xaxis=dict(title=None, gridcolor="rgba(255,255,255,0.06)"),
+                yaxis=dict(title="Rolling Pearson ρ",
+                           gridcolor="rgba(255,255,255,0.06)"),
+                margin=dict(l=60, r=20, t=20, b=50),
+                height=300,
+                showlegend=False,
+            )
+            st.plotly_chart(_fig_roll, use_container_width=True)
+
+            # ── Commentary ────────────────────────────────────────────────────
+            if abs(_peak_corr) > 0.4:
+                _h_prose = (
+                    f"Strong hydro→NO2 lead relationship: ρ = {_peak_corr:.3f} at lag {_peak_lag}d. "
+                    f"{'Higher' if _peak_corr < 0 else 'Lower'} Norwegian hydro reservoir fill {_peak_lag} days ago "
+                    f"is associated with {'lower' if _peak_corr < 0 else 'higher'} NO2 day-ahead prices today. "
+                    "This confirms Norwegian hydro as a leading fundamental driver of Nordic spot prices. "
+                    "Hydro reservoir changes — from precipitation, snowmelt, or drawdown — propagate into "
+                    f"spot market pricing with a delay of roughly {_peak_lag} trading day(s)."
+                )
+                _h_status = "warn" if _peak_corr > 0 else "ok"
+            elif abs(_peak_corr) > 0.2:
+                _h_prose = (
+                    f"Moderate hydro→NO2 correlation at lag {_peak_lag}d (ρ = {_peak_corr:.3f}). "
+                    "The hydro signal is present but not dominant — other factors (continental prices, TTF, "
+                    "grid constraints) are likely exerting stronger influence on NO2 in the current sample."
+                )
+                _h_status = "ok"
+            else:
+                _h_prose = (
+                    f"Weak hydro→NO2 correlation across all lags 0–{_MAX_LAG}d (peak ρ = {_peak_corr:.3f}). "
+                    "In the current sample, hydro reservoir level does not show a meaningful predictive "
+                    "relationship with NO2 prices. Continental price spillover (NL via NordLink) or gas price "
+                    "pass-through may be dominating the price formation mechanism."
+                )
+                _h_status = "ok"
+
+            st.markdown(commentary(_h_prose, _h_status), unsafe_allow_html=True)
+
+            # ── Methodology ───────────────────────────────────────────────────
+            with st.expander("Methodology", expanded=False):
+                st.markdown(f"""
+                **Cross-correlation:** For each lag k ∈ [0, {_MAX_LAG}], compute the Pearson correlation
+                coefficient between `hydro_pct[t−k]` and `NO2[t]`:
+
+                `ρ(k) = corr(hydro_pct[t−k], NO2[t])`
+
+                **Expected sign:** Negative. Higher hydro reservoir fill → more hydro generation capacity
+                available → lower marginal cost of supply → lower spot prices. Negative ρ confirms the
+                fundamental hydro supply relationship.
+
+                **Lag interpretation:** The peak lag k* is the number of days by which changes in hydro
+                reservoir fill level lead changes in NO2 spot prices. This reflects how quickly new
+                hydro fundamentals information propagates into market prices.
+
+                **Rolling correlation:** {_roll_win}-day trailing window applied to the lagged pair.
+                Periods of low rolling correlation indicate that other drivers temporarily dominated
+                price formation (e.g. cold snap, gas price shock, continental congestion).
+
+                **Data:** Norwegian hydro reservoir filling level (ENTSO-E B31, TWh), normalised to
+                % of expanding 98th percentile to create a stationary fill-rate signal.
+
+                **Limitations:**
+                - Weekly ENTSO-E hydro data is forward-filled to daily — this reduces the effective
+                  degrees of freedom and may understate lags shorter than 7 days.
+                - Correlation does not imply causality: hydro and prices may both respond to common
+                  factors (temperature, precipitation forecasts).
+                - The relationship may be non-linear at extreme fill levels (very low = scarcity,
+                  very high = spill risk / negative prices).
+
+                **Sample:** {len(_hdf)} overlapping days of hydro_pct and NO2.
+                """)
+
+            st.caption("Sources: ENTSO-E B31 (hydro reservoirs) | ENTSO-E A44 (NO2 day-ahead prices)")
 
 
 # ── Footer ────────────────────────────────────────────────────────────────────
