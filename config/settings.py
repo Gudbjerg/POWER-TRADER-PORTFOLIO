@@ -49,6 +49,19 @@ FLOW_PAIRS = [
     ("NO1", "GB"),
 ]
 
+# ── Interconnector capacity constants (MW, rounded from operator data) ─────
+# Sources: Statnett, TenneT, National Grid, Energinet, Svenska Kraftnät.
+# Used for utilisation % display in Layer 1 Flows tab.
+# Key format matches FLOW_PAIRS arrow notation: "FROM->TO"
+INTERCONNECTOR_CAPACITY_MW: dict[str, float] = {
+    "NO2->DE":  1400.0,   # NordLink (Statnett / TenneT, commissioned 2020)
+    "NO2->NL":   700.0,   # NorNed (Statnett / TenneT, commissioned 2008)
+    "NO1->GB":  1400.0,   # NSN / North Sea Link (Statnett / National Grid, commissioned 2021)
+    "NO2->DK1": 1700.0,   # Skagerrak cables 1-4 combined (Statnett / Energinet)
+    "NO2->SE3":  2095.0,  # Sydvestlänken (Statnett / SvK, approximate thermal limit)
+    "NO1->SE3":   500.0,  # NO1-SE3 (approximate, varies seasonally)
+}
+
 # ── LNG countries (GIE ALSI) ────────────────────────────────────────────────
 LNG_COUNTRIES = {
     "BE": "Belgium (Zeebrugge)",

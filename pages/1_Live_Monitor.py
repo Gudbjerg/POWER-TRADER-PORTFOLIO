@@ -578,6 +578,41 @@ with tab_flows:
     else:
         render_flows_chart(flows)
 
+        # ── B5: Interconnector utilisation KPIs ───────────────────────────────
+        from config.settings import INTERCONNECTOR_CAPACITY_MW
+        _flows_df = flows.get("flows", pd.DataFrame())
+        if not _flows_df.empty:
+            _latest_day = _flows_df["date"].max()
+            _today_flows = _flows_df[_flows_df["date"] == _latest_day].copy()
+            _today_flows["pair"] = _today_flows["pair"].str.replace("→", "->", regex=False)
+
+            if not _today_flows.empty:
+                st.markdown("##### Interconnector utilisation — latest day")
+                _util_cols = st.columns(len(INTERCONNECTOR_CAPACITY_MW))
+                for _ci, (_pair, _cap_mw) in enumerate(INTERCONNECTOR_CAPACITY_MW.items()):
+                    _row = _today_flows[_today_flows["pair"] == _pair]
+                    with _util_cols[_ci]:
+                        if not _row.empty:
+                            _flow_mwh = abs(float(_row["net_flow_mwh"].iloc[0]))
+                            _cap_mwh  = _cap_mw * 24.0  # MWh/day at full capacity
+                            _util_pct = min(_flow_mwh / _cap_mwh * 100.0, 100.0)
+                            _dir      = "→ NO" if float(_row["net_flow_mwh"].iloc[0]) > 0 else "→ EU"
+                            _u_color  = "red" if _util_pct > 90 else ("amber" if _util_pct > 70 else "green")
+                            st.markdown(
+                                kpi_card(
+                                    _pair.replace("->", " → "),
+                                    f"{_util_pct:.0f}%",
+                                    delta_span(f"{_flow_mwh/1000:.1f} GWh {_dir}", _u_color),
+                                ),
+                                unsafe_allow_html=True,
+                            )
+                        else:
+                            st.markdown(
+                                kpi_card(_pair.replace("->", " → "), "n/a",
+                                         delta_span("no data", "amber")),
+                                unsafe_allow_html=True,
+                            )
+
         with st.expander("Understanding Nordic cross-border flows", expanded=True):
             st.markdown("""
             **Key interconnector corridors:**
