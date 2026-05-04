@@ -31,6 +31,12 @@ from models.nordic_decomp import (
     make_beta_chart, make_contribution_bar, FACTOR_LABELS,
 )
 from models.feature_assembly import assemble_features, get_available_feature_sets
+from models.wind_forecast_error import (
+    compute_errors, compute_rolling_rmse, compute_price_correlation,
+    make_error_bar_chart, make_rmse_chart, make_correlation_scatter,
+    ZONE_LABELS as WIND_ZONE_LABELS,
+)
+from data.wind import fetch_wind_daily, fetch_wind_forecast
 
 apply_dark_theme()
 
@@ -68,20 +74,21 @@ with st.expander("Model overview", expanded=False):
     | Price Spike Detector | Active |
     | TTF Seasonal Injection-Withdrawal Backtest | Active |
     | Nordic price decomposition | Active |
-    | Wind forecast error | Awaiting ENTSO-E key |
+    | Wind forecast error | Active |
     | Merit order / supply stack | Active |
     """)
 
 st.divider()
 
 # ── Model tabs ───────────────────────────────────────────────────────────────
-tab_mc, tab_reg, tab_spike, tab_bt, tab_stack, tab_decomp = st.tabs([
+tab_mc, tab_reg, tab_spike, tab_bt, tab_stack, tab_decomp, tab_wind = st.tabs([
     "Storage Monte Carlo",
     "Gas-to-Power Regression",
     "Price Spike Detector",
     "TTF Seasonal Strategy",
     "Supply Stack",
     "Nordic Decomposition",
+    "Wind Forecast Error",
 ])
 
 
@@ -1226,6 +1233,188 @@ with tab_decomp:
                 "Sources: ENTSO-E A44 (day-ahead prices) | ICE/Yahoo Finance (TTF) | "
                 "ENTSO-E B31 (hydro) | Fraunhofer ISE (wind)"
             )
+
+
+# ════════════════════════════════════════════════════════════════════════════
+# TAB 7: WIND FORECAST ERROR TRACKER
+# ════════════════════════════════════════════════════════════════════════════
+with tab_wind:
+    st.markdown("### Wind Forecast Error Tracker")
+    st.caption(
+        "ENTSO-E A69 day-ahead wind generation forecast versus actual generation. "
+        "Tracks how well TSO wind forecasts perform and whether large forecast misses "
+        "coincide with elevated intraday price volatility."
+    )
+
+    # ── Load data ─────────────────────────────────────────────────────────────
+    @st.cache_data(ttl=3600, show_spinner=False, persist="disk")
+    def _get_wind_forecast():
+        return fetch_wind_forecast(days=90)
+
+    @st.cache_data(ttl=3600, show_spinner=False, persist="disk")
+    def _get_wind_actual():
+        return fetch_wind_daily(days=90)
+
+    with st.spinner("Loading wind forecast and actual data…"):
+        fc_data  = _get_wind_forecast()
+        act_data = _get_wind_actual()
+
+    fc_df     = fc_data.get("forecast", pd.DataFrame())
+    fc_zones  = fc_data.get("zones", [])
+    fc_source = fc_data.get("source", "unavailable")
+    act_df    = act_data.get("daily", pd.DataFrame())
+
+    # ── Source banners ────────────────────────────────────────────────────────
+    if fc_source == "unavailable":
+        st.warning(
+            "Wind forecast data (ENTSO-E A69) is unavailable. "
+            "Possible causes: no ENTSOE_API_KEY set, or ENTSO-E server instability "
+            "(A69 wind forecast endpoint may be affected by the ongoing platform issues "
+            "also affecting B16/B19 actual generation). Check API key in settings.",
+            icon="⚠️",
+        )
+    else:
+        _zones_str = ", ".join(WIND_ZONE_LABELS.get(z, z) for z in fc_zones)
+        st.success(
+            f"Forecast data loaded from {fc_source}. "
+            f"Zones with data: {_zones_str}.",
+            icon="✅",
+        )
+
+    if fc_df.empty or act_df.empty or not fc_zones:
+        st.info(
+            "Both forecast (ENTSO-E A69) and actual (ENTSO-E B18/B19 or Fraunhofer ISE) "
+            "data are required for error computation. Actual DE wind is available via "
+            "Fraunhofer ISE fallback — forecast data requires an active ENTSO-E API key.",
+            icon="ℹ️",
+        )
+    else:
+        # ── Compute errors ────────────────────────────────────────────────────
+        error_df = compute_errors(fc_df, act_df, fc_zones)
+        rmse_df  = compute_rolling_rmse(error_df, fc_zones, window=7)
+
+        if error_df.empty:
+            st.warning(
+                "Could not compute forecast errors — no overlapping dates between "
+                "forecast and actual data. This typically means the zones with "
+                "forecast data (e.g. DK1, NO, GB) do not have corresponding actual "
+                "generation data available via the current fallback chain."
+            )
+        else:
+            # ── KPI row ───────────────────────────────────────────────────────
+            kpi_cols = st.columns(len(fc_zones) + 1)
+            with kpi_cols[0]:
+                latest_date = error_df["date"].max()
+                st.markdown(
+                    kpi_card("Latest data", str(latest_date),
+                             delta_span(f"{len(error_df)} days", "blue")),
+                    unsafe_allow_html=True,
+                )
+            for i, zone in enumerate(fc_zones):
+                col = f"{zone}_error_gwh"
+                if col not in error_df.columns:
+                    continue
+                latest_err = float(error_df[col].dropna().iloc[-1]) if not error_df[col].dropna().empty else 0.0
+                mean_abs   = float(error_df[col].abs().mean()) if not error_df[col].dropna().empty else 0.0
+                color = "red" if abs(latest_err) > mean_abs * 1.5 else "blue"
+                with kpi_cols[i + 1]:
+                    st.markdown(
+                        kpi_card(
+                            WIND_ZONE_LABELS.get(zone, zone),
+                            f"{latest_err:+.1f} GWh",
+                            delta_span(f"mean |err| {mean_abs:.1f} GWh", color),
+                        ),
+                        unsafe_allow_html=True,
+                    )
+
+            st.divider()
+
+            # ── Error bar chart ───────────────────────────────────────────────
+            st.markdown("#### Daily Forecast Error (last 60 days)")
+            st.caption("Red = over-forecast (forecast > actual). Green = under-forecast.")
+            fig_err = make_error_bar_chart(error_df, fc_zones, last_n_days=60)
+            st.plotly_chart(fig_err, use_container_width=True)
+
+            # ── RMSE chart ────────────────────────────────────────────────────
+            if not rmse_df.empty:
+                st.markdown("#### Rolling 7-Day RMSE by Country")
+                st.caption(
+                    "Lower RMSE = more accurate wind forecast. "
+                    "RMSE spikes typically coincide with rapid weather pattern changes."
+                )
+                fig_rmse = make_rmse_chart(rmse_df, fc_zones)
+                st.plotly_chart(fig_rmse, use_container_width=True)
+
+            # ── Correlation scatter ───────────────────────────────────────────
+            primary_zone = fc_zones[0] if fc_zones else "DE"
+            corr_df = compute_price_correlation(error_df, features_df, zone=primary_zone, window=30)
+
+            if not corr_df.empty:
+                st.markdown(f"#### Forecast Error vs Price Volatility — {WIND_ZONE_LABELS.get(primary_zone, primary_zone)}")
+                st.caption(
+                    "Tests whether large wind forecast misses coincide with large next-day price moves. "
+                    "Rolling 30-day Pearson correlation annotated. Significant positive correlation "
+                    "implies wind forecast error is a viable intraday volatility predictor."
+                )
+                fig_corr = make_correlation_scatter(corr_df, zone=primary_zone)
+                st.plotly_chart(fig_corr, use_container_width=True)
+
+                latest_rho = corr_df["rolling_corr"].dropna().iloc[-1] if not corr_df["rolling_corr"].dropna().empty else float("nan")
+                if not np.isnan(latest_rho):
+                    if abs(latest_rho) > 0.3:
+                        interpretation = (
+                            f"Rolling 30-day correlation ρ = {latest_rho:.2f} — statistically meaningful. "
+                            "Large wind forecast misses are co-moving with elevated power price volatility in "
+                            "the current period. This is consistent with the theory that wind forecast errors "
+                            "create imbalances that require expensive real-time correction."
+                        )
+                        status = "warn" if latest_rho > 0.3 else "ok"
+                    else:
+                        interpretation = (
+                            f"Rolling 30-day correlation ρ = {latest_rho:.2f} — weak relationship. "
+                            "Wind forecast errors are not strongly co-moving with price volatility in the "
+                            "current period. Other drivers (storage levels, gas price, continental flows) "
+                            "are likely dominating price formation."
+                        )
+                        status = "ok"
+                    st.markdown(commentary(interpretation, status), unsafe_allow_html=True)
+
+    # ── Methodology ───────────────────────────────────────────────────────────
+    with st.expander("Methodology", expanded=False):
+        st.markdown("""
+        **Wind forecast data:** ENTSO-E A69 (Day-Ahead Aggregated Generation — Wind and Solar),
+        queried via `query_wind_and_solar_forecast()` in `entsoe-py`. Onshore (B19) + offshore
+        (B18) PSR types are summed to daily GWh.
+
+        **Actual wind data:** ENTSO-E B18/B19 for non-DE zones. Germany (DE) actual wind is
+        sourced from Fraunhofer ISE energy-charts.info as primary (more reliable than ENTSO-E
+        B18/B19 which are subject to ongoing server instability).
+
+        **Error definition:** `forecast_error = forecast_gwh − actual_gwh`
+        - Positive error = TSO over-predicted wind (more dispatch available than expected)
+        - Negative error = TSO under-predicted wind (less dispatch than expected)
+
+        **Error percentage:** `forecast_error / actual_gwh × 100`. Undefined when actual = 0 (shown as n/a).
+
+        **Rolling RMSE:** `sqrt( mean( error² ) )` over a 7-day trailing window.
+
+        **Price correlation:** Pearson correlation between `|forecast_error_gwh|` and
+        `|day-over-day NO2 price change (EUR/MWh)|` over a 30-day trailing window.
+        The NO2 price change is used as a proxy for intraday/next-day market volatility —
+        a direct intraday continuous price series requires REMIT / Epex intraday data.
+
+        **ENTSO-E A69 vs B16/B19 availability:** A69 (forecasts) and B16/B19 (actuals) are
+        separate document types that may be served from different ENTSO-E platform components.
+        If A69 is unavailable, the tab shows a clear error banner rather than silent null data.
+
+        **Countries:** DE (Fraunhofer actuals, A69 forecast), DK1 (ENTSO-E both), NO (ENTSO-E both),
+        GB (ENTSO-E both — availability may vary post-Brexit).
+        """)
+
+    st.caption(
+        "Sources: ENTSO-E A69 (wind forecast) | ENTSO-E B18/B19 (actuals) | "
+        "Fraunhofer ISE energy-charts.info (DE actuals fallback)"
+    )
 
 
 # ── Footer ────────────────────────────────────────────────────────────────────
