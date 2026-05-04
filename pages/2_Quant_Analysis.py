@@ -5,6 +5,7 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 import plotly.graph_objects as go
+import time as _time
 from dotenv import load_dotenv
 from datetime import date as _date
 
@@ -44,6 +45,14 @@ apply_dark_theme()
 @st.cache_data(ttl=3600, show_spinner=False, persist="disk")
 def _get_features_l2():
     return assemble_features(years=3)
+
+@st.cache_data(ttl=3600, show_spinner=False, persist="disk")
+def _run_decomp_cached(df: pd.DataFrame, window: int = 90):
+    return run_rolling_decomposition(df, window)
+
+@st.cache_data(ttl=3600, show_spinner=False, persist="disk")
+def _run_ols_cached(reg_df: pd.DataFrame):
+    return run_full_ols(reg_df)
 
 with st.spinner(""):
     storage    = get_storage_data()
@@ -277,7 +286,7 @@ with tab_reg:
     POWER_ZONE = "NL"
     ttf_df = ttf["prices"]
     reg_df = prepare_data(ttf_df, spot_df, power_zone=POWER_ZONE)
-    ols    = run_full_ols(reg_df)
+    ols    = _run_ols_cached(reg_df)
 
     if not ols:
         st.warning(
@@ -1084,11 +1093,11 @@ with tab_decomp:
             "Requires at least 100 trading days of NO2, NL, and TTF prices."
         )
     else:
-        # Run rolling decomposition
-        with st.spinner("Running rolling OLS decomposition…"):
-            decomp_results, feat_cols, model_label = run_rolling_decomposition(
-                features_df, window=90,
-            )
+        # Run rolling decomposition (cached — fast on subsequent slider interactions)
+        _t_decomp0 = _time.perf_counter()
+        decomp_results, feat_cols, model_label = _run_decomp_cached(features_df, window=90)
+        _decomp_ms = (_time.perf_counter() - _t_decomp0) * 1000
+        _decomp_tag = "disk cache" if _decomp_ms < 500 else "computed"
 
         # Model mode banner
         if len(feat_cols) < 4:
@@ -1096,11 +1105,15 @@ with tab_decomp:
                 f"Active: **{model_label}**. "
                 + ("Hydro and wind data unavailable — ENTSO-E key required for full 4-factor model."
                    if len(feat_cols) == 2 else
-                   "Wind data unavailable — ENTSO-E key or Fraunhofer fallback required for 4-factor model."),
+                   "Wind data unavailable — ENTSO-E key or Fraunhofer fallback required for 4-factor model.")
+                + f" | Rolling OLS: {_decomp_tag}, {_decomp_ms/1000:.1f}s",
                 icon="ℹ️",
             )
         else:
-            st.success(f"Active: **{model_label}**.", icon="✅")
+            st.success(
+                f"Active: **{model_label}**. | Rolling OLS: {_decomp_tag}, {_decomp_ms/1000:.1f}s",
+                icon="✅",
+            )
 
         if decomp_results.empty:
             st.warning("Rolling OLS could not converge. Check that statsmodels is installed.")
