@@ -113,12 +113,13 @@ with st.expander("Model overview", expanded=False):
     | Wind forecast error | Active |
     | Merit order / supply stack | Active |
     | Sentiment → TTF Granger Causality | Active |
+    | Storage–Price OLS Regression | Active |
     """)
 
 st.divider()
 
 # ── Model tabs ───────────────────────────────────────────────────────────────
-tab_mc, tab_reg, tab_spike, tab_bt, tab_stack, tab_decomp, tab_wind, tab_granger = st.tabs([
+tab_mc, tab_reg, tab_spike, tab_bt, tab_stack, tab_decomp, tab_wind, tab_granger, tab_storage_reg = st.tabs([
     "Storage Monte Carlo",
     "Gas-to-Power Regression",
     "Price Spike Detector",
@@ -127,6 +128,7 @@ tab_mc, tab_reg, tab_spike, tab_bt, tab_stack, tab_decomp, tab_wind, tab_granger
     "Nordic Decomposition",
     "Wind Forecast Error",
     "Granger Causality",
+    "Storage–Price Regression",
 ])
 
 
@@ -1783,6 +1785,288 @@ with tab_granger:
                     )
                 except Exception as _e:
                     st.error(f"Granger test failed: {_e}", icon="🚨")
+
+
+# ════════════════════════════════════════════════════════════════════════════
+# TAB 9: STORAGE–PRICE OLS REGRESSION
+# ════════════════════════════════════════════════════════════════════════════
+with tab_storage_reg:
+    st.markdown("### EU Storage → TTF Price Regression")
+    st.caption(
+        "OLS regression of TTF front-month price on EU aggregate storage fill level. "
+        "The residual — actual TTF minus the storage-implied fair value — is the "
+        "supply-risk premium: a positive residual means the market prices in additional "
+        "fear (geopolitical, supply disruption) beyond what storage fundamentals explain."
+    )
+
+    _eu_reg = storage.get("europe", pd.DataFrame())
+    _ttf_reg = ttf.get("prices", pd.DataFrame())
+
+    if _eu_reg.empty:
+        st.warning(
+            "EU gas storage data unavailable. Add AGSI_API_KEY to .env to enable this model.",
+            icon="⚠️",
+        )
+    elif _ttf_reg.empty:
+        st.warning("TTF price data unavailable.", icon="⚠️")
+    else:
+        # ── Build merged series ───────────────────────────────────────────────
+        _str_df = _eu_reg[["gasDayStart", "full"]].copy().dropna()
+        _str_df = _str_df.rename(columns={"gasDayStart": "date", "full": "storage_pct"})
+        _str_df["date"] = pd.to_datetime(_str_df["date"])
+
+        _ttf_r = _ttf_reg[["date", "price"]].copy()
+        _ttf_r["date"] = pd.to_datetime(_ttf_r["date"])
+
+        _sreg = _str_df.merge(_ttf_r, on="date", how="inner").dropna().sort_values("date")
+
+        _MIN_OBS = 60
+        if len(_sreg) < _MIN_OBS:
+            st.info(
+                f"Storage regression requires {_MIN_OBS} overlapping observations. "
+                f"Currently have {len(_sreg)}. "
+                "Ensure AGSI_API_KEY is set and TTF history is available.",
+                icon="ℹ️",
+            )
+        else:
+            try:
+                import statsmodels.api as _sm
+
+                _X = _sm.add_constant(_sreg["storage_pct"])
+                _y = _sreg["price"]
+                _ols_res = _sm.OLS(_y, _X).fit()
+
+                _alpha   = float(_ols_res.params["const"])
+                _beta    = float(_ols_res.params["storage_pct"])
+                _r2      = float(_ols_res.rsquared)
+                _p_beta  = float(_ols_res.pvalues["storage_pct"])
+
+                _sreg = _sreg.copy()
+                _sreg["fitted"]   = _ols_res.fittedvalues.values
+                _sreg["residual"] = (_sreg["price"] - _sreg["fitted"])
+
+                _latest_row     = _sreg.iloc[-1]
+                _latest_storage = float(_latest_row["storage_pct"])
+                _latest_ttf     = float(_latest_row["price"])
+                _latest_fitted  = float(_latest_row["fitted"])
+                _latest_resid   = float(_latest_row["residual"])
+
+                # ── KPI row ───────────────────────────────────────────────────
+                _k1, _k2, _k3, _k4, _k5 = st.columns(5)
+                with _k1:
+                    st.markdown(
+                        kpi_card("EU storage", f"{_latest_storage:.1f}%",
+                                 delta_span("latest fill level", "blue")),
+                        unsafe_allow_html=True,
+                    )
+                with _k2:
+                    st.markdown(
+                        kpi_card("TTF actual", f"€{_latest_ttf:.1f}/MWh",
+                                 delta_span("front-month", "blue")),
+                        unsafe_allow_html=True,
+                    )
+                with _k3:
+                    st.markdown(
+                        kpi_card("Storage-implied", f"€{_latest_fitted:.1f}/MWh",
+                                 delta_span(f"β={_beta:.2f} EUR/pp", "amber")),
+                        unsafe_allow_html=True,
+                    )
+                with _k4:
+                    _prem_color = "red" if _latest_resid > 5 else ("green" if _latest_resid < -5 else "blue")
+                    _prem_label = "supply fear premium" if _latest_resid > 5 else (
+                        "below fundamental value" if _latest_resid < -5 else "near fair value"
+                    )
+                    st.markdown(
+                        kpi_card("Risk premium", f"{_latest_resid:+.1f} EUR/MWh",
+                                 delta_span(_prem_label, _prem_color)),
+                        unsafe_allow_html=True,
+                    )
+                with _k5:
+                    st.markdown(
+                        kpi_card("R² (full sample)", f"{_r2:.2f}",
+                                 delta_span(f"p={_p_beta:.3f} for β", "blue")),
+                        unsafe_allow_html=True,
+                    )
+
+                st.divider()
+
+                # ── Scatter + OLS fit ─────────────────────────────────────────
+                st.markdown("#### Storage Fill % vs TTF Price — Scatter & OLS Fit")
+                st.caption(
+                    "Each dot is one trading day. Colour indicates year. "
+                    "Red dot = current observation. Regression line shows the storage-implied fair value."
+                )
+
+                _years = _sreg["date"].dt.year.unique()
+                _palette = ["#58a6ff", "#3fb950", "#f0e040", "#e07b39", "#f85149",
+                            "#a371f7", "#7ec8e3", "#ffa657"]
+                _fig_scatter = go.Figure()
+                for _i, _yr in enumerate(sorted(_years)):
+                    _sub = _sreg[_sreg["date"].dt.year == _yr]
+                    _fig_scatter.add_trace(go.Scatter(
+                        x=_sub["storage_pct"], y=_sub["price"],
+                        mode="markers",
+                        name=str(_yr),
+                        marker=dict(color=_palette[_i % len(_palette)], size=5, opacity=0.6),
+                        hovertemplate=f"{_yr}: storage=%{{x:.1f}}%, TTF=€%{{y:.1f}}/MWh<extra></extra>",
+                    ))
+
+                # OLS regression line
+                _x_line = np.linspace(float(_sreg["storage_pct"].min()),
+                                      float(_sreg["storage_pct"].max()), 100)
+                _y_line = _alpha + _beta * _x_line
+                _fig_scatter.add_trace(go.Scatter(
+                    x=_x_line, y=_y_line,
+                    mode="lines",
+                    name=f"OLS fit (R²={_r2:.2f})",
+                    line=dict(color="rgba(255,255,255,0.6)", width=2, dash="dash"),
+                    hoverinfo="skip",
+                ))
+
+                # Current obs highlight
+                _fig_scatter.add_trace(go.Scatter(
+                    x=[_latest_storage], y=[_latest_ttf],
+                    mode="markers",
+                    name="Current",
+                    marker=dict(color="#f85149", size=12, symbol="star",
+                                line=dict(color="white", width=1)),
+                    hovertemplate=f"Now: storage={_latest_storage:.1f}%, TTF=€{_latest_ttf:.1f}/MWh<extra></extra>",
+                ))
+
+                _fig_scatter.update_layout(
+                    template="plotly_dark",
+                    paper_bgcolor="#0d1117",
+                    plot_bgcolor="#161b22",
+                    xaxis=dict(title="EU storage fill level (%)",
+                               gridcolor="rgba(255,255,255,0.06)"),
+                    yaxis=dict(title="TTF front-month (EUR/MWh)",
+                               gridcolor="rgba(255,255,255,0.06)"),
+                    legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="left", x=0,
+                                font=dict(size=10)),
+                    margin=dict(l=60, r=20, t=30, b=50),
+                    height=420,
+                )
+                st.plotly_chart(_fig_scatter, use_container_width=True)
+
+                # ── Residual time series ──────────────────────────────────────
+                st.markdown("#### Supply-Risk Premium (OLS Residual) Over Time")
+                st.caption(
+                    "Residual = actual TTF − storage-implied TTF. "
+                    "Positive: market prices in supply risk beyond storage fundamentals. "
+                    "Negative: TTF trading below what storage fill alone would suggest."
+                )
+
+                _resid_color = [
+                    "#f85149" if r > 0 else "#3fb950"
+                    for r in _sreg["residual"]
+                ]
+                _fig_resid = go.Figure()
+                _fig_resid.add_trace(go.Bar(
+                    x=_sreg["date"], y=_sreg["residual"],
+                    name="Risk premium",
+                    marker_color=_resid_color,
+                    hovertemplate="Date: %{x|%Y-%m-%d}<br>Premium: %{y:+.1f} EUR/MWh<extra></extra>",
+                ))
+                _fig_resid.add_hline(y=0, line=dict(color="rgba(255,255,255,0.3)", width=1))
+                _fig_resid.add_hline(
+                    y=10, line=dict(color="rgba(248,81,73,0.4)", width=1, dash="dot"),
+                    annotation_text="+10 EUR/MWh",
+                    annotation_font=dict(color="rgba(248,81,73,0.6)", size=9),
+                    annotation_position="top right",
+                )
+                _fig_resid.add_hline(
+                    y=-10, line=dict(color="rgba(63,185,80,0.4)", width=1, dash="dot"),
+                    annotation_text="−10 EUR/MWh",
+                    annotation_font=dict(color="rgba(63,185,80,0.6)", size=9),
+                    annotation_position="bottom right",
+                )
+                _fig_resid.update_layout(
+                    template="plotly_dark",
+                    paper_bgcolor="#0d1117",
+                    plot_bgcolor="#161b22",
+                    xaxis=dict(title=None, gridcolor="rgba(255,255,255,0.06)"),
+                    yaxis=dict(title="Residual (EUR/MWh)",
+                               gridcolor="rgba(255,255,255,0.06)"),
+                    margin=dict(l=60, r=20, t=20, b=50),
+                    height=320,
+                    showlegend=False,
+                )
+                st.plotly_chart(_fig_resid, use_container_width=True)
+
+                # ── Commentary ────────────────────────────────────────────────
+                _eq_str = f"TTF = {_alpha:.1f} + {_beta:.2f} × storage_pct"
+                if _latest_resid > 5:
+                    _prose = (
+                        f"At {_latest_storage:.1f}% EU storage fill, the OLS model implies a fair-value "
+                        f"TTF of €{_latest_fitted:.1f}/MWh ({_eq_str}). "
+                        f"Actual TTF (€{_latest_ttf:.1f}/MWh) is €{_latest_resid:.1f}/MWh above this — "
+                        "a supply-fear premium. The market is pricing in risk (geopolitical, supply disruption, "
+                        "demand shock) that the storage fill level alone does not justify."
+                    )
+                    _prem_status = "warn"
+                elif _latest_resid < -5:
+                    _prose = (
+                        f"At {_latest_storage:.1f}% EU storage fill, the OLS model implies a fair-value "
+                        f"TTF of €{_latest_fitted:.1f}/MWh ({_eq_str}). "
+                        f"Actual TTF (€{_latest_ttf:.1f}/MWh) is €{abs(_latest_resid):.1f}/MWh below this — "
+                        "TTF is trading at a discount to storage-implied fundamental value. "
+                        "Possible explanations: strong LNG imports, subdued industrial demand, or a risk-off "
+                        "market environment compressing the forward risk premium."
+                    )
+                    _prem_status = "ok"
+                else:
+                    _prose = (
+                        f"At {_latest_storage:.1f}% EU storage fill, the OLS model implies a fair-value "
+                        f"TTF of €{_latest_fitted:.1f}/MWh ({_eq_str}). "
+                        f"Actual TTF (€{_latest_ttf:.1f}/MWh) is {_latest_resid:+.1f} EUR/MWh — "
+                        "near the storage-implied fundamental level. "
+                        "The market is pricing storage fundamentals without a significant risk premium or discount."
+                    )
+                    _prem_status = "ok"
+
+                st.markdown(commentary(_prose, _prem_status), unsafe_allow_html=True)
+
+                # ── Methodology ───────────────────────────────────────────────
+                with st.expander("Methodology", expanded=False):
+                    st.markdown(f"""
+                    **Model:** Simple OLS regression over the full available history:
+
+                    `TTF (EUR/MWh) = α + β × EU_storage_fill (%) + ε`
+
+                    **Estimated coefficients (full sample, N={len(_sreg)}):**
+                    - Intercept α = {_alpha:.1f} EUR/MWh
+                    - Storage slope β = {_beta:.2f} EUR/MWh per percentage point
+                    - R² = {_r2:.3f} &nbsp; | &nbsp; p-value for β = {_p_beta:.4f}
+
+                    **Interpretation of β:** A one percentage-point higher storage fill is associated
+                    with a {abs(_beta):.2f} EUR/MWh {"lower" if _beta < 0 else "higher"} TTF price on average.
+                    The negative sign (if β < 0) reflects the fundamental inverse relationship: high storage
+                    reduces scarcity risk and therefore gas prices.
+
+                    **Supply-risk premium (residual):** The OLS residual captures the component of TTF that
+                    is not explained by storage fill alone. Persistent positive residuals indicate that the
+                    market is pricing in supply risk beyond what the current fill level justifies — a fear
+                    premium driven by geopolitical events, pipeline disruptions, or LNG market tightness.
+
+                    **Limitations:**
+                    - OLS assumes a linear, time-stationary relationship between storage and price.
+                      In practice, the relationship is non-linear (scarcity accelerates at low fill levels)
+                      and regime-dependent (pre-2022 vs post-2022 markets behave differently).
+                    - The model does not control for season, demand, LNG supply, or weather.
+                    - Residual should be interpreted as a signal for further investigation, not a trading signal.
+
+                    **Data sources:** GIE AGSI+ (EU aggregate storage) | ICE/Yahoo Finance (TTF=F)
+                    """)
+
+                st.caption("Sources: GIE AGSI+ (EU storage) | ICE/Yahoo Finance (TTF=F)")
+
+            except ImportError:
+                st.warning(
+                    "statsmodels is required for OLS regression. Run `pip install statsmodels`.",
+                    icon="⚠️",
+                )
+            except Exception as _e:
+                st.error(f"Storage regression failed: {_e}", icon="🚨")
 
 
 # ── Footer ────────────────────────────────────────────────────────────────────
