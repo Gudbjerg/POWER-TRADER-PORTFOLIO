@@ -995,11 +995,21 @@ with tab_stack:
     with k5:
         if nl_latest is not None:
             premium = nl_latest - marginal["marginal_cost"]
-            color   = "red" if premium > 10 else ("green" if premium < -10 else "blue")
-            label   = "scarcity premium" if premium > 0 else "below implied"
+            # Sign-aware interpretation: depends on which fuel is marginal
+            _zero_cost_fuels = {"wind", "solar", "hydro"}
+            if marginal["fuel"] in _zero_cost_fuels:
+                # NL > €0 implied is NOT scarcity — it's the renewable-surplus disconnect
+                label = "above renewable clearing" if premium > 0 else "below renewable clearing"
+            elif premium > 10:
+                label = "above thermal cost floor"
+            elif premium < -10:
+                label = "below thermal cost floor"
+            else:
+                label = "near implied"
+            color = "red" if premium > 10 else ("green" if premium < -10 else "blue")
             st.markdown(
                 kpi_card("NL vs implied", f"€{nl_latest:.1f}/MWh",
-                         delta_span(f"{premium:+.1f} EUR/MWh {label}", color)),
+                         delta_span(f"{premium:+.1f} EUR/MWh — {label}", color)),
                 unsafe_allow_html=True,
             )
         else:
@@ -1036,10 +1046,19 @@ with tab_stack:
         )
         status = "warn"
     elif marginal["fuel"] in ("wind", "solar"):
+        _gap_note = ""
+        if nl_latest is not None:
+            _gap = nl_latest - marginal["marginal_cost"]
+            _gap_note = (
+                f" NL day-ahead at €{nl_latest:.1f}/MWh is €{_gap:.1f}/MWh above the structural cost "
+                "floor of €0/MWh — this is not a scarcity premium. It reflects grid constraints, "
+                "reserve capacity costs, import flows (NordLink, NorNed), or real-time demand that "
+                "the simplified merit order does not capture."
+            )
         prose = (
             f"At {demand_gw:.0f} GW demand, the marginal fuel is renewable (zero SRMC). "
-            "Negative or near-zero power prices are possible when renewable output is high and demand is low. "
-            "This is a structural feature of high-renewables markets with inflexible baseload."
+            "Negative or near-zero wholesale prices are possible when renewable output is high and "
+            f"demand is low.{_gap_note}"
         )
         status = "ok"
     else:

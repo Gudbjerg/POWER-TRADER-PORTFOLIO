@@ -177,10 +177,16 @@ def make_merit_order_figure(
     fig = go.Figure()
 
     for _, row in stack_df.iterrows():
-        center_x = row["cum_start"] + row["capacity_gw"] / 2.0
+        center_x    = row["cum_start"] + row["capacity_gw"] / 2.0
+        actual_cost = row["marginal_cost"]
+        # Zero-cost fuels (wind, solar, hydro) render as invisible y=0 bars.
+        # Display at 2 EUR/MWh minimum so they appear as a thin coloured band;
+        # the hover and all analytics still use the real SRMC of €0/MWh.
+        display_cost = max(actual_cost, 2.0)
+        srmc_label   = "€0/MWh (must-run)" if actual_cost == 0.0 else f"€{actual_cost:.1f}/MWh"
         fig.add_trace(go.Bar(
             x=[center_x],
-            y=[row["marginal_cost"]],
+            y=[display_cost],
             width=[row["capacity_gw"]],
             name=row["label"],
             marker=dict(color=row["color"], opacity=0.85,
@@ -188,7 +194,7 @@ def make_merit_order_figure(
             hovertemplate=(
                 f"<b>{row['label']}</b><br>"
                 f"Capacity: {row['capacity_gw']:.0f} GW<br>"
-                f"SRMC: €{row['marginal_cost']:.1f}/MWh<br>"
+                f"SRMC: {srmc_label}<br>"
                 f"Stack position: {row['cum_start']:.0f}–{row['cum_end']:.0f} GW"
                 "<extra></extra>"
             ),
@@ -220,6 +226,15 @@ def make_merit_order_figure(
             annotation_font=dict(color="#58a6ff", size=11),
             annotation_position="bottom left",
         )
+
+    # Footnote: explain the 2 EUR/MWh display minimum for zero-cost fuels
+    fig.add_annotation(
+        xref="paper", yref="paper", x=0.01, y=0.01,
+        text="* Wind / solar / hydro SRMC = €0/MWh — shown at €2/MWh min height for visibility",
+        showarrow=False,
+        font=dict(size=9, color="#8b949e"),
+        xanchor="left", yanchor="bottom",
+    )
 
     total_cap = stack_df["capacity_gw"].sum()
     fig.update_layout(
