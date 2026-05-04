@@ -38,6 +38,7 @@ from models.wind_forecast_error import (
     ZONE_LABELS as WIND_ZONE_LABELS,
 )
 from data.wind import fetch_wind_daily, fetch_wind_forecast
+from data.sentiment import get_sentiment_data
 
 apply_dark_theme()
 
@@ -53,6 +54,10 @@ def _run_decomp_cached(df: pd.DataFrame, window: int = 90):
 @st.cache_data(ttl=3600, show_spinner=False, persist="disk")
 def _run_ols_cached(reg_df: pd.DataFrame):
     return run_full_ols(reg_df)
+
+@st.cache_data(ttl=21600, show_spinner=False)
+def _get_sentiment_l2():
+    return get_sentiment_data()
 
 with st.spinner(""):
     storage = get_storage_data()
@@ -107,12 +112,13 @@ with st.expander("Model overview", expanded=False):
     | Nordic price decomposition | Active |
     | Wind forecast error | Active |
     | Merit order / supply stack | Active |
+    | Sentiment → TTF Granger Causality | Active |
     """)
 
 st.divider()
 
 # ── Model tabs ───────────────────────────────────────────────────────────────
-tab_mc, tab_reg, tab_spike, tab_bt, tab_stack, tab_decomp, tab_wind = st.tabs([
+tab_mc, tab_reg, tab_spike, tab_bt, tab_stack, tab_decomp, tab_wind, tab_granger = st.tabs([
     "Storage Monte Carlo",
     "Gas-to-Power Regression",
     "Price Spike Detector",
@@ -120,6 +126,7 @@ tab_mc, tab_reg, tab_spike, tab_bt, tab_stack, tab_decomp, tab_wind = st.tabs([
     "Supply Stack",
     "Nordic Decomposition",
     "Wind Forecast Error",
+    "Granger Causality",
 ])
 
 
@@ -1481,6 +1488,301 @@ with tab_wind:
         "Sources: ENTSO-E A69 (wind forecast) | ENTSO-E B18/B19 (actuals) | "
         "Fraunhofer ISE energy-charts.info (DE actuals fallback)"
     )
+
+
+# ════════════════════════════════════════════════════════════════════════════
+# TAB 8: GRANGER CAUSALITY — SENTIMENT → TTF
+# ════════════════════════════════════════════════════════════════════════════
+with tab_granger:
+    st.markdown("### Sentiment → TTF Granger Causality")
+    st.caption(
+        "Tests whether lagged energy news sentiment Granger-causes next-day TTF price returns. "
+        "A statistically significant result (p < 0.05) means past sentiment adds predictive power "
+        "beyond TTF's own history — a potential leading indicator for gas price direction."
+    )
+
+    with st.spinner("Loading sentiment history…"):
+        _sent = _get_sentiment_l2()
+
+    _daily_sent = _sent.get("daily", pd.DataFrame())
+    _sent_error = _sent.get("error")
+
+    if _sent_error and _daily_sent.empty:
+        st.warning(
+            f"Sentiment pipeline unavailable: {_sent_error} "
+            "This tab requires the FinBERT model (HuggingFace Spaces deployment) and "
+            "at least 21 days of scored headlines.",
+            icon="⚠️",
+        )
+    else:
+        _ttf_prices_df = ttf.get("prices", pd.DataFrame())
+
+        if _ttf_prices_df.empty:
+            st.warning("TTF price data unavailable — cannot compute Granger test.", icon="⚠️")
+        elif _daily_sent.empty:
+            st.info(
+                "No sentiment history yet. Granger test requires at least 21 days of scored headlines. "
+                "History accumulates automatically on each page load.",
+                icon="ℹ️",
+            )
+        else:
+            # ── Build merged series ───────────────────────────────────────────
+            _ttf_df = _ttf_prices_df[["date", "price"]].copy()
+            _ttf_df["date"] = pd.to_datetime(_ttf_df["date"])
+            _ttf_df["return"] = _ttf_df["price"].pct_change() * 100
+
+            _daily_sent = _daily_sent.copy()
+            _daily_sent["date"] = pd.to_datetime(_daily_sent["date"])
+
+            _merged = _daily_sent[["date", "net_sentiment"]].merge(
+                _ttf_df[["date", "return"]], on="date", how="inner"
+            ).dropna().sort_values("date")
+
+            _MIN_DAYS = 21
+            _n_merged = len(_merged)
+
+            if _n_merged < _MIN_DAYS:
+                _days_needed = _MIN_DAYS - _n_merged
+                st.info(
+                    f"Granger test requires {_MIN_DAYS} aligned trading days with both sentiment "
+                    f"and TTF return data. Currently have **{_n_merged}** — "
+                    f"**{_days_needed} more** needed before the test can run. "
+                    "Sentiment history accumulates automatically.",
+                    icon="ℹ️",
+                )
+                # Show what we have so far
+                if _n_merged > 0:
+                    st.markdown("**Available data preview:**")
+                    st.dataframe(
+                        _merged.tail(10)[["date", "net_sentiment", "return"]].rename(columns={
+                            "date": "Date", "net_sentiment": "Net Sentiment", "return": "TTF Return (%)"
+                        }),
+                        use_container_width=True, hide_index=True,
+                    )
+            else:
+                # ── Run Granger test ──────────────────────────────────────────
+                _maxlag = min(7, _n_merged // 7)
+                try:
+                    from statsmodels.tsa.stattools import grangercausalitytests
+                    _gc = grangercausalitytests(
+                        _merged[["return", "net_sentiment"]], maxlag=_maxlag, verbose=False
+                    )
+                    _p_vals = {
+                        lag: _gc[lag][0]["ssr_ftest"][1]
+                        for lag in range(1, _maxlag + 1)
+                    }
+                    _f_vals = {
+                        lag: _gc[lag][0]["ssr_ftest"][0]
+                        for lag in range(1, _maxlag + 1)
+                    }
+                    _min_p    = min(_p_vals.values())
+                    _best_lag = min(_p_vals, key=_p_vals.get)
+
+                    # ── KPI row ───────────────────────────────────────────────
+                    _k1, _k2, _k3, _k4 = st.columns(4)
+                    with _k1:
+                        st.markdown(
+                            kpi_card("Best p-value", f"{_min_p:.3f}",
+                                     delta_span(f"at lag {_best_lag}d", "blue")),
+                            unsafe_allow_html=True,
+                        )
+                    with _k2:
+                        _sig_label = "Significant (p<0.05)" if _min_p < 0.05 else (
+                            "Borderline (p<0.10)" if _min_p < 0.10 else "Not significant"
+                        )
+                        _sig_color = "red" if _min_p < 0.05 else ("amber" if _min_p < 0.10 else "blue")
+                        st.markdown(
+                            kpi_card("Verdict", _sig_label,
+                                     delta_span("SSR F-test", _sig_color)),
+                            unsafe_allow_html=True,
+                        )
+                    with _k3:
+                        _f_best = _f_vals[_best_lag]
+                        st.markdown(
+                            kpi_card("F-statistic", f"{_f_best:.2f}",
+                                     delta_span(f"lag {_best_lag}d", "blue")),
+                            unsafe_allow_html=True,
+                        )
+                    with _k4:
+                        st.markdown(
+                            kpi_card("Sample size", f"{_n_merged} days",
+                                     delta_span(f"max lag: {_maxlag}d", "blue")),
+                            unsafe_allow_html=True,
+                        )
+
+                    st.divider()
+
+                    # ── P-value bar chart ─────────────────────────────────────
+                    st.markdown("#### Granger Test P-Values by Lag")
+                    st.caption(
+                        "Each bar shows the SSR F-test p-value for whether net sentiment at that lag "
+                        "has incremental predictive power for next-day TTF returns. "
+                        "Bars below the red line (p=0.05) indicate statistical significance."
+                    )
+
+                    _lags  = list(_p_vals.keys())
+                    _pvals = list(_p_vals.values())
+                    _bar_colors = [
+                        "#f85149" if p < 0.05 else ("#e07b39" if p < 0.10 else "#58a6ff")
+                        for p in _pvals
+                    ]
+
+                    _fig_gc = go.Figure()
+                    _fig_gc.add_trace(go.Bar(
+                        x=[f"Lag {lag}d" for lag in _lags],
+                        y=_pvals,
+                        marker_color=_bar_colors,
+                        text=[f"p={p:.3f}" for p in _pvals],
+                        textposition="outside",
+                        hovertemplate="Lag %{x}: p=%{y:.4f}<extra></extra>",
+                    ))
+                    _fig_gc.add_hline(
+                        y=0.05, line=dict(color="rgba(248,81,73,0.8)", width=1.5, dash="dash"),
+                        annotation_text="p=0.05 significance threshold",
+                        annotation_font=dict(color="rgba(248,81,73,0.8)", size=10),
+                        annotation_position="top right",
+                    )
+                    _fig_gc.add_hline(
+                        y=0.10, line=dict(color="rgba(210,153,34,0.5)", width=1, dash="dot"),
+                        annotation_text="p=0.10 borderline",
+                        annotation_font=dict(color="rgba(210,153,34,0.5)", size=10),
+                        annotation_position="bottom right",
+                    )
+                    _fig_gc.update_layout(
+                        template="plotly_dark",
+                        paper_bgcolor="#0d1117",
+                        plot_bgcolor="#161b22",
+                        xaxis=dict(title="Lag", gridcolor="rgba(255,255,255,0.06)"),
+                        yaxis=dict(
+                            title="p-value (SSR F-test)",
+                            range=[0, min(1.05, max(_pvals) * 1.2)],
+                            gridcolor="rgba(255,255,255,0.06)",
+                        ),
+                        margin=dict(l=60, r=20, t=30, b=50),
+                        height=360,
+                        showlegend=False,
+                    )
+                    st.plotly_chart(_fig_gc, use_container_width=True)
+
+                    # ── Sentiment + TTF return overlay ────────────────────────
+                    st.markdown("#### Net Sentiment vs TTF Daily Return")
+                    st.caption(
+                        "Visual check: are large sentiment moves followed by TTF price moves? "
+                        "Secondary axis (right) shows TTF daily return."
+                    )
+                    _fig_ts = go.Figure()
+                    _fig_ts.add_trace(go.Scatter(
+                        x=_merged["date"], y=_merged["net_sentiment"],
+                        name="Net Sentiment",
+                        line=dict(color="#58a6ff", width=1.5),
+                        hovertemplate="Sentiment: %{y:.2f}<extra></extra>",
+                    ))
+                    _fig_ts.add_trace(go.Scatter(
+                        x=_merged["date"], y=_merged["return"],
+                        name="TTF Return (%)",
+                        line=dict(color="#e07b39", width=1.2),
+                        yaxis="y2",
+                        hovertemplate="TTF return: %{y:.2f}%<extra></extra>",
+                    ))
+                    _fig_ts.update_layout(
+                        template="plotly_dark",
+                        paper_bgcolor="#0d1117",
+                        plot_bgcolor="#161b22",
+                        xaxis=dict(gridcolor="rgba(255,255,255,0.06)"),
+                        yaxis=dict(
+                            title="Net sentiment",
+                            gridcolor="rgba(255,255,255,0.06)",
+                            side="left",
+                        ),
+                        yaxis2=dict(
+                            title="TTF daily return (%)",
+                            overlaying="y", side="right",
+                            showgrid=False,
+                        ),
+                        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="left", x=0),
+                        margin=dict(l=60, r=60, t=30, b=50),
+                        height=320,
+                        hovermode="x unified",
+                    )
+                    st.plotly_chart(_fig_ts, use_container_width=True)
+
+                    # ── Commentary ────────────────────────────────────────────
+                    if _min_p < 0.05:
+                        _prose = (
+                            f"Granger causality is statistically significant at lag {_best_lag}d "
+                            f"(p={_min_p:.3f}, F={_f_best:.2f}). "
+                            "This means that past energy news sentiment contains incremental predictive "
+                            "information for next-day TTF returns, beyond TTF's own lagged values. "
+                            "In practical terms: when sentiment deteriorates sharply, a TTF upside move "
+                            f"tends to follow within {_best_lag} trading day(s). "
+                            "Note: Granger causality does not imply structural causality — "
+                            "both may respond to a common unobserved shock (e.g. a supply disruption "
+                            "hits news feeds before it is fully priced in)."
+                        )
+                        _status = "warn"
+                    elif _min_p < 0.10:
+                        _prose = (
+                            f"Borderline Granger causality at lag {_best_lag}d (p={_min_p:.3f}). "
+                            "Sentiment shows weak predictive value for TTF returns — directionally "
+                            "interesting but not robust enough to trade on without additional confirmation. "
+                            f"Sample size: {_n_merged} days."
+                        )
+                        _status = "ok"
+                    else:
+                        _prose = (
+                            f"No statistically significant Granger causality detected at any lag up to {_maxlag}d "
+                            f"(best p={_min_p:.3f}). "
+                            "Sentiment does not add predictive power for TTF daily returns beyond TTF's own history "
+                            "in the current sample. This can reflect: insufficient history, high noise in the sentiment "
+                            "series, or a regime where macro/supply factors dominate over news flow."
+                        )
+                        _status = "ok"
+
+                    st.markdown(commentary(_prose, _status), unsafe_allow_html=True)
+
+                    # ── Methodology ───────────────────────────────────────────
+                    with st.expander("Methodology", expanded=False):
+                        st.markdown(f"""
+                        **Granger causality test (Granger 1969):** A variable X is said to Granger-cause Y
+                        if lagged values of X add statistically significant predictive power for Y in an
+                        OLS regression that already includes lagged values of Y.
+
+                        **Test setup:**
+                        - Y: TTF daily return (%) = `(price_t − price_{{t−1}}) / price_{{t−1}} × 100`
+                        - X: Net sentiment score = (positive − negative) FinBERT classifications per day,
+                          aggregated across all scored energy headlines
+                        - Test: SSR F-test at each lag 1…{_maxlag}
+                        - Null hypothesis H₀: sentiment at lag k does not Granger-cause TTF return
+
+                        **Significance levels:**
+                        - p < 0.05: reject H₀ — sentiment is a statistically significant predictor
+                        - p < 0.10: borderline — directionally suggestive, not robust
+                        - p ≥ 0.10: fail to reject H₀ — no predictive evidence in current sample
+
+                        **Sentiment source:** ProsusAI/FinBERT applied to filtered energy RSS headlines
+                        (BBC Business, Guardian Energy, LNG World News, Energy Monitor).
+                        Daily net sentiment = Σ(positive − negative) scores across all day's headlines.
+
+                        **Limitations:**
+                        - Small sample: RSS feeds carry 2–7 days of articles per fetch; history grows over time.
+                        - FinBERT was trained on financial news, not specifically energy commodities.
+                        - Granger causality ≠ structural causality. Both series may respond to common
+                          unobserved shocks (e.g. geopolitical event).
+                        - The test uses daily returns; intraday or hourly sentiment would be stronger.
+
+                        **Sample:** {_n_merged} aligned trading days, max lag {_maxlag}d.
+                        """)
+
+                    st.caption("Sources: ProsusAI/FinBERT | BBC/Guardian/LNG World News RSS | ICE/Yahoo Finance (TTF=F)")
+
+                except ImportError:
+                    st.warning(
+                        "statsmodels is required for the Granger causality test. "
+                        "Run `pip install statsmodels` to enable this tab.",
+                        icon="⚠️",
+                    )
+                except Exception as _e:
+                    st.error(f"Granger test failed: {_e}", icon="🚨")
 
 
 # ── Footer ────────────────────────────────────────────────────────────────────
