@@ -115,12 +115,13 @@ with st.expander("Model overview", expanded=False):
     | Sentiment → TTF Granger Causality | Active |
     | Storage–Price OLS Regression | Active |
     | Hydro Reservoir Lead/Lag Analysis | Active |
+    | TTF Seasonal Norm Tracker | Active |
     """)
 
 st.divider()
 
 # ── Model tabs ───────────────────────────────────────────────────────────────
-tab_mc, tab_reg, tab_spike, tab_bt, tab_stack, tab_decomp, tab_wind, tab_granger, tab_storage_reg, tab_hydro_lag = st.tabs([
+tab_mc, tab_reg, tab_spike, tab_bt, tab_stack, tab_decomp, tab_wind, tab_granger, tab_storage_reg, tab_hydro_lag, tab_ttf_norm = st.tabs([
     "Storage Monte Carlo",
     "Gas-to-Power Regression",
     "Price Spike Detector",
@@ -131,6 +132,7 @@ tab_mc, tab_reg, tab_spike, tab_bt, tab_stack, tab_decomp, tab_wind, tab_granger
     "Granger Causality",
     "Storage–Price Regression",
     "Hydro Lead/Lag",
+    "TTF Seasonal Norm",
 ])
 
 
@@ -2310,6 +2312,268 @@ with tab_hydro_lag:
                 """)
 
             st.caption("Sources: ENTSO-E B31 (hydro reservoirs) | ENTSO-E A44 (NO2 day-ahead prices)")
+
+
+# ════════════════════════════════════════════════════════════════════════════
+# TAB 11: TTF SEASONAL NORM TRACKER
+# ════════════════════════════════════════════════════════════════════════════
+with tab_ttf_norm:
+    st.markdown("### TTF Seasonal Norm Tracker")
+    st.caption(
+        "Current TTF prices overlaid on the historical seasonal distribution (prior years). "
+        "Shaded bands show the 10th–90th and 25th–75th percentile range by calendar day. "
+        "Prices trading above the 90th percentile signal historically extreme levels; "
+        "below the 10th percentile signal historically cheap gas."
+    )
+
+    @st.cache_data(ttl=3600, show_spinner=False, persist="disk")
+    def _get_ttf_history_norm():
+        return fetch_ttf_history(years=7)
+
+    with st.spinner("Loading TTF price history…"):
+        _ttf_norm_df = _get_ttf_history_norm()
+
+    if _ttf_norm_df.empty:
+        st.warning(
+            "TTF price history unavailable. yfinance must be installed and TTF=F must be accessible.",
+            icon="⚠️",
+        )
+    else:
+        _ttf_norm_df = _ttf_norm_df.copy()
+        _ttf_norm_df["date"] = pd.to_datetime(_ttf_norm_df["date"])
+        _ttf_norm_df["year"]  = _ttf_norm_df["date"].dt.year
+        _ttf_norm_df["month"] = _ttf_norm_df["date"].dt.month
+        _ttf_norm_df["day"]   = _ttf_norm_df["date"].dt.day
+        _ttf_norm_df["md"]    = _ttf_norm_df["month"] * 100 + _ttf_norm_df["day"]  # MMDD key
+
+        _current_year = _ttf_norm_df["date"].dt.year.max()
+        _hist_df  = _ttf_norm_df[_ttf_norm_df["year"] < _current_year]
+        _curr_df  = _ttf_norm_df[_ttf_norm_df["year"] == _current_year].copy()
+
+        if _hist_df.empty or len(_hist_df["year"].unique()) < 2:
+            st.info("Need at least 2 prior years of history to compute seasonal bands.", icon="ℹ️")
+        else:
+            # ── Compute seasonal bands by calendar day ────────────────────────
+            _bands = (
+                _hist_df.groupby("md")["price"]
+                .agg(
+                    p10=lambda x: x.quantile(0.10),
+                    p25=lambda x: x.quantile(0.25),
+                    p50=lambda x: x.quantile(0.50),
+                    p75=lambda x: x.quantile(0.75),
+                    p90=lambda x: x.quantile(0.90),
+                )
+                .reset_index()
+            )
+
+            # Build a reference date axis using current year (or 2024 as leap-year base)
+            _ref_year = 2024
+            def _md_to_date(md: int) -> pd.Timestamp:
+                m, d = divmod(md, 100)
+                try:
+                    return pd.Timestamp(year=_ref_year, month=m, day=d)
+                except ValueError:
+                    return pd.NaT
+
+            _bands["ref_date"] = _bands["md"].apply(_md_to_date)
+            _bands = _bands.dropna(subset=["ref_date"]).sort_values("ref_date")
+
+            # Map current year prices to ref_date axis for overlay
+            _curr_df = _curr_df.copy()
+            _curr_df["ref_date"] = _curr_df.apply(
+                lambda r: _md_to_date(int(r["md"])), axis=1
+            )
+            _curr_df = _curr_df.dropna(subset=["ref_date"]).sort_values("ref_date")
+
+            # ── Current position in seasonal distribution ─────────────────────
+            _latest_ttf_norm = float(_ttf_norm_df.sort_values("date")["price"].iloc[-1])
+            _latest_md       = int(_ttf_norm_df.sort_values("date")["md"].iloc[-1])
+            _band_row        = _bands[_bands["md"] == _latest_md]
+
+            _pct_rank: float | None = None
+            if not _band_row.empty:
+                _p10 = float(_band_row["p10"].iloc[0])
+                _p90 = float(_band_row["p90"].iloc[0])
+                _p50 = float(_band_row["p50"].iloc[0])
+                # Percentile rank in historical distribution for this calendar day
+                _day_hist = _hist_df[_hist_df["md"] == _latest_md]["price"]
+                if len(_day_hist) >= 2:
+                    _pct_rank = float((_day_hist < _latest_ttf_norm).mean() * 100)
+
+            # ── KPI row ───────────────────────────────────────────────────────
+            _n1, _n2, _n3, _n4 = st.columns(4)
+            with _n1:
+                st.markdown(
+                    kpi_card("TTF current", f"€{_latest_ttf_norm:.1f}/MWh",
+                             delta_span("latest front-month", "blue")),
+                    unsafe_allow_html=True,
+                )
+            if not _band_row.empty:
+                with _n2:
+                    _vs_median = _latest_ttf_norm - _p50
+                    _med_color = "red" if _vs_median > 5 else ("green" if _vs_median < -5 else "blue")
+                    st.markdown(
+                        kpi_card("vs seasonal median", f"{_vs_median:+.1f} EUR/MWh",
+                                 delta_span(f"median: €{_p50:.1f}/MWh", _med_color)),
+                        unsafe_allow_html=True,
+                    )
+                with _n3:
+                    if _pct_rank is not None:
+                        _rank_label = (
+                            "above 90th pct" if _pct_rank > 90 else
+                            "below 10th pct" if _pct_rank < 10 else
+                            f"{_pct_rank:.0f}th percentile"
+                        )
+                        _rank_color = "red" if _pct_rank > 90 else ("green" if _pct_rank < 10 else "blue")
+                        st.markdown(
+                            kpi_card("Seasonal rank", f"{_pct_rank:.0f}th pct",
+                                     delta_span(_rank_label, _rank_color)),
+                            unsafe_allow_html=True,
+                        )
+                with _n4:
+                    _hist_years = sorted(_hist_df["year"].unique())
+                    st.markdown(
+                        kpi_card("History", f"{len(_hist_years)} years",
+                                 delta_span(f"{_hist_years[0]}–{_hist_years[-1]}", "blue")),
+                        unsafe_allow_html=True,
+                    )
+
+            st.divider()
+
+            # ── Seasonal norm chart ───────────────────────────────────────────
+            st.markdown(f"#### TTF {_current_year} vs Seasonal Distribution ({_hist_years[0]}–{_hist_years[-1]})")
+            st.caption(
+                "Dark shaded band = 25th–75th percentile (typical range). "
+                "Light shaded band = 10th–90th percentile (historical extremes). "
+                f"Solid line = {_current_year} actual prices."
+            )
+
+            _fig_norm = go.Figure()
+
+            # 10th–90th outer band
+            _fig_norm.add_trace(go.Scatter(
+                x=list(_bands["ref_date"]) + list(_bands["ref_date"])[::-1],
+                y=list(_bands["p90"]) + list(_bands["p10"])[::-1],
+                fill="toself",
+                fillcolor="rgba(88,166,255,0.10)",
+                line=dict(color="rgba(255,255,255,0)"),
+                hoverinfo="skip",
+                name="10th–90th pct (historical)",
+                showlegend=True,
+            ))
+
+            # 25th–75th inner band
+            _fig_norm.add_trace(go.Scatter(
+                x=list(_bands["ref_date"]) + list(_bands["ref_date"])[::-1],
+                y=list(_bands["p75"]) + list(_bands["p25"])[::-1],
+                fill="toself",
+                fillcolor="rgba(88,166,255,0.22)",
+                line=dict(color="rgba(255,255,255,0)"),
+                hoverinfo="skip",
+                name="25th–75th pct (typical)",
+                showlegend=True,
+            ))
+
+            # Median
+            _fig_norm.add_trace(go.Scatter(
+                x=_bands["ref_date"], y=_bands["p50"],
+                mode="lines",
+                name="Seasonal median",
+                line=dict(color="rgba(88,166,255,0.5)", width=1.5, dash="dot"),
+                hovertemplate="Median: €%{y:.1f}/MWh<extra></extra>",
+            ))
+
+            # Current year actual
+            if not _curr_df.empty:
+                _fig_norm.add_trace(go.Scatter(
+                    x=_curr_df["ref_date"], y=_curr_df["price"],
+                    mode="lines",
+                    name=f"{_current_year} actual",
+                    line=dict(color="#f0e040", width=2),
+                    hovertemplate=f"{_current_year}: €%{{y:.1f}}/MWh<extra></extra>",
+                ))
+
+            _fig_norm.update_layout(
+                template="plotly_dark",
+                paper_bgcolor="#0d1117",
+                plot_bgcolor="#161b22",
+                xaxis=dict(
+                    title="Calendar month",
+                    tickformat="%b",
+                    dtick="M1",
+                    gridcolor="rgba(255,255,255,0.06)",
+                ),
+                yaxis=dict(
+                    title="TTF front-month (EUR/MWh)",
+                    gridcolor="rgba(255,255,255,0.06)",
+                    rangemode="tozero",
+                ),
+                legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="left", x=0,
+                            font=dict(size=10)),
+                margin=dict(l=60, r=20, t=30, b=50),
+                height=420,
+            )
+            st.plotly_chart(_fig_norm, use_container_width=True)
+
+            # ── Commentary ────────────────────────────────────────────────────
+            if _pct_rank is not None:
+                if _pct_rank > 90:
+                    _norm_prose = (
+                        f"TTF at €{_latest_ttf_norm:.1f}/MWh is at the {_pct_rank:.0f}th percentile of "
+                        f"the historical seasonal distribution for this time of year — "
+                        f"€{_latest_ttf_norm - _p50:.1f}/MWh above the seasonal median. "
+                        "This is historically elevated. Such levels typically reflect supply risk "
+                        "(geopolitical disruption, LNG tightness) or cold-weather demand pressure "
+                        "rather than pure storage fundamentals."
+                    )
+                    _norm_status = "warn"
+                elif _pct_rank < 10:
+                    _norm_prose = (
+                        f"TTF at €{_latest_ttf_norm:.1f}/MWh is at the {_pct_rank:.0f}th percentile of "
+                        f"the historical seasonal distribution — "
+                        f"€{abs(_latest_ttf_norm - _p50):.1f}/MWh below the seasonal median. "
+                        "Historically cheap. Possible explanations: strong LNG imports, full storage, "
+                        "mild demand, or a post-shock normalization from prior elevated prices."
+                    )
+                    _norm_status = "ok"
+                else:
+                    _norm_prose = (
+                        f"TTF at €{_latest_ttf_norm:.1f}/MWh sits at the {_pct_rank:.0f}th percentile "
+                        f"of the historical seasonal range — {abs(_latest_ttf_norm - _p50):.1f} EUR/MWh "
+                        f"{'above' if _latest_ttf_norm > _p50 else 'below'} the seasonal median. "
+                        "Within normal seasonal bounds for this time of year."
+                    )
+                    _norm_status = "ok"
+                st.markdown(commentary(_norm_prose, _norm_status), unsafe_allow_html=True)
+
+            # ── Methodology ───────────────────────────────────────────────────
+            with st.expander("Methodology", expanded=False):
+                st.markdown(f"""
+                **Seasonal distribution:** For each calendar day (month-day pair), the prior-year
+                closing prices of TTF front-month futures (TTF=F via Yahoo Finance/ICE) are collected
+                across all available history ({', '.join(str(y) for y in _hist_years)}).
+                The 10th, 25th, 50th, 75th, and 90th percentiles define the seasonal bands.
+
+                **Current year overlay:** {_current_year} prices are plotted on the same calendar axis
+                (Jan 1 → Dec 31) to show where the current year stands relative to prior-year seasonal
+                patterns.
+
+                **Percentile rank:** The current TTF price is ranked against the same calendar-day
+                distribution. A 90th-percentile reading means that for this day of the year, TTF has
+                historically been cheaper in 90% of prior years.
+
+                **Interpretation:**
+                - Above 90th percentile: historically extreme. Indicates supply risk, cold-weather demand,
+                  or market stress beyond seasonal norms.
+                - 25th–75th band: typical seasonal range. No unusual signal.
+                - Below 10th percentile: historically cheap. Watch for demand recovery or LNG supply tightening.
+
+                **Data:** ICE TTF front-month (TTF=F), {len(_hist_years)} years of history,
+                fetched via yfinance. Note: TTF=F is a continuous front-month contract; roll effects
+                may introduce noise around contract expiry dates.
+                """)
+
+            st.caption("Source: ICE/Yahoo Finance (TTF=F)")
 
 
 # ── Footer ────────────────────────────────────────────────────────────────────
