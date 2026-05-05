@@ -124,6 +124,7 @@ with st.expander("Model overview", expanded=False):
     | Storage–Price OLS Regression | Active |
     | Hydro Reservoir Lead/Lag Analysis | Active |
     | TTF Seasonal Norm Tracker | Active |
+    | NO2/NL Cointegration & Spread Mean-Reversion | Active |
     """)
 
 st.divider()
@@ -338,7 +339,7 @@ with st.expander("Quant Signal Scorecard", expanded=True):
 st.divider()
 
 # ── Model tabs ───────────────────────────────────────────────────────────────
-tab_mc, tab_reg, tab_spike, tab_bt, tab_stack, tab_decomp, tab_wind, tab_granger, tab_storage_reg, tab_hydro_lag, tab_ttf_norm = st.tabs([
+tab_mc, tab_reg, tab_spike, tab_bt, tab_stack, tab_decomp, tab_wind, tab_granger, tab_storage_reg, tab_hydro_lag, tab_ttf_norm, tab_coint = st.tabs([
     "Storage Monte Carlo",
     "Gas-to-Power Regression",
     "Price Spike Detector",
@@ -350,6 +351,7 @@ tab_mc, tab_reg, tab_spike, tab_bt, tab_stack, tab_decomp, tab_wind, tab_granger
     "Storage–Price Regression",
     "Hydro Lead/Lag",
     "TTF Seasonal Norm",
+    "NO2/NL Cointegration",
 ])
 
 
@@ -2783,6 +2785,296 @@ with tab_ttf_norm:
                 """)
 
             st.caption("Source: ICE/Yahoo Finance (TTF=F)")
+
+
+# ════════════════════════════════════════════════════════════════════════════
+# TAB 12: NO2/NL COINTEGRATION & SPREAD MEAN-REVERSION
+# ════════════════════════════════════════════════════════════════════════════
+with tab_coint:
+    st.markdown("### NO2/NL Cointegration & Spread Mean-Reversion")
+    st.caption(
+        "Engle-Granger cointegration test on the NO2–NL day-ahead price pair. "
+        "If cointegrated, the spread has a long-run equilibrium and mean-reverts. "
+        "The Ornstein-Uhlenbeck half-life quantifies how quickly deviations correct. "
+        "Entry/exit z-score thresholds define a rules-based spread trading signal."
+    )
+
+    # Lazy-load feature matrix
+    if "features_l2" not in st.session_state:
+        with st.spinner("Assembling feature matrix (first visit — subsequent loads are instant)…"):
+            st.session_state["features_l2"] = _get_features_l2()
+    _coint_feat = st.session_state["features_l2"]
+
+    if _coint_feat.empty:
+        st.warning("Feature matrix unavailable. Check ENTSO-E API key.", icon="⚠️")
+    elif "no2" not in _coint_feat.columns or "nl" not in _coint_feat.columns:
+        st.warning("NO2 and NL price series required. Check ENTSO-E A44 API key.", icon="⚠️")
+    else:
+        _ci_df = _coint_feat[["date", "no2", "nl"]].dropna().copy()
+        _ci_df["date"] = pd.to_datetime(_ci_df["date"])
+        _ci_df = _ci_df.sort_values("date").reset_index(drop=True)
+        _ci_df["spread"] = _ci_df["no2"] - _ci_df["nl"]
+
+        _MIN_COINT = 100
+        if len(_ci_df) < _MIN_COINT:
+            st.info(
+                f"Cointegration test requires at least {_MIN_COINT} observations. "
+                f"Currently have {len(_ci_df)}.",
+                icon="ℹ️",
+            )
+        else:
+            try:
+                from statsmodels.tsa.stattools import coint as _eg_coint
+                import statsmodels.api as _sm_ci
+
+                # ── Engle-Granger cointegration test ─────────────────────────
+                _ci_score, _ci_pval, _ci_crit = _eg_coint(_ci_df["no2"], _ci_df["nl"])
+
+                # OLS to get residual (spread series for OU fit)
+                _ci_X   = _sm_ci.add_constant(_ci_df["nl"])
+                _ci_ols = _sm_ci.OLS(_ci_df["no2"], _ci_X).fit()
+                _ci_beta_hedge = float(_ci_ols.params["nl"])
+                _ci_resid = _ci_ols.resid.values.copy()
+
+                # ── Ornstein-Uhlenbeck half-life via OLS on lagged residual ──
+                _ci_resid_lag = _ci_resid[:-1]
+                _ci_resid_d   = np.diff(_ci_resid)
+                _ci_ou_X = _sm_ci.add_constant(_ci_resid_lag)
+                _ci_ou   = _sm_ci.OLS(_ci_resid_d, _ci_ou_X).fit()
+                _ci_lambda = float(_ci_ou.params[1])
+                _ci_halflife = (-np.log(2) / _ci_lambda) if _ci_lambda < 0 else float("inf")
+
+                # ── Spread z-score ────────────────────────────────────────────
+                _ci_spread_mean = float(np.mean(_ci_resid))
+                _ci_spread_std  = float(np.std(_ci_resid))
+                _ci_z_series    = (_ci_resid - _ci_spread_mean) / (_ci_spread_std + 1e-9)
+                _ci_z_now       = float(_ci_z_series[-1])
+                _ci_spread_now  = float(_ci_df["spread"].iloc[-1])
+
+                # ── Backtest: reversion hit-rate at ±1σ entry ─────────────────
+                _ENTRY_Z = 1.0
+                _MAX_HOLD = max(5, int(_ci_halflife * 3)) if np.isfinite(_ci_halflife) else 21
+                _bt_hits, _bt_total, _bt_mean_days = 0, 0, []
+                for _idx in range(len(_ci_z_series) - _MAX_HOLD):
+                    _z = _ci_z_series[_idx]
+                    if abs(_z) > _ENTRY_Z:
+                        _bt_total += 1
+                        _target_sign = -np.sign(_z)
+                        _revert_days = None
+                        for _d in range(1, _MAX_HOLD + 1):
+                            if np.sign(_ci_z_series[_idx + _d]) == _target_sign or abs(_ci_z_series[_idx + _d]) < 0.5:
+                                _revert_days = _d
+                                break
+                        if _revert_days is not None:
+                            _bt_hits += 1
+                            _bt_mean_days.append(_revert_days)
+                _bt_hit_rate = (_bt_hits / _bt_total * 100) if _bt_total > 0 else 0.0
+                _bt_avg_days = float(np.mean(_bt_mean_days)) if _bt_mean_days else float("nan")
+
+                # ── KPI row ───────────────────────────────────────────────────
+                _co1, _co2, _co3, _co4, _co5 = st.columns(5)
+                with _co1:
+                    _coint_verdict = "Cointegrated" if _ci_pval < 0.05 else (
+                        "Borderline" if _ci_pval < 0.10 else "Not cointegrated"
+                    )
+                    _coint_color = "red" if _ci_pval < 0.05 else ("amber" if _ci_pval < 0.10 else "blue")
+                    st.markdown(
+                        kpi_card("Cointegration", _coint_verdict,
+                                 delta_span(f"E-G p={_ci_pval:.3f}", _coint_color)),
+                        unsafe_allow_html=True,
+                    )
+                with _co2:
+                    _hl_str = f"{_ci_halflife:.1f}d" if np.isfinite(_ci_halflife) else "∞ (no reversion)"
+                    st.markdown(
+                        kpi_card("OU Half-life", _hl_str,
+                                 delta_span("spread mean-reversion speed", "blue")),
+                        unsafe_allow_html=True,
+                    )
+                with _co3:
+                    _z_color = "red" if abs(_ci_z_now) > 2 else ("amber" if abs(_ci_z_now) > 1 else "blue")
+                    st.markdown(
+                        kpi_card("Spread z-score", f"{_ci_z_now:+.2f}σ",
+                                 delta_span(f"raw: {_ci_spread_now:+.1f} EUR/MWh", _z_color)),
+                        unsafe_allow_html=True,
+                    )
+                with _co4:
+                    st.markdown(
+                        kpi_card("Hedge ratio β", f"{_ci_beta_hedge:.3f}",
+                                 delta_span("NO2 = α + β·NL + ε", "blue")),
+                        unsafe_allow_html=True,
+                    )
+                with _co5:
+                    st.markdown(
+                        kpi_card("±1σ Reversion rate", f"{_bt_hit_rate:.0f}%",
+                                 delta_span(f"avg {_bt_avg_days:.1f}d | {_bt_total} signals" if not np.isnan(_bt_avg_days) else f"{_bt_total} signals", "blue")),
+                        unsafe_allow_html=True,
+                    )
+
+                st.divider()
+
+                # ── Spread z-score time series ────────────────────────────────
+                st.markdown("#### NO2–NL Spread Z-Score (OLS Residual, Full Sample)")
+                st.caption(
+                    "Z-score of the OLS residual from regressing NO2 on NL. "
+                    "Values beyond ±1σ are potential entry points for mean-reversion trades. "
+                    "Red dot = current position."
+                )
+
+                _ci_dates = _ci_df["date"].values
+                _fig_z_ci = go.Figure()
+                _fig_z_ci.add_trace(go.Scatter(
+                    x=_ci_dates, y=_ci_z_series,
+                    mode="lines",
+                    name="Spread z-score",
+                    line=dict(color="#58a6ff", width=1.2),
+                    hovertemplate="%{x|%Y-%m-%d}: z=%{y:.2f}<extra></extra>",
+                ))
+                # Entry/exit bands
+                for _lv, _col, _lbl in [
+                    (2.0,  "rgba(248,81,73,0.5)",   "±2σ (aggressive entry)"),
+                    (1.0,  "rgba(224,123,57,0.5)",   "±1σ (base entry)"),
+                    (-1.0, "rgba(224,123,57,0.5)",   ""),
+                    (-2.0, "rgba(248,81,73,0.5)",    ""),
+                    (0.0,  "rgba(255,255,255,0.2)",  "Mean"),
+                ]:
+                    _fig_z_ci.add_hline(
+                        y=_lv, line=dict(color=_col, width=1, dash="dot"),
+                        annotation_text=_lbl if _lbl else None,
+                        annotation_font=dict(color=_col, size=9),
+                        annotation_position="top right" if _lv > 0 else "bottom right",
+                    )
+                # Current position
+                _fig_z_ci.add_trace(go.Scatter(
+                    x=[_ci_dates[-1]], y=[_ci_z_now],
+                    mode="markers",
+                    name="Current",
+                    marker=dict(color="#f85149", size=10, symbol="circle",
+                                line=dict(color="white", width=1)),
+                    hovertemplate=f"Now: z={_ci_z_now:+.2f}<extra></extra>",
+                ))
+                _fig_z_ci.update_layout(
+                    template="plotly_dark",
+                    paper_bgcolor="#0d1117", plot_bgcolor="#161b22",
+                    xaxis=dict(title=None, gridcolor="rgba(255,255,255,0.06)"),
+                    yaxis=dict(title="Z-score (σ)", gridcolor="rgba(255,255,255,0.06)"),
+                    legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="left", x=0),
+                    margin=dict(l=60, r=20, t=30, b=50),
+                    height=360,
+                    hovermode="x unified",
+                )
+                st.plotly_chart(_fig_z_ci, use_container_width=True)
+
+                # ── Raw spread + NO2 / NL price overlay ──────────────────────
+                st.markdown("#### NO2 vs NL Day-Ahead Prices")
+                st.caption(
+                    "Visual cointegration check: both series should share a common long-run trend "
+                    "if the pair is cointegrated."
+                )
+                _fig_px = go.Figure()
+                _fig_px.add_trace(go.Scatter(
+                    x=_ci_df["date"], y=_ci_df["no2"], name="NO2",
+                    line=dict(color="#58a6ff", width=1.5),
+                    hovertemplate="NO2: €%{y:.1f}/MWh<extra></extra>",
+                ))
+                _fig_px.add_trace(go.Scatter(
+                    x=_ci_df["date"], y=_ci_df["nl"], name="NL",
+                    line=dict(color="#e07b39", width=1.5),
+                    hovertemplate="NL: €%{y:.1f}/MWh<extra></extra>",
+                ))
+                _fig_px.update_layout(
+                    template="plotly_dark",
+                    paper_bgcolor="#0d1117", plot_bgcolor="#161b22",
+                    xaxis=dict(title=None, gridcolor="rgba(255,255,255,0.06)"),
+                    yaxis=dict(title="EUR/MWh", gridcolor="rgba(255,255,255,0.06)"),
+                    legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="left", x=0),
+                    margin=dict(l=60, r=20, t=30, b=50),
+                    height=300,
+                    hovermode="x unified",
+                )
+                st.plotly_chart(_fig_px, use_container_width=True)
+
+                # ── Commentary ────────────────────────────────────────────────
+                if _ci_pval < 0.05:
+                    if abs(_ci_z_now) > 1.0:
+                        _side = "long NO2 / short NL" if _ci_z_now < -1.0 else "short NO2 / long NL"
+                        _ci_prose = (
+                            f"NO2 and NL are statistically cointegrated (E-G p={_ci_pval:.3f}). "
+                            f"The spread is mean-reverting with an OU half-life of {_ci_halflife:.1f} days. "
+                            f"Current z-score = {_ci_z_now:+.2f}σ — beyond the ±1σ entry threshold. "
+                            f"Signal: {_side}. "
+                            f"Historical ±1σ reversion rate: {_bt_hit_rate:.0f}% within {int(_MAX_HOLD)} days "
+                            f"(avg {_bt_avg_days:.1f}d to revert, {_bt_total} signals in sample)."
+                        )
+                        _ci_status = "warn"
+                    else:
+                        _ci_prose = (
+                            f"NO2 and NL are statistically cointegrated (E-G p={_ci_pval:.3f}). "
+                            f"OU half-life: {_ci_halflife:.1f}d. "
+                            f"Current z-score = {_ci_z_now:+.2f}σ — within the neutral zone (|z| < 1σ). "
+                            "No active spread trade signal."
+                        )
+                        _ci_status = "ok"
+                else:
+                    _ci_prose = (
+                        f"Engle-Granger test does not reject the null of no cointegration "
+                        f"(p={_ci_pval:.3f} > 0.05). "
+                        "In the current sample, NO2 and NL do not share a statistically confirmed "
+                        "long-run equilibrium. Spread trades carry higher risk of trending rather than reverting. "
+                        f"OU half-life estimate ({_ci_halflife:.1f}d) should be treated with caution when "
+                        "cointegration is not confirmed."
+                    )
+                    _ci_status = "ok"
+
+                st.markdown(commentary(_ci_prose, _ci_status), unsafe_allow_html=True)
+
+                # ── Methodology ───────────────────────────────────────────────
+                with st.expander("Methodology", expanded=False):
+                    st.markdown(f"""
+                    **Engle-Granger cointegration test (Engle & Granger 1987):**
+                    Two non-stationary series X and Y are cointegrated if there exists a linear combination
+                    `ε = Y − α − β·X` that is stationary (I(0)). This means deviations from the long-run
+                    equilibrium are transient — the spread mean-reverts.
+
+                    **Step 1 — OLS regression:** `NO2 = α + β·NL + ε`
+                    - Estimated β (hedge ratio) = {_ci_beta_hedge:.3f}
+                    - This means 1 MWh NO2 is hedged by {_ci_beta_hedge:.3f} MWh NL exposure.
+
+                    **Step 2 — Residual stationarity (ADF test on ε):**
+                    - Test statistic = {_ci_score:.3f}
+                    - p-value = {_ci_pval:.4f}
+                    - Critical values: 1% = {_ci_crit[0]:.3f}, 5% = {_ci_crit[1]:.3f}, 10% = {_ci_crit[2]:.3f}
+                    - Conclusion: {"residual is stationary → cointegrated" if _ci_pval < 0.05 else "residual is non-stationary → cointegration not confirmed"}
+
+                    **Ornstein-Uhlenbeck half-life:**
+                    Estimated by regressing `Δε_t = λ·ε_{{t−1}} + const + u_t`.
+                    Half-life = −ln(2) / λ = **{_ci_halflife:.1f} trading days**.
+                    Interpretation: the spread takes ~{_ci_halflife:.0f}d to halve a deviation on average.
+                    Typical Nordic/Continental half-lives: 3–15 days (faster when interconnectors are uncongested).
+
+                    **Z-score:** `z_t = (ε_t − μ_ε) / σ_ε` where μ_ε and σ_ε are full-sample moments.
+                    Entry threshold: |z| > 1σ. Exit: |z| < 0.5σ (or sign flip).
+
+                    **Backtest (simple):** For each historical ±1σ entry, checks whether the z-score
+                    reverted to <0.5σ (or opposite sign) within {_MAX_HOLD} trading days.
+                    Hit rate = {_bt_hit_rate:.0f}% ({_bt_hits}/{_bt_total} signals).
+
+                    **Important limitations:**
+                    - Cointegration is a full-sample result — regime breaks (e.g. the 2021/22 energy crisis)
+                      can cause temporary breakdown of the relationship.
+                    - Hedge ratio β is estimated unconditionally; rolling β from the Nordic Decomp tab
+                      provides a more responsive estimate.
+                    - Transaction costs, bid-ask spreads, and settlement mechanics are not modelled.
+                    - The spread is wholesale day-ahead; intraday or balancing spreads differ.
+
+                    **Data:** ENTSO-E A44 (NO2 and NL day-ahead prices), {len(_ci_df)} trading days.
+                    """)
+
+                st.caption("Sources: ENTSO-E A44 (NO2, NL day-ahead prices)")
+
+            except ImportError:
+                st.warning("statsmodels is required. Run `pip install statsmodels`.", icon="⚠️")
+            except Exception as _e:
+                st.error(f"Cointegration analysis failed: {_e}", icon="🚨")
 
 
 # ── Footer ────────────────────────────────────────────────────────────────────
