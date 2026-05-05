@@ -59,6 +59,14 @@ def _run_ols_cached(reg_df: pd.DataFrame):
 def _get_sentiment_l2():
     return get_sentiment_data()
 
+@st.cache_data(ttl=3600, show_spinner=False, persist="disk")
+def _get_eua():
+    return fetch_eua_price()
+
+@st.cache_data(ttl=3600, show_spinner=False, persist="disk")
+def _get_ttf_history_norm():
+    return fetch_ttf_history(years=7)
+
 with st.spinner(""):
     storage = get_storage_data()
     ttf     = get_ttf_data()
@@ -117,6 +125,215 @@ with st.expander("Model overview", expanded=False):
     | Hydro Reservoir Lead/Lag Analysis | Active |
     | TTF Seasonal Norm Tracker | Active |
     """)
+
+st.divider()
+
+# ── Quant Signal Scorecard ────────────────────────────────────────────────────
+_PILL = {
+    "up":      "<span style='background:#3d1515;color:#f85149;border-radius:4px;"
+               "padding:2px 7px;font-size:0.78rem;font-weight:600;'>↑ UPSIDE</span>",
+    "down":    "<span style='background:#0f2a1a;color:#3fb950;border-radius:4px;"
+               "padding:2px 7px;font-size:0.78rem;font-weight:600;'>↓ DOWNSIDE</span>",
+    "neutral": "<span style='background:#1a2233;color:#58a6ff;border-radius:4px;"
+               "padding:2px 7px;font-size:0.78rem;font-weight:600;'>→ NEUTRAL</span>",
+    "na":      "<span style='background:#1a1a1a;color:#6e7681;border-radius:4px;"
+               "padding:2px 7px;font-size:0.78rem;font-weight:600;'>⊘ N/A</span>",
+}
+
+def _score_card_html(name: str, value: str, direction: str, note: str) -> str:
+    pill = _PILL[direction]
+    return (
+        f"<div style='background:#161b22;border:1px solid #30363d;border-radius:8px;"
+        f"padding:14px 16px;height:100%;'>"
+        f"<div style='color:#8b949e;font-size:0.74rem;margin-bottom:4px;'>{name}</div>"
+        f"<div style='font-size:1.05rem;font-weight:700;color:#e6edf3;"
+        f"margin-bottom:6px;'>{value}</div>"
+        f"{pill}"
+        f"<div style='color:#8b949e;font-size:0.74rem;margin-top:6px;line-height:1.3;'>{note}</div>"
+        f"</div>"
+    )
+
+_sc_signals: list[dict] = []
+
+# Signal 1: Storage risk premium (OLS residual)
+try:
+    import statsmodels.api as _sm_sc
+    _sc_eu = storage.get("europe", pd.DataFrame())
+    _sc_ttf = ttf.get("prices", pd.DataFrame()).copy()
+    if not _sc_eu.empty and not _sc_ttf.empty and "full" in _sc_eu.columns:
+        _sc_str = _sc_eu[["gasDayStart", "full"]].dropna().rename(
+            columns={"gasDayStart": "date", "full": "storage_pct"}
+        )
+        _sc_str["date"] = pd.to_datetime(_sc_str["date"])
+        _sc_ttf["date"] = pd.to_datetime(_sc_ttf["date"])
+        _sc_m = _sc_str.merge(_sc_ttf[["date", "price"]], on="date", how="inner").dropna()
+        if len(_sc_m) >= 60:
+            _sc_X  = _sm_sc.add_constant(_sc_m["storage_pct"])
+            _sc_fit = _sm_sc.OLS(_sc_m["price"], _sc_X).fit()
+            _sc_latest = _sc_m.iloc[-1]
+            _sc_prem   = float(_sc_latest["price"] - _sc_fit.predict(
+                _sm_sc.add_constant([_sc_latest["storage_pct"]])[0]
+            ))
+            _sc_dir = "up" if _sc_prem > 5 else ("down" if _sc_prem < -5 else "neutral")
+            _sc_note = ("TTF elevated above storage-implied value" if _sc_prem > 5
+                        else ("TTF below storage-implied value" if _sc_prem < -5
+                              else "TTF near storage-implied fair value"))
+            _sc_signals.append({"name": "Supply-Risk Premium", "value": f"{_sc_prem:+.1f} EUR/MWh",
+                                 "direction": _sc_dir, "note": _sc_note})
+        else:
+            _sc_signals.append({"name": "Supply-Risk Premium", "value": "n/a",
+                                 "direction": "na", "note": "Need AGSI key + 60+ obs"})
+    else:
+        _sc_signals.append({"name": "Supply-Risk Premium", "value": "n/a",
+                             "direction": "na", "note": "Storage data unavailable"})
+except Exception:
+    _sc_signals.append({"name": "Supply-Risk Premium", "value": "n/a",
+                         "direction": "na", "note": "Computation error"})
+
+# Signal 2: TTF seasonal percentile rank
+try:
+    _sc_hist = _get_ttf_history_norm()
+    if not _sc_hist.empty:
+        _sc_hist = _sc_hist.copy()
+        _sc_hist["date"]  = pd.to_datetime(_sc_hist["date"])
+        _sc_hist["year"]  = _sc_hist["date"].dt.year
+        _sc_hist["md"]    = _sc_hist["date"].dt.month * 100 + _sc_hist["date"].dt.day
+        _sc_cur_yr  = _sc_hist["year"].max()
+        _sc_latest_ttf_val  = float(_sc_hist.sort_values("date")["price"].iloc[-1])
+        _sc_latest_md       = int(_sc_hist.sort_values("date")["md"].iloc[-1])
+        _sc_day_hist = _sc_hist[(_sc_hist["year"] < _sc_cur_yr) & (_sc_hist["md"] == _sc_latest_md)]["price"]
+        if len(_sc_day_hist) >= 2:
+            _sc_pct_rank = float((_sc_day_hist < _sc_latest_ttf_val).mean() * 100)
+            _sc_dir = "up" if _sc_pct_rank > 75 else ("down" if _sc_pct_rank < 25 else "neutral")
+            _sc_note = (f"Historically elevated for this time of year" if _sc_pct_rank > 75
+                        else (f"Historically cheap for this time of year" if _sc_pct_rank < 25
+                              else "Within typical seasonal range"))
+            _sc_signals.append({"name": "TTF Seasonal Rank", "value": f"{_sc_pct_rank:.0f}th pct",
+                                 "direction": _sc_dir, "note": _sc_note})
+        else:
+            _sc_signals.append({"name": "TTF Seasonal Rank", "value": "n/a",
+                                 "direction": "na", "note": "Insufficient history"})
+    else:
+        _sc_signals.append({"name": "TTF Seasonal Rank", "value": "n/a",
+                             "direction": "na", "note": "yfinance unavailable"})
+except Exception:
+    _sc_signals.append({"name": "TTF Seasonal Rank", "value": "n/a",
+                         "direction": "na", "note": "Computation error"})
+
+# Signal 3: Marginal fuel (supply stack at 60 GW reference demand)
+try:
+    _sc_ttf_px = ttf.get("prices", pd.DataFrame())
+    _sc_ttf_latest = float(_sc_ttf_px["price"].iloc[-1]) if not _sc_ttf_px.empty else 50.0
+    _sc_eua, _ = _get_eua()
+    _sc_stack  = build_stack(_sc_ttf_latest, _sc_eua)
+    _sc_marg   = identify_marginal_fuel(_sc_stack, 60.0)
+    _sc_fuel   = _sc_marg["fuel"]
+    _sc_dir = ("up" if _sc_fuel in ("gas", "oil")
+               else ("down" if _sc_fuel in ("wind", "solar", "hydro")
+                     else "neutral"))
+    _sc_fuel_note = {
+        "gas":   "Gas-marginal regime — TTF drives power prices",
+        "oil":   "Oil/peaker marginal — demand near capacity ceiling",
+        "coal":  "Coal-marginal — mid-stack clearing",
+        "wind":  "Renewable-marginal — structurally low-cost clearing",
+        "solar": "Renewable-marginal — structurally low-cost clearing",
+        "hydro": "Hydro-marginal — low-cost supply clearing",
+        "lignite": "Lignite-marginal — mid-stack clearing",
+        "biomass": "Biomass-marginal — mid-stack clearing",
+    }.get(_sc_fuel, f"{_sc_fuel} marginal")
+    _sc_signals.append({"name": "Marginal Fuel (60 GW)", "value": _sc_marg["label"].split("/")[0].strip(),
+                         "direction": _sc_dir, "note": _sc_fuel_note})
+except Exception:
+    _sc_signals.append({"name": "Marginal Fuel (60 GW)", "value": "n/a",
+                         "direction": "na", "note": "Computation error"})
+
+# Signal 4: Hydro level vs 90-day mean (session_state — only after Nordic Decomp/Wind visit)
+try:
+    _sc_fm = st.session_state.get("features_l2")
+    if _sc_fm is not None and not _sc_fm.empty and "hydro_pct" in _sc_fm.columns:
+        _sc_hydro_ser = _sc_fm["hydro_pct"].dropna()
+        if len(_sc_hydro_ser) >= 30:
+            _sc_hydro_cur  = float(_sc_hydro_ser.iloc[-1])
+            _sc_hydro_mean = float(_sc_hydro_ser.iloc[-90:].mean())
+            _sc_hydro_dev  = _sc_hydro_cur - _sc_hydro_mean
+            _sc_dir = "down" if _sc_hydro_dev > 5 else ("up" if _sc_hydro_dev < -5 else "neutral")
+            _sc_note = (f"Above 90d mean ({_sc_hydro_mean:.0f}%) — supply comfortable" if _sc_hydro_dev > 5
+                        else (f"Below 90d mean ({_sc_hydro_mean:.0f}%) — hydro tightening" if _sc_hydro_dev < -5
+                              else f"Near 90d mean ({_sc_hydro_mean:.0f}%)"))
+            _sc_signals.append({"name": "Hydro Level", "value": f"{_sc_hydro_cur:.0f}%",
+                                 "direction": _sc_dir, "note": _sc_note})
+        else:
+            _sc_signals.append({"name": "Hydro Level", "value": "n/a",
+                                 "direction": "na", "note": "Visit Nordic Decomp tab to load"})
+    else:
+        _sc_signals.append({"name": "Hydro Level", "value": "n/a",
+                             "direction": "na", "note": "Visit Nordic Decomp tab to load"})
+except Exception:
+    _sc_signals.append({"name": "Hydro Level", "value": "n/a",
+                         "direction": "na", "note": "Computation error"})
+
+# Signal 5: Granger sentiment
+try:
+    _sc_sent = _get_sentiment_l2()
+    _sc_daily_sent = _sc_sent.get("daily", pd.DataFrame())
+    _sc_ttf_px2 = ttf.get("prices", pd.DataFrame()).copy()
+    if not _sc_daily_sent.empty and not _sc_ttf_px2.empty:
+        _sc_daily_sent = _sc_daily_sent.copy()
+        _sc_daily_sent["date"] = pd.to_datetime(_sc_daily_sent["date"])
+        _sc_ttf_px2["date"]   = pd.to_datetime(_sc_ttf_px2["date"])
+        _sc_ttf_px2["return"] = _sc_ttf_px2["price"].pct_change() * 100
+        _sc_gc_merged = _sc_daily_sent[["date", "net_sentiment"]].merge(
+            _sc_ttf_px2[["date", "return"]], on="date", how="inner"
+        ).dropna().sort_values("date")
+        if len(_sc_gc_merged) >= 21:
+            from statsmodels.tsa.stattools import grangercausalitytests as _gct
+            _sc_gc = _gct(_sc_gc_merged[["return", "net_sentiment"]], maxlag=2, verbose=False)
+            _sc_min_p = min(_sc_gc[1][0]["ssr_ftest"][1], _sc_gc[2][0]["ssr_ftest"][1])
+            _sc_recent_sent = float(_sc_gc_merged["net_sentiment"].iloc[-7:].mean())
+            if _sc_min_p < 0.10:
+                _sc_dir = "up" if _sc_recent_sent < 0 else "down"
+                _sc_note = (f"Significant (p={_sc_min_p:.3f}) + negative news flow → upside pressure"
+                            if _sc_recent_sent < 0
+                            else f"Significant (p={_sc_min_p:.3f}) + positive news flow → downside pressure")
+            else:
+                _sc_dir = "neutral"
+                _sc_note = f"Not significant (p={_sc_min_p:.3f}) — no news-driven price signal"
+            _sc_signals.append({"name": "Sentiment → TTF", "value": f"p={_sc_min_p:.3f}",
+                                 "direction": _sc_dir, "note": _sc_note})
+        else:
+            _sc_signals.append({"name": "Sentiment → TTF", "value": "n/a",
+                                 "direction": "na", "note": f"Need 21 aligned days ({len(_sc_gc_merged)} so far)"})
+    else:
+        _sc_signals.append({"name": "Sentiment → TTF", "value": "n/a",
+                             "direction": "na", "note": "Sentiment pipeline unavailable"})
+except Exception:
+    _sc_signals.append({"name": "Sentiment → TTF", "value": "n/a",
+                         "direction": "na", "note": "Computation error"})
+
+# Render scorecard
+_n_up   = sum(1 for s in _sc_signals if s["direction"] == "up")
+_n_down = sum(1 for s in _sc_signals if s["direction"] == "down")
+_n_neu  = sum(1 for s in _sc_signals if s["direction"] == "neutral")
+_agg_color = "#f85149" if _n_up > _n_down + _n_neu else ("#3fb950" if _n_down > _n_up + _n_neu else "#58a6ff")
+_agg_label = (f"<span style='color:{_agg_color};font-weight:700;'>"
+              f"{_n_up} upside &nbsp;/&nbsp; {_n_down} downside &nbsp;/&nbsp; {_n_neu} neutral</span>")
+
+with st.expander("Quant Signal Scorecard", expanded=True):
+    st.markdown(
+        f"<div style='margin-bottom:10px;font-size:0.85rem;color:#8b949e;'>"
+        f"Aggregate: {_agg_label}"
+        f"<span style='color:#484f58;margin-left:12px;font-size:0.72rem;'>"
+        f"Hydro loads after first Nordic Decomp visit · Sentiment accumulates over time</span></div>",
+        unsafe_allow_html=True,
+    )
+    _sc_cols = st.columns(5)
+    for _i, _sig in enumerate(_sc_signals):
+        with _sc_cols[_i]:
+            st.markdown(
+                _score_card_html(_sig["name"], _sig["value"], _sig["direction"], _sig["note"]),
+                unsafe_allow_html=True,
+            )
+    st.markdown("<div style='margin-bottom:4px'></div>", unsafe_allow_html=True)
 
 st.divider()
 
@@ -961,10 +1178,6 @@ with tab_stack:
         )
 
     # ── Fetch EUA, build stack ────────────────────────────────────────────────
-    @st.cache_data(ttl=3600, show_spinner=False, persist="disk")
-    def _get_eua():
-        return fetch_eua_price()
-
     eua_price, eua_source = _get_eua()
     stack_df  = build_stack(ttf_latest, eua_price)
     marginal  = identify_marginal_fuel(stack_df, demand_gw)
@@ -2325,10 +2538,6 @@ with tab_ttf_norm:
         "Prices trading above the 90th percentile signal historically extreme levels; "
         "below the 10th percentile signal historically cheap gas."
     )
-
-    @st.cache_data(ttl=3600, show_spinner=False, persist="disk")
-    def _get_ttf_history_norm():
-        return fetch_ttf_history(years=7)
 
     with st.spinner("Loading TTF price history…"):
         _ttf_norm_df = _get_ttf_history_norm()
