@@ -1,6 +1,7 @@
 """
 Layer 2: Quantitative Analysis
 """
+import os
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -66,6 +67,37 @@ def _get_eua():
 @st.cache_data(ttl=3600, show_spinner=False, persist="disk")
 def _get_ttf_history_norm():
     return fetch_ttf_history(years=7)
+
+@st.cache_data(ttl=1800, show_spinner=False, persist="disk")
+def _get_de_live_load_gw() -> tuple:
+    """
+    Fetch today's German total load from ENTSO-E A65.
+    Returns (load_gw: float | None, source_label: str).
+    Falls back to yesterday if today's data not yet published.
+    """
+    _key = os.getenv("ENTSOE_API_KEY", "")
+    if not _key:
+        return None, "ENTSO-E key required"
+    try:
+        from entsoe import EntsoePandasClient
+        import pytz
+        from datetime import datetime as _dt
+        _tz  = pytz.timezone("Europe/Berlin")
+        _now = _dt.now(_tz)
+        _start = pd.Timestamp(_now.date(), tz="Europe/Berlin")
+        _end   = _start + pd.Timedelta(days=1)
+        _client_a65 = EntsoePandasClient(api_key=_key)
+        _ser = _client_a65.query_load("10Y1001A1001A83F", start=_start, end=_end)
+        if _ser is None or (hasattr(_ser, "empty") and _ser.empty):
+            _start -= pd.Timedelta(days=1)
+            _end   -= pd.Timedelta(days=1)
+            _ser    = _client_a65.query_load("10Y1001A1001A83F", start=_start, end=_end)
+        if _ser is not None and not (hasattr(_ser, "empty") and _ser.empty):
+            _gw = float(_ser.mean()) / 1000.0
+            return _gw, f"ENTSO-E A65 ({_start.date()})"
+        return None, "No load data returned"
+    except Exception as _exc:
+        return None, f"A65 error: {str(_exc)[:60]}"
 
 with st.spinner(""):
     storage = get_storage_data()
@@ -221,13 +253,18 @@ except Exception:
     _sc_signals.append({"name": "TTF Seasonal Rank", "value": "n/a",
                          "direction": "na", "note": "Computation error"})
 
-# Signal 3: Marginal fuel (supply stack at 60 GW reference demand)
+# Signal 3: Marginal fuel (supply stack at live demand if available, else 60 GW)
 try:
     _sc_ttf_px = ttf.get("prices", pd.DataFrame())
     _sc_ttf_latest = float(_sc_ttf_px["price"].iloc[-1]) if not _sc_ttf_px.empty else 50.0
     _sc_eua, _ = _get_eua()
+    _sc_live_load, _ = _get_de_live_load_gw()
+    _sc_ref_demand = (
+        float(np.clip(round(_sc_live_load), 30, 90))
+        if _sc_live_load is not None else 60.0
+    )
     _sc_stack  = build_stack(_sc_ttf_latest, _sc_eua)
-    _sc_marg   = identify_marginal_fuel(_sc_stack, 60.0)
+    _sc_marg   = identify_marginal_fuel(_sc_stack, _sc_ref_demand)
     _sc_fuel   = _sc_marg["fuel"]
     _sc_dir = ("up" if _sc_fuel in ("gas", "oil")
                else ("down" if _sc_fuel in ("wind", "solar", "hydro")
@@ -242,10 +279,12 @@ try:
         "lignite": "Lignite-marginal — mid-stack clearing",
         "biomass": "Biomass-marginal — mid-stack clearing",
     }.get(_sc_fuel, f"{_sc_fuel} marginal")
-    _sc_signals.append({"name": "Marginal Fuel (60 GW)", "value": _sc_marg["label"].split("/")[0].strip(),
+    _sc_demand_label = f"{_sc_ref_demand:.0f} GW" + (" live" if _sc_live_load is not None else " ref")
+    _sc_signals.append({"name": f"Marginal Fuel ({_sc_demand_label})",
+                         "value": _sc_marg["label"].split("/")[0].strip(),
                          "direction": _sc_dir, "note": _sc_fuel_note})
 except Exception:
-    _sc_signals.append({"name": "Marginal Fuel (60 GW)", "value": "n/a",
+    _sc_signals.append({"name": "Marginal Fuel", "value": "n/a",
                          "direction": "na", "note": "Computation error"})
 
 # Signal 4: Hydro level vs 90-day mean (session_state — only after Nordic Decomp/Wind visit)
@@ -1157,24 +1196,35 @@ with tab_stack:
     ttf_prices = ttf.get("prices", pd.DataFrame())
     ttf_latest = float(ttf_prices["price"].iloc[-1]) if not ttf_prices.empty else 50.0
 
+    _live_load_gw, _load_src = _get_de_live_load_gw()
+    _default_demand = (
+        float(np.clip(round(_live_load_gw), 30, 90))
+        if _live_load_gw is not None
+        else 60.0
+    )
+
     col_left, col_right = st.columns([2, 1])
     with col_left:
         demand_gw = st.slider(
             "Modelled demand (GW)",
-            min_value=30.0, max_value=90.0, value=60.0, step=1.0,
+            min_value=30.0, max_value=90.0, value=_default_demand, step=1.0,
             help=(
+                "Default set to today's ENTSO-E A65 German actual load average. "
                 "German grid load varies from ~35 GW (summer weekend night) to ~85 GW "
-                "(cold winter peak). Slide to see which fuel sets the clearing price at "
-                "different demand levels. ENTSO-E A65 live load data will be added in a "
-                "future update."
+                "(cold winter peak). Slide to override."
             ),
         )
     with col_right:
+        _load_badge = (
+            f"Live demand: {_live_load_gw:.1f} GW ({_load_src})"
+            if _live_load_gw is not None
+            else f"Live demand unavailable — {_load_src}. Using 60 GW default."
+        )
         st.markdown(
             commentary(
                 f"TTF input: €{ttf_latest:.1f}/MWh (live). "
-                "EUA carbon price fetched below.",
-                "ok",
+                f"EUA carbon price fetched below. {_load_badge}",
+                "ok" if _live_load_gw is not None else "warn",
             ),
             unsafe_allow_html=True,
         )
@@ -1308,6 +1358,7 @@ with tab_stack:
         **Dynamic inputs:**
         - Gas CCGT SRMC = TTF ÷ 0.55 + EUA × 0.37 (live TTF: **€{ttf_latest:.1f}/MWh**, EUA: **€{eua_price:.0f}/t**)
         - Hard coal SRMC = 11 EUR/MWh_th ÷ 0.40 + EUA × 0.85 ≈ **€{coal_srmc:.1f}/MWh** at current EUA
+        - Demand default: **{_default_demand:.0f} GW** — {"ENTSO-E A65 today's average (" + _load_src + ")" if _live_load_gw is not None else "static 60 GW fallback (" + _load_src + ")"}
 
         **Static inputs (Bundesnetzagentur 2024):**
         - Wind: 66 GW installed | Solar: 73 GW | Hydro: 4.5 GW | Biomass: 8.5 GW
