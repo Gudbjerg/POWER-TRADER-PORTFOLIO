@@ -191,6 +191,26 @@ with st.expander("Live Model 1: Train and Predict", expanded=lstm_is_trained()):
                                      delta_span(f"{len(_lm.get('feature_cols',[]))} features", "blue")),
                              unsafe_allow_html=True)
 
+            # Honesty banner: warn when LSTM underperforms naive baseline
+            _no2_mae   = _lm.get("test_mae_no2")
+            _no2_naive = _lm.get("naive_mae_no2")
+            if _no2_mae is not None and _no2_naive is not None:
+                try:
+                    _mae_f, _naive_f = float(_no2_mae), float(_no2_naive)
+                    if _mae_f > _naive_f:
+                        st.warning(
+                            f"**Model limitation:** LSTM test MAE €{_mae_f:.2f}/MWh underperforms "
+                            f"naive persistence baseline (€{_naive_f:.2f}/MWh). "
+                            "Predictions currently revert toward the mean and should not be used for "
+                            "trading decisions. Root cause: the Q1–Q2 2026 test window coincides with "
+                            "the Iran/Hormuz supply shock — a regime structurally outside the training "
+                            "distribution. Methodology fix (log-return target, quantile loss, "
+                            "walk-forward validation) is scheduled for a future session.",
+                            icon="⚠️",
+                        )
+                except (TypeError, ValueError):
+                    pass
+
             # Live prediction
             _pred = predict_next(_features_df)
             if _pred and "no2_pred" in _pred and _pred["no2_pred"] is not None:

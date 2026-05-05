@@ -1,0 +1,37 @@
+{
+  "feature_cols": [
+    "no2_z",
+    "nl_z",
+    "spread_z",
+    "ttf_z",
+    "storage_dev",
+    "no2_vol5_z",
+    "hydro_pct",
+    "wind_de_z"
+  ],
+  "n_states": 4,
+  "n_obs": 482,
+  "date_min": "2024-04-08",
+  "date_max": "2026-03-27",
+  "regime_labels": {
+    "3": "Gas-driven",
+    "1": "Renewables-driven",
+    "2": "Hydro-driven",
+    "0": "Geopolitical stress"
+  },
+  "state_pcts": {
+    "Geopolitical stress": 27.4,
+    "Renewables-driven": 26.1,
+    "Hydro-driven": 40.2,
+    "Gas-driven": 6.4
+  },
+  "state_durations": {
+    "Geopolitical stress": 21.1,
+    "Renewables-driven": 135.0,
+    "Hydro-driven": 37.5,
+    "Gas-driven": 30.0
+  },
+  "log_prob": -5341.77,
+  "trained_at": "2026-04-06T14:43:05.858777",
+  "relabeled_at": "2026-04-06T15:42:43.909426"
+}

@@ -5,6 +5,7 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 import plotly.graph_objects as go
+import time as _time
 from dotenv import load_dotenv
 from datetime import date as _date
 
@@ -37,6 +38,7 @@ from models.wind_forecast_error import (
     ZONE_LABELS as WIND_ZONE_LABELS,
 )
 from data.wind import fetch_wind_daily, fetch_wind_forecast
+from data.sentiment import get_sentiment_data
 
 apply_dark_theme()
 
@@ -45,11 +47,24 @@ apply_dark_theme()
 def _get_features_l2():
     return assemble_features(years=3)
 
+@st.cache_data(ttl=3600, show_spinner=False, persist="disk")
+def _run_decomp_cached(df: pd.DataFrame, window: int = 90):
+    return run_rolling_decomposition(df, window)
+
+@st.cache_data(ttl=3600, show_spinner=False, persist="disk")
+def _run_ols_cached(reg_df: pd.DataFrame):
+    return run_full_ols(reg_df)
+
+@st.cache_data(ttl=21600, show_spinner=False)
+def _get_sentiment_l2():
+    return get_sentiment_data()
+
 with st.spinner(""):
-    storage    = get_storage_data()
-    ttf        = get_ttf_data()
-    spot_df    = fetch_spot_prices(days=150)   # extended history for regression
-    features_df = _get_features_l2()
+    storage = get_storage_data()
+    ttf     = get_ttf_data()
+    spot_df = fetch_spot_prices(days=150)   # extended history for regression
+    # features_df is lazy-loaded inside the tabs that need it (Nordic Decomp, Wind)
+    # so the default tab (Storage MC) renders without waiting for ENTSO-E feature assembly
 
 eu_df = storage["europe"]
 
@@ -59,6 +74,27 @@ if not eu_df.empty and "full" in eu_df.columns:
 
 monthly_stats = compute_monthly_stats(eu_df)
 has_empirical = bool(monthly_stats)
+
+# ── Sidebar: data freshness ───────────────────────────────────────────────────
+with st.sidebar:
+    st.markdown("#### Data freshness")
+    _fmt = "%H:%M UTC"
+    _st_at  = storage.get("fetched_at")
+    _ttf_at = ttf.get("fetched_at")
+    st.caption(f"Storage: {_st_at.strftime(_fmt) if _st_at else 'n/a'}")
+    st.caption(f"TTF prices: {_ttf_at.strftime(_fmt) if _ttf_at else 'n/a'}")
+    if not spot_df.empty:
+        _spot_latest = pd.to_datetime(spot_df["date"]).max().strftime("%Y-%m-%d")
+        st.caption(f"Spot prices: through {_spot_latest}")
+    else:
+        st.caption("Spot prices: unavailable")
+    _fm = st.session_state.get("features_l2")
+    if _fm is not None and not _fm.empty:
+        _fm_latest = pd.to_datetime(_fm["date"]).max().strftime("%Y-%m-%d")
+        st.caption(f"Feature matrix: {len(_fm)} rows through {_fm_latest}")
+    else:
+        st.caption("Feature matrix: loads on first visit to Nordic Decomp or Wind tab")
+    st.divider()
 
 # ── Header ───────────────────────────────────────────────────────────────────
 st.markdown("## Layer 2: Quantitative Analysis")
@@ -76,12 +112,16 @@ with st.expander("Model overview", expanded=False):
     | Nordic price decomposition | Active |
     | Wind forecast error | Active |
     | Merit order / supply stack | Active |
+    | Sentiment → TTF Granger Causality | Active |
+    | Storage–Price OLS Regression | Active |
+    | Hydro Reservoir Lead/Lag Analysis | Active |
+    | TTF Seasonal Norm Tracker | Active |
     """)
 
 st.divider()
 
 # ── Model tabs ───────────────────────────────────────────────────────────────
-tab_mc, tab_reg, tab_spike, tab_bt, tab_stack, tab_decomp, tab_wind = st.tabs([
+tab_mc, tab_reg, tab_spike, tab_bt, tab_stack, tab_decomp, tab_wind, tab_granger, tab_storage_reg, tab_hydro_lag, tab_ttf_norm = st.tabs([
     "Storage Monte Carlo",
     "Gas-to-Power Regression",
     "Price Spike Detector",
@@ -89,6 +129,10 @@ tab_mc, tab_reg, tab_spike, tab_bt, tab_stack, tab_decomp, tab_wind = st.tabs([
     "Supply Stack",
     "Nordic Decomposition",
     "Wind Forecast Error",
+    "Granger Causality",
+    "Storage–Price Regression",
+    "Hydro Lead/Lag",
+    "TTF Seasonal Norm",
 ])
 
 
@@ -277,7 +321,7 @@ with tab_reg:
     POWER_ZONE = "NL"
     ttf_df = ttf["prices"]
     reg_df = prepare_data(ttf_df, spot_df, power_zone=POWER_ZONE)
-    ols    = run_full_ols(reg_df)
+    ols    = _run_ols_cached(reg_df)
 
     if not ols:
         st.warning(
@@ -964,11 +1008,21 @@ with tab_stack:
     with k5:
         if nl_latest is not None:
             premium = nl_latest - marginal["marginal_cost"]
-            color   = "red" if premium > 10 else ("green" if premium < -10 else "blue")
-            label   = "scarcity premium" if premium > 0 else "below implied"
+            # Sign-aware interpretation: depends on which fuel is marginal
+            _zero_cost_fuels = {"wind", "solar", "hydro"}
+            if marginal["fuel"] in _zero_cost_fuels:
+                # NL > €0 implied is NOT scarcity — it's the renewable-surplus disconnect
+                label = "above renewable clearing" if premium > 0 else "below renewable clearing"
+            elif premium > 10:
+                label = "above thermal cost floor"
+            elif premium < -10:
+                label = "below thermal cost floor"
+            else:
+                label = "near implied"
+            color = "red" if premium > 10 else ("green" if premium < -10 else "blue")
             st.markdown(
                 kpi_card("NL vs implied", f"€{nl_latest:.1f}/MWh",
-                         delta_span(f"{premium:+.1f} EUR/MWh {label}", color)),
+                         delta_span(f"{premium:+.1f} EUR/MWh — {label}", color)),
                 unsafe_allow_html=True,
             )
         else:
@@ -1005,10 +1059,19 @@ with tab_stack:
         )
         status = "warn"
     elif marginal["fuel"] in ("wind", "solar"):
+        _gap_note = ""
+        if nl_latest is not None:
+            _gap = nl_latest - marginal["marginal_cost"]
+            _gap_note = (
+                f" NL day-ahead at €{nl_latest:.1f}/MWh is €{_gap:.1f}/MWh above the structural cost "
+                "floor of €0/MWh — this is not a scarcity premium. It reflects grid constraints, "
+                "reserve capacity costs, import flows (NordLink, NorNed), or real-time demand that "
+                "the simplified merit order does not capture."
+            )
         prose = (
             f"At {demand_gw:.0f} GW demand, the marginal fuel is renewable (zero SRMC). "
-            "Negative or near-zero power prices are possible when renewable output is high and demand is low. "
-            "This is a structural feature of high-renewables markets with inflexible baseload."
+            "Negative or near-zero wholesale prices are possible when renewable output is high and "
+            f"demand is low.{_gap_note}"
         )
         status = "ok"
     else:
@@ -1075,6 +1138,12 @@ with tab_decomp:
         "are directly comparable across drivers."
     )
 
+    # Lazy-load feature matrix: only assembled when this tab is first visited
+    if "features_l2" not in st.session_state:
+        with st.spinner("Assembling feature matrix (first visit — subsequent loads are instant)…"):
+            st.session_state["features_l2"] = _get_features_l2()
+    features_df = st.session_state["features_l2"]
+
     _avail_l2 = get_available_feature_sets(features_df)
     _n_rows_l2 = len(features_df)
 
@@ -1084,11 +1153,11 @@ with tab_decomp:
             "Requires at least 100 trading days of NO2, NL, and TTF prices."
         )
     else:
-        # Run rolling decomposition
-        with st.spinner("Running rolling OLS decomposition…"):
-            decomp_results, feat_cols, model_label = run_rolling_decomposition(
-                features_df, window=90,
-            )
+        # Run rolling decomposition (cached — fast on subsequent slider interactions)
+        _t_decomp0 = _time.perf_counter()
+        decomp_results, feat_cols, model_label = _run_decomp_cached(features_df, window=90)
+        _decomp_ms = (_time.perf_counter() - _t_decomp0) * 1000
+        _decomp_tag = "disk cache" if _decomp_ms < 500 else "computed"
 
         # Model mode banner
         if len(feat_cols) < 4:
@@ -1096,11 +1165,15 @@ with tab_decomp:
                 f"Active: **{model_label}**. "
                 + ("Hydro and wind data unavailable — ENTSO-E key required for full 4-factor model."
                    if len(feat_cols) == 2 else
-                   "Wind data unavailable — ENTSO-E key or Fraunhofer fallback required for 4-factor model."),
+                   "Wind data unavailable — ENTSO-E key or Fraunhofer fallback required for 4-factor model.")
+                + f" | Rolling OLS: {_decomp_tag}, {_decomp_ms/1000:.1f}s",
                 icon="ℹ️",
             )
         else:
-            st.success(f"Active: **{model_label}**.", icon="✅")
+            st.success(
+                f"Active: **{model_label}**. | Rolling OLS: {_decomp_tag}, {_decomp_ms/1000:.1f}s",
+                icon="✅",
+            )
 
         if decomp_results.empty:
             st.warning("Rolling OLS could not converge. Check that statsmodels is installed.")
@@ -1246,7 +1319,13 @@ with tab_wind:
         "coincide with elevated intraday price volatility."
     )
 
-    # ── Load data ─────────────────────────────────────────────────────────────
+    # ── Load feature matrix (lazy — only when this tab is visited) ───────────
+    if "features_l2" not in st.session_state:
+        with st.spinner("Assembling feature matrix (first visit — subsequent loads are instant)…"):
+            st.session_state["features_l2"] = _get_features_l2()
+    features_df = st.session_state["features_l2"]
+
+    # ── Load wind data ────────────────────────────────────────────────────────
     @st.cache_data(ttl=3600, show_spinner=False, persist="disk")
     def _get_wind_forecast():
         return fetch_wind_forecast(days=90)
@@ -1415,6 +1494,1086 @@ with tab_wind:
         "Sources: ENTSO-E A69 (wind forecast) | ENTSO-E B18/B19 (actuals) | "
         "Fraunhofer ISE energy-charts.info (DE actuals fallback)"
     )
+
+
+# ════════════════════════════════════════════════════════════════════════════
+# TAB 8: GRANGER CAUSALITY — SENTIMENT → TTF
+# ════════════════════════════════════════════════════════════════════════════
+with tab_granger:
+    st.markdown("### Sentiment → TTF Granger Causality")
+    st.caption(
+        "Tests whether lagged energy news sentiment Granger-causes next-day TTF price returns. "
+        "A statistically significant result (p < 0.05) means past sentiment adds predictive power "
+        "beyond TTF's own history — a potential leading indicator for gas price direction."
+    )
+
+    with st.spinner("Loading sentiment history…"):
+        _sent = _get_sentiment_l2()
+
+    _daily_sent = _sent.get("daily", pd.DataFrame())
+    _sent_error = _sent.get("error")
+
+    if _sent_error and _daily_sent.empty:
+        st.warning(
+            f"Sentiment pipeline unavailable: {_sent_error} "
+            "This tab requires the FinBERT model (HuggingFace Spaces deployment) and "
+            "at least 21 days of scored headlines.",
+            icon="⚠️",
+        )
+    else:
+        _ttf_prices_df = ttf.get("prices", pd.DataFrame())
+
+        if _ttf_prices_df.empty:
+            st.warning("TTF price data unavailable — cannot compute Granger test.", icon="⚠️")
+        elif _daily_sent.empty:
+            st.info(
+                "No sentiment history yet. Granger test requires at least 21 days of scored headlines. "
+                "History accumulates automatically on each page load.",
+                icon="ℹ️",
+            )
+        else:
+            # ── Build merged series ───────────────────────────────────────────
+            _ttf_df = _ttf_prices_df[["date", "price"]].copy()
+            _ttf_df["date"] = pd.to_datetime(_ttf_df["date"])
+            _ttf_df["return"] = _ttf_df["price"].pct_change() * 100
+
+            _daily_sent = _daily_sent.copy()
+            _daily_sent["date"] = pd.to_datetime(_daily_sent["date"])
+
+            _merged = _daily_sent[["date", "net_sentiment"]].merge(
+                _ttf_df[["date", "return"]], on="date", how="inner"
+            ).dropna().sort_values("date")
+
+            _MIN_DAYS = 21
+            _n_merged = len(_merged)
+
+            if _n_merged < _MIN_DAYS:
+                _days_needed = _MIN_DAYS - _n_merged
+                st.info(
+                    f"Granger test requires {_MIN_DAYS} aligned trading days with both sentiment "
+                    f"and TTF return data. Currently have **{_n_merged}** — "
+                    f"**{_days_needed} more** needed before the test can run. "
+                    "Sentiment history accumulates automatically.",
+                    icon="ℹ️",
+                )
+                # Show what we have so far
+                if _n_merged > 0:
+                    st.markdown("**Available data preview:**")
+                    st.dataframe(
+                        _merged.tail(10)[["date", "net_sentiment", "return"]].rename(columns={
+                            "date": "Date", "net_sentiment": "Net Sentiment", "return": "TTF Return (%)"
+                        }),
+                        use_container_width=True, hide_index=True,
+                    )
+            else:
+                # ── Run Granger test ──────────────────────────────────────────
+                _maxlag = min(7, _n_merged // 7)
+                try:
+                    from statsmodels.tsa.stattools import grangercausalitytests
+                    _gc = grangercausalitytests(
+                        _merged[["return", "net_sentiment"]], maxlag=_maxlag, verbose=False
+                    )
+                    _p_vals = {
+                        lag: _gc[lag][0]["ssr_ftest"][1]
+                        for lag in range(1, _maxlag + 1)
+                    }
+                    _f_vals = {
+                        lag: _gc[lag][0]["ssr_ftest"][0]
+                        for lag in range(1, _maxlag + 1)
+                    }
+                    _min_p    = min(_p_vals.values())
+                    _best_lag = min(_p_vals, key=_p_vals.get)
+
+                    # ── KPI row ───────────────────────────────────────────────
+                    _k1, _k2, _k3, _k4 = st.columns(4)
+                    with _k1:
+                        st.markdown(
+                            kpi_card("Best p-value", f"{_min_p:.3f}",
+                                     delta_span(f"at lag {_best_lag}d", "blue")),
+                            unsafe_allow_html=True,
+                        )
+                    with _k2:
+                        _sig_label = "Significant (p<0.05)" if _min_p < 0.05 else (
+                            "Borderline (p<0.10)" if _min_p < 0.10 else "Not significant"
+                        )
+                        _sig_color = "red" if _min_p < 0.05 else ("amber" if _min_p < 0.10 else "blue")
+                        st.markdown(
+                            kpi_card("Verdict", _sig_label,
+                                     delta_span("SSR F-test", _sig_color)),
+                            unsafe_allow_html=True,
+                        )
+                    with _k3:
+                        _f_best = _f_vals[_best_lag]
+                        st.markdown(
+                            kpi_card("F-statistic", f"{_f_best:.2f}",
+                                     delta_span(f"lag {_best_lag}d", "blue")),
+                            unsafe_allow_html=True,
+                        )
+                    with _k4:
+                        st.markdown(
+                            kpi_card("Sample size", f"{_n_merged} days",
+                                     delta_span(f"max lag: {_maxlag}d", "blue")),
+                            unsafe_allow_html=True,
+                        )
+
+                    st.divider()
+
+                    # ── P-value bar chart ─────────────────────────────────────
+                    st.markdown("#### Granger Test P-Values by Lag")
+                    st.caption(
+                        "Each bar shows the SSR F-test p-value for whether net sentiment at that lag "
+                        "has incremental predictive power for next-day TTF returns. "
+                        "Bars below the red line (p=0.05) indicate statistical significance."
+                    )
+
+                    _lags  = list(_p_vals.keys())
+                    _pvals = list(_p_vals.values())
+                    _bar_colors = [
+                        "#f85149" if p < 0.05 else ("#e07b39" if p < 0.10 else "#58a6ff")
+                        for p in _pvals
+                    ]
+
+                    _fig_gc = go.Figure()
+                    _fig_gc.add_trace(go.Bar(
+                        x=[f"Lag {lag}d" for lag in _lags],
+                        y=_pvals,
+                        marker_color=_bar_colors,
+                        text=[f"p={p:.3f}" for p in _pvals],
+                        textposition="outside",
+                        hovertemplate="Lag %{x}: p=%{y:.4f}<extra></extra>",
+                    ))
+                    _fig_gc.add_hline(
+                        y=0.05, line=dict(color="rgba(248,81,73,0.8)", width=1.5, dash="dash"),
+                        annotation_text="p=0.05 significance threshold",
+                        annotation_font=dict(color="rgba(248,81,73,0.8)", size=10),
+                        annotation_position="top right",
+                    )
+                    _fig_gc.add_hline(
+                        y=0.10, line=dict(color="rgba(210,153,34,0.5)", width=1, dash="dot"),
+                        annotation_text="p=0.10 borderline",
+                        annotation_font=dict(color="rgba(210,153,34,0.5)", size=10),
+                        annotation_position="bottom right",
+                    )
+                    _fig_gc.update_layout(
+                        template="plotly_dark",
+                        paper_bgcolor="#0d1117",
+                        plot_bgcolor="#161b22",
+                        xaxis=dict(title="Lag", gridcolor="rgba(255,255,255,0.06)"),
+                        yaxis=dict(
+                            title="p-value (SSR F-test)",
+                            range=[0, min(1.05, max(_pvals) * 1.2)],
+                            gridcolor="rgba(255,255,255,0.06)",
+                        ),
+                        margin=dict(l=60, r=20, t=30, b=50),
+                        height=360,
+                        showlegend=False,
+                    )
+                    st.plotly_chart(_fig_gc, use_container_width=True)
+
+                    # ── Sentiment + TTF return overlay ────────────────────────
+                    st.markdown("#### Net Sentiment vs TTF Daily Return")
+                    st.caption(
+                        "Visual check: are large sentiment moves followed by TTF price moves? "
+                        "Secondary axis (right) shows TTF daily return."
+                    )
+                    _fig_ts = go.Figure()
+                    _fig_ts.add_trace(go.Scatter(
+                        x=_merged["date"], y=_merged["net_sentiment"],
+                        name="Net Sentiment",
+                        line=dict(color="#58a6ff", width=1.5),
+                        hovertemplate="Sentiment: %{y:.2f}<extra></extra>",
+                    ))
+                    _fig_ts.add_trace(go.Scatter(
+                        x=_merged["date"], y=_merged["return"],
+                        name="TTF Return (%)",
+                        line=dict(color="#e07b39", width=1.2),
+                        yaxis="y2",
+                        hovertemplate="TTF return: %{y:.2f}%<extra></extra>",
+                    ))
+                    _fig_ts.update_layout(
+                        template="plotly_dark",
+                        paper_bgcolor="#0d1117",
+                        plot_bgcolor="#161b22",
+                        xaxis=dict(gridcolor="rgba(255,255,255,0.06)"),
+                        yaxis=dict(
+                            title="Net sentiment",
+                            gridcolor="rgba(255,255,255,0.06)",
+                            side="left",
+                        ),
+                        yaxis2=dict(
+                            title="TTF daily return (%)",
+                            overlaying="y", side="right",
+                            showgrid=False,
+                        ),
+                        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="left", x=0),
+                        margin=dict(l=60, r=60, t=30, b=50),
+                        height=320,
+                        hovermode="x unified",
+                    )
+                    st.plotly_chart(_fig_ts, use_container_width=True)
+
+                    # ── Commentary ────────────────────────────────────────────
+                    if _min_p < 0.05:
+                        _prose = (
+                            f"Granger causality is statistically significant at lag {_best_lag}d "
+                            f"(p={_min_p:.3f}, F={_f_best:.2f}). "
+                            "This means that past energy news sentiment contains incremental predictive "
+                            "information for next-day TTF returns, beyond TTF's own lagged values. "
+                            "In practical terms: when sentiment deteriorates sharply, a TTF upside move "
+                            f"tends to follow within {_best_lag} trading day(s). "
+                            "Note: Granger causality does not imply structural causality — "
+                            "both may respond to a common unobserved shock (e.g. a supply disruption "
+                            "hits news feeds before it is fully priced in)."
+                        )
+                        _status = "warn"
+                    elif _min_p < 0.10:
+                        _prose = (
+                            f"Borderline Granger causality at lag {_best_lag}d (p={_min_p:.3f}). "
+                            "Sentiment shows weak predictive value for TTF returns — directionally "
+                            "interesting but not robust enough to trade on without additional confirmation. "
+                            f"Sample size: {_n_merged} days."
+                        )
+                        _status = "ok"
+                    else:
+                        _prose = (
+                            f"No statistically significant Granger causality detected at any lag up to {_maxlag}d "
+                            f"(best p={_min_p:.3f}). "
+                            "Sentiment does not add predictive power for TTF daily returns beyond TTF's own history "
+                            "in the current sample. This can reflect: insufficient history, high noise in the sentiment "
+                            "series, or a regime where macro/supply factors dominate over news flow."
+                        )
+                        _status = "ok"
+
+                    st.markdown(commentary(_prose, _status), unsafe_allow_html=True)
+
+                    # ── Methodology ───────────────────────────────────────────
+                    with st.expander("Methodology", expanded=False):
+                        st.markdown(f"""
+                        **Granger causality test (Granger 1969):** A variable X is said to Granger-cause Y
+                        if lagged values of X add statistically significant predictive power for Y in an
+                        OLS regression that already includes lagged values of Y.
+
+                        **Test setup:**
+                        - Y: TTF daily return (%) = `(price_t − price_{{t−1}}) / price_{{t−1}} × 100`
+                        - X: Net sentiment score = (positive − negative) FinBERT classifications per day,
+                          aggregated across all scored energy headlines
+                        - Test: SSR F-test at each lag 1…{_maxlag}
+                        - Null hypothesis H₀: sentiment at lag k does not Granger-cause TTF return
+
+                        **Significance levels:**
+                        - p < 0.05: reject H₀ — sentiment is a statistically significant predictor
+                        - p < 0.10: borderline — directionally suggestive, not robust
+                        - p ≥ 0.10: fail to reject H₀ — no predictive evidence in current sample
+
+                        **Sentiment source:** ProsusAI/FinBERT applied to filtered energy RSS headlines
+                        (BBC Business, Guardian Energy, LNG World News, Energy Monitor).
+                        Daily net sentiment = Σ(positive − negative) scores across all day's headlines.
+
+                        **Limitations:**
+                        - Small sample: RSS feeds carry 2–7 days of articles per fetch; history grows over time.
+                        - FinBERT was trained on financial news, not specifically energy commodities.
+                        - Granger causality ≠ structural causality. Both series may respond to common
+                          unobserved shocks (e.g. geopolitical event).
+                        - The test uses daily returns; intraday or hourly sentiment would be stronger.
+
+                        **Sample:** {_n_merged} aligned trading days, max lag {_maxlag}d.
+                        """)
+
+                    st.caption("Sources: ProsusAI/FinBERT | BBC/Guardian/LNG World News RSS | ICE/Yahoo Finance (TTF=F)")
+
+                except ImportError:
+                    st.warning(
+                        "statsmodels is required for the Granger causality test. "
+                        "Run `pip install statsmodels` to enable this tab.",
+                        icon="⚠️",
+                    )
+                except Exception as _e:
+                    st.error(f"Granger test failed: {_e}", icon="🚨")
+
+
+# ════════════════════════════════════════════════════════════════════════════
+# TAB 9: STORAGE–PRICE OLS REGRESSION
+# ════════════════════════════════════════════════════════════════════════════
+with tab_storage_reg:
+    st.markdown("### EU Storage → TTF Price Regression")
+    st.caption(
+        "OLS regression of TTF front-month price on EU aggregate storage fill level. "
+        "The residual — actual TTF minus the storage-implied fair value — is the "
+        "supply-risk premium: a positive residual means the market prices in additional "
+        "fear (geopolitical, supply disruption) beyond what storage fundamentals explain."
+    )
+
+    _eu_reg = storage.get("europe", pd.DataFrame())
+    _ttf_reg = ttf.get("prices", pd.DataFrame())
+
+    if _eu_reg.empty:
+        st.warning(
+            "EU gas storage data unavailable. Add AGSI_API_KEY to .env to enable this model.",
+            icon="⚠️",
+        )
+    elif _ttf_reg.empty:
+        st.warning("TTF price data unavailable.", icon="⚠️")
+    else:
+        # ── Build merged series ───────────────────────────────────────────────
+        _str_df = _eu_reg[["gasDayStart", "full"]].copy().dropna()
+        _str_df = _str_df.rename(columns={"gasDayStart": "date", "full": "storage_pct"})
+        _str_df["date"] = pd.to_datetime(_str_df["date"])
+
+        _ttf_r = _ttf_reg[["date", "price"]].copy()
+        _ttf_r["date"] = pd.to_datetime(_ttf_r["date"])
+
+        _sreg = _str_df.merge(_ttf_r, on="date", how="inner").dropna().sort_values("date")
+
+        _MIN_OBS = 60
+        if len(_sreg) < _MIN_OBS:
+            st.info(
+                f"Storage regression requires {_MIN_OBS} overlapping observations. "
+                f"Currently have {len(_sreg)}. "
+                "Ensure AGSI_API_KEY is set and TTF history is available.",
+                icon="ℹ️",
+            )
+        else:
+            try:
+                import statsmodels.api as _sm
+
+                _X = _sm.add_constant(_sreg["storage_pct"])
+                _y = _sreg["price"]
+                _ols_res = _sm.OLS(_y, _X).fit()
+
+                _alpha   = float(_ols_res.params["const"])
+                _beta    = float(_ols_res.params["storage_pct"])
+                _r2      = float(_ols_res.rsquared)
+                _p_beta  = float(_ols_res.pvalues["storage_pct"])
+
+                _sreg = _sreg.copy()
+                _sreg["fitted"]   = _ols_res.fittedvalues.values
+                _sreg["residual"] = (_sreg["price"] - _sreg["fitted"])
+
+                _latest_row     = _sreg.iloc[-1]
+                _latest_storage = float(_latest_row["storage_pct"])
+                _latest_ttf     = float(_latest_row["price"])
+                _latest_fitted  = float(_latest_row["fitted"])
+                _latest_resid   = float(_latest_row["residual"])
+
+                # ── KPI row ───────────────────────────────────────────────────
+                _k1, _k2, _k3, _k4, _k5 = st.columns(5)
+                with _k1:
+                    st.markdown(
+                        kpi_card("EU storage", f"{_latest_storage:.1f}%",
+                                 delta_span("latest fill level", "blue")),
+                        unsafe_allow_html=True,
+                    )
+                with _k2:
+                    st.markdown(
+                        kpi_card("TTF actual", f"€{_latest_ttf:.1f}/MWh",
+                                 delta_span("front-month", "blue")),
+                        unsafe_allow_html=True,
+                    )
+                with _k3:
+                    st.markdown(
+                        kpi_card("Storage-implied", f"€{_latest_fitted:.1f}/MWh",
+                                 delta_span(f"β={_beta:.2f} EUR/pp", "amber")),
+                        unsafe_allow_html=True,
+                    )
+                with _k4:
+                    _prem_color = "red" if _latest_resid > 5 else ("green" if _latest_resid < -5 else "blue")
+                    _prem_label = "supply fear premium" if _latest_resid > 5 else (
+                        "below fundamental value" if _latest_resid < -5 else "near fair value"
+                    )
+                    st.markdown(
+                        kpi_card("Risk premium", f"{_latest_resid:+.1f} EUR/MWh",
+                                 delta_span(_prem_label, _prem_color)),
+                        unsafe_allow_html=True,
+                    )
+                with _k5:
+                    st.markdown(
+                        kpi_card("R² (full sample)", f"{_r2:.2f}",
+                                 delta_span(f"p={_p_beta:.3f} for β", "blue")),
+                        unsafe_allow_html=True,
+                    )
+
+                st.divider()
+
+                # ── Scatter + OLS fit ─────────────────────────────────────────
+                st.markdown("#### Storage Fill % vs TTF Price — Scatter & OLS Fit")
+                st.caption(
+                    "Each dot is one trading day. Colour indicates year. "
+                    "Red dot = current observation. Regression line shows the storage-implied fair value."
+                )
+
+                _years = _sreg["date"].dt.year.unique()
+                _palette = ["#58a6ff", "#3fb950", "#f0e040", "#e07b39", "#f85149",
+                            "#a371f7", "#7ec8e3", "#ffa657"]
+                _fig_scatter = go.Figure()
+                for _i, _yr in enumerate(sorted(_years)):
+                    _sub = _sreg[_sreg["date"].dt.year == _yr]
+                    _fig_scatter.add_trace(go.Scatter(
+                        x=_sub["storage_pct"], y=_sub["price"],
+                        mode="markers",
+                        name=str(_yr),
+                        marker=dict(color=_palette[_i % len(_palette)], size=5, opacity=0.6),
+                        hovertemplate=f"{_yr}: storage=%{{x:.1f}}%, TTF=€%{{y:.1f}}/MWh<extra></extra>",
+                    ))
+
+                # OLS regression line
+                _x_line = np.linspace(float(_sreg["storage_pct"].min()),
+                                      float(_sreg["storage_pct"].max()), 100)
+                _y_line = _alpha + _beta * _x_line
+                _fig_scatter.add_trace(go.Scatter(
+                    x=_x_line, y=_y_line,
+                    mode="lines",
+                    name=f"OLS fit (R²={_r2:.2f})",
+                    line=dict(color="rgba(255,255,255,0.6)", width=2, dash="dash"),
+                    hoverinfo="skip",
+                ))
+
+                # Current obs highlight
+                _fig_scatter.add_trace(go.Scatter(
+                    x=[_latest_storage], y=[_latest_ttf],
+                    mode="markers",
+                    name="Current",
+                    marker=dict(color="#f85149", size=12, symbol="star",
+                                line=dict(color="white", width=1)),
+                    hovertemplate=f"Now: storage={_latest_storage:.1f}%, TTF=€{_latest_ttf:.1f}/MWh<extra></extra>",
+                ))
+
+                _fig_scatter.update_layout(
+                    template="plotly_dark",
+                    paper_bgcolor="#0d1117",
+                    plot_bgcolor="#161b22",
+                    xaxis=dict(title="EU storage fill level (%)",
+                               gridcolor="rgba(255,255,255,0.06)"),
+                    yaxis=dict(title="TTF front-month (EUR/MWh)",
+                               gridcolor="rgba(255,255,255,0.06)"),
+                    legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="left", x=0,
+                                font=dict(size=10)),
+                    margin=dict(l=60, r=20, t=30, b=50),
+                    height=420,
+                )
+                st.plotly_chart(_fig_scatter, use_container_width=True)
+
+                # ── Residual time series ──────────────────────────────────────
+                st.markdown("#### Supply-Risk Premium (OLS Residual) Over Time")
+                st.caption(
+                    "Residual = actual TTF − storage-implied TTF. "
+                    "Positive: market prices in supply risk beyond storage fundamentals. "
+                    "Negative: TTF trading below what storage fill alone would suggest."
+                )
+
+                _resid_color = [
+                    "#f85149" if r > 0 else "#3fb950"
+                    for r in _sreg["residual"]
+                ]
+                _fig_resid = go.Figure()
+                _fig_resid.add_trace(go.Bar(
+                    x=_sreg["date"], y=_sreg["residual"],
+                    name="Risk premium",
+                    marker_color=_resid_color,
+                    hovertemplate="Date: %{x|%Y-%m-%d}<br>Premium: %{y:+.1f} EUR/MWh<extra></extra>",
+                ))
+                _fig_resid.add_hline(y=0, line=dict(color="rgba(255,255,255,0.3)", width=1))
+                _fig_resid.add_hline(
+                    y=10, line=dict(color="rgba(248,81,73,0.4)", width=1, dash="dot"),
+                    annotation_text="+10 EUR/MWh",
+                    annotation_font=dict(color="rgba(248,81,73,0.6)", size=9),
+                    annotation_position="top right",
+                )
+                _fig_resid.add_hline(
+                    y=-10, line=dict(color="rgba(63,185,80,0.4)", width=1, dash="dot"),
+                    annotation_text="−10 EUR/MWh",
+                    annotation_font=dict(color="rgba(63,185,80,0.6)", size=9),
+                    annotation_position="bottom right",
+                )
+                _fig_resid.update_layout(
+                    template="plotly_dark",
+                    paper_bgcolor="#0d1117",
+                    plot_bgcolor="#161b22",
+                    xaxis=dict(title=None, gridcolor="rgba(255,255,255,0.06)"),
+                    yaxis=dict(title="Residual (EUR/MWh)",
+                               gridcolor="rgba(255,255,255,0.06)"),
+                    margin=dict(l=60, r=20, t=20, b=50),
+                    height=320,
+                    showlegend=False,
+                )
+                st.plotly_chart(_fig_resid, use_container_width=True)
+
+                # ── Commentary ────────────────────────────────────────────────
+                _eq_str = f"TTF = {_alpha:.1f} + {_beta:.2f} × storage_pct"
+                if _latest_resid > 5:
+                    _prose = (
+                        f"At {_latest_storage:.1f}% EU storage fill, the OLS model implies a fair-value "
+                        f"TTF of €{_latest_fitted:.1f}/MWh ({_eq_str}). "
+                        f"Actual TTF (€{_latest_ttf:.1f}/MWh) is €{_latest_resid:.1f}/MWh above this — "
+                        "a supply-fear premium. The market is pricing in risk (geopolitical, supply disruption, "
+                        "demand shock) that the storage fill level alone does not justify."
+                    )
+                    _prem_status = "warn"
+                elif _latest_resid < -5:
+                    _prose = (
+                        f"At {_latest_storage:.1f}% EU storage fill, the OLS model implies a fair-value "
+                        f"TTF of €{_latest_fitted:.1f}/MWh ({_eq_str}). "
+                        f"Actual TTF (€{_latest_ttf:.1f}/MWh) is €{abs(_latest_resid):.1f}/MWh below this — "
+                        "TTF is trading at a discount to storage-implied fundamental value. "
+                        "Possible explanations: strong LNG imports, subdued industrial demand, or a risk-off "
+                        "market environment compressing the forward risk premium."
+                    )
+                    _prem_status = "ok"
+                else:
+                    _prose = (
+                        f"At {_latest_storage:.1f}% EU storage fill, the OLS model implies a fair-value "
+                        f"TTF of €{_latest_fitted:.1f}/MWh ({_eq_str}). "
+                        f"Actual TTF (€{_latest_ttf:.1f}/MWh) is {_latest_resid:+.1f} EUR/MWh — "
+                        "near the storage-implied fundamental level. "
+                        "The market is pricing storage fundamentals without a significant risk premium or discount."
+                    )
+                    _prem_status = "ok"
+
+                st.markdown(commentary(_prose, _prem_status), unsafe_allow_html=True)
+
+                # ── Methodology ───────────────────────────────────────────────
+                with st.expander("Methodology", expanded=False):
+                    st.markdown(f"""
+                    **Model:** Simple OLS regression over the full available history:
+
+                    `TTF (EUR/MWh) = α + β × EU_storage_fill (%) + ε`
+
+                    **Estimated coefficients (full sample, N={len(_sreg)}):**
+                    - Intercept α = {_alpha:.1f} EUR/MWh
+                    - Storage slope β = {_beta:.2f} EUR/MWh per percentage point
+                    - R² = {_r2:.3f} &nbsp; | &nbsp; p-value for β = {_p_beta:.4f}
+
+                    **Interpretation of β:** A one percentage-point higher storage fill is associated
+                    with a {abs(_beta):.2f} EUR/MWh {"lower" if _beta < 0 else "higher"} TTF price on average.
+                    The negative sign (if β < 0) reflects the fundamental inverse relationship: high storage
+                    reduces scarcity risk and therefore gas prices.
+
+                    **Supply-risk premium (residual):** The OLS residual captures the component of TTF that
+                    is not explained by storage fill alone. Persistent positive residuals indicate that the
+                    market is pricing in supply risk beyond what the current fill level justifies — a fear
+                    premium driven by geopolitical events, pipeline disruptions, or LNG market tightness.
+
+                    **Limitations:**
+                    - OLS assumes a linear, time-stationary relationship between storage and price.
+                      In practice, the relationship is non-linear (scarcity accelerates at low fill levels)
+                      and regime-dependent (pre-2022 vs post-2022 markets behave differently).
+                    - The model does not control for season, demand, LNG supply, or weather.
+                    - Residual should be interpreted as a signal for further investigation, not a trading signal.
+
+                    **Data sources:** GIE AGSI+ (EU aggregate storage) | ICE/Yahoo Finance (TTF=F)
+                    """)
+
+                st.caption("Sources: GIE AGSI+ (EU storage) | ICE/Yahoo Finance (TTF=F)")
+
+            except ImportError:
+                st.warning(
+                    "statsmodels is required for OLS regression. Run `pip install statsmodels`.",
+                    icon="⚠️",
+                )
+            except Exception as _e:
+                st.error(f"Storage regression failed: {_e}", icon="🚨")
+
+
+# ════════════════════════════════════════════════════════════════════════════
+# TAB 10: HYDRO RESERVOIR LEAD/LAG ANALYSIS
+# ════════════════════════════════════════════════════════════════════════════
+with tab_hydro_lag:
+    st.markdown("### Hydro Reservoir Lead/Lag Analysis")
+    st.caption(
+        "Cross-correlation of Norwegian hydro reservoir fill level (% of historical max) "
+        "with NO2 day-ahead price at lags 0–21 days. A negative correlation at lag k means "
+        "high reservoir fill k days ago is associated with lower prices today — quantifying "
+        "how far ahead hydro fundamentals lead the spot market."
+    )
+
+    # Lazy-load feature matrix
+    if "features_l2" not in st.session_state:
+        with st.spinner("Assembling feature matrix (first visit — subsequent loads are instant)…"):
+            st.session_state["features_l2"] = _get_features_l2()
+    _hydro_feat_df = st.session_state["features_l2"]
+
+    if _hydro_feat_df.empty:
+        st.warning("Feature matrix unavailable. Check ENTSO-E API key.", icon="⚠️")
+    elif "hydro_pct" not in _hydro_feat_df.columns or _hydro_feat_df["hydro_pct"].notna().sum() < 60:
+        st.info(
+            "Norwegian hydro reservoir data is not available in the current feature set. "
+            "This requires an active ENTSO-E API key (ENTSOE_API_KEY in .env). "
+            "Without hydro data, the lead/lag analysis cannot run.",
+            icon="ℹ️",
+        )
+    else:
+        _MAX_LAG = 21
+
+        _hdf = _hydro_feat_df[["date", "no2", "hydro_pct"]].dropna().copy()
+        _hdf["date"] = pd.to_datetime(_hdf["date"])
+        _hdf = _hdf.sort_values("date").reset_index(drop=True)
+
+        if len(_hdf) < _MAX_LAG + 30:
+            st.warning(
+                f"Insufficient overlapping hydro + NO2 data ({len(_hdf)} rows). "
+                f"Need at least {_MAX_LAG + 30}.",
+                icon="⚠️",
+            )
+        else:
+            # ── Compute cross-correlations ────────────────────────────────────
+            _lags  = list(range(0, _MAX_LAG + 1))
+            _corrs = []
+            for _lag in _lags:
+                _shifted = _hdf["hydro_pct"].shift(_lag)
+                _r = _shifted.corr(_hdf["no2"])
+                _corrs.append(float(_r) if not pd.isna(_r) else 0.0)
+
+            _abs_corrs  = [abs(c) for c in _corrs]
+            _peak_lag   = int(_lags[int(np.argmax(_abs_corrs))])
+            _peak_corr  = _corrs[_peak_lag]
+            _lag0_corr  = _corrs[0]
+
+            # ── KPI row ───────────────────────────────────────────────────────
+            _h1, _h2, _h3, _h4 = st.columns(4)
+            with _h1:
+                st.markdown(
+                    kpi_card("Peak lag", f"{_peak_lag} days",
+                             delta_span("strongest hydro → price signal", "blue")),
+                    unsafe_allow_html=True,
+                )
+            with _h2:
+                _corr_color = "red" if abs(_peak_corr) > 0.4 else ("amber" if abs(_peak_corr) > 0.2 else "blue")
+                st.markdown(
+                    kpi_card("Peak correlation", f"{_peak_corr:.3f}",
+                             delta_span("ρ(hydro[t−k], NO2[t])", _corr_color)),
+                    unsafe_allow_html=True,
+                )
+            with _h3:
+                st.markdown(
+                    kpi_card("Lag-0 correlation", f"{_lag0_corr:.3f}",
+                             delta_span("contemporaneous", "blue")),
+                    unsafe_allow_html=True,
+                )
+            with _h4:
+                st.markdown(
+                    kpi_card("Sample", f"{len(_hdf)} days",
+                             delta_span(f"max lag: {_MAX_LAG}d", "blue")),
+                    unsafe_allow_html=True,
+                )
+
+            st.divider()
+
+            # ── Cross-correlation bar chart ────────────────────────────────────
+            st.markdown("#### Cross-Correlation ρ(hydro_pct[t−k], NO2[t]) by Lag")
+            st.caption(
+                "Negative correlation (blue) means higher hydro fill at lag k is associated with lower "
+                "NO2 price today — the expected direction. The lag with the largest |ρ| is the point "
+                "where hydro has the most predictive power for NO2."
+            )
+
+            _bar_cols = [
+                "#f85149" if c > 0 else "#58a6ff"
+                for c in _corrs
+            ]
+            _fig_cc = go.Figure()
+            _fig_cc.add_trace(go.Bar(
+                x=_lags,
+                y=_corrs,
+                marker_color=_bar_cols,
+                text=[f"{c:.2f}" for c in _corrs],
+                textposition="outside",
+                hovertemplate="Lag %{x}d: ρ=%{y:.3f}<extra></extra>",
+            ))
+            # Highlight peak lag
+            _fig_cc.add_vline(
+                x=_peak_lag,
+                line=dict(color="rgba(240,224,64,0.6)", width=2, dash="dash"),
+                annotation_text=f"  Peak lag: {_peak_lag}d",
+                annotation_font=dict(color="#f0e040", size=10),
+                annotation_position="top right",
+            )
+            _fig_cc.add_hline(y=0, line=dict(color="rgba(255,255,255,0.2)", width=1))
+            _fig_cc.update_layout(
+                template="plotly_dark",
+                paper_bgcolor="#0d1117",
+                plot_bgcolor="#161b22",
+                xaxis=dict(title="Lag (days)", dtick=1,
+                           gridcolor="rgba(255,255,255,0.06)"),
+                yaxis=dict(title="Pearson correlation ρ",
+                           gridcolor="rgba(255,255,255,0.06)",
+                           range=[min(_corrs) * 1.2 - 0.05, max(_corrs) * 1.2 + 0.05]),
+                margin=dict(l=60, r=20, t=30, b=50),
+                height=380,
+                showlegend=False,
+            )
+            st.plotly_chart(_fig_cc, use_container_width=True)
+
+            # ── Rolling correlation time series ───────────────────────────────
+            _roll_win = 90
+            st.markdown(f"#### Rolling {_roll_win}-Day Correlation at Peak Lag ({_peak_lag}d)")
+            st.caption(
+                f"How has the hydro→NO2 lead relationship at lag {_peak_lag}d evolved over time? "
+                "Periods of near-zero rolling correlation indicate other drivers dominated."
+            )
+
+            _hdf_lag = _hdf.copy()
+            _hdf_lag["hydro_lagged"] = _hdf_lag["hydro_pct"].shift(_peak_lag)
+            _hdf_lag = _hdf_lag.dropna(subset=["hydro_lagged", "no2"])
+            _hdf_lag["rolling_corr"] = (
+                _hdf_lag["hydro_lagged"]
+                .rolling(_roll_win)
+                .corr(_hdf_lag["no2"])
+            )
+
+            _fig_roll = go.Figure()
+            _fig_roll.add_trace(go.Scatter(
+                x=_hdf_lag["date"],
+                y=_hdf_lag["rolling_corr"],
+                mode="lines",
+                name=f"Rolling {_roll_win}d ρ",
+                line=dict(color="#58a6ff", width=1.5),
+                hovertemplate="%{x|%Y-%m-%d}: ρ=%{y:.3f}<extra></extra>",
+            ))
+            _fig_roll.add_hline(y=0, line=dict(color="rgba(255,255,255,0.2)", width=1))
+            _fig_roll.add_hline(
+                y=-0.4, line=dict(color="rgba(248,81,73,0.3)", width=1, dash="dot"),
+                annotation_text="ρ=−0.4",
+                annotation_font=dict(color="rgba(248,81,73,0.5)", size=9),
+                annotation_position="bottom right",
+            )
+            _fig_roll.update_layout(
+                template="plotly_dark",
+                paper_bgcolor="#0d1117",
+                plot_bgcolor="#161b22",
+                xaxis=dict(title=None, gridcolor="rgba(255,255,255,0.06)"),
+                yaxis=dict(title="Rolling Pearson ρ",
+                           gridcolor="rgba(255,255,255,0.06)"),
+                margin=dict(l=60, r=20, t=20, b=50),
+                height=300,
+                showlegend=False,
+            )
+            st.plotly_chart(_fig_roll, use_container_width=True)
+
+            # ── Commentary ────────────────────────────────────────────────────
+            if abs(_peak_corr) > 0.4:
+                _h_prose = (
+                    f"Strong hydro→NO2 lead relationship: ρ = {_peak_corr:.3f} at lag {_peak_lag}d. "
+                    f"{'Higher' if _peak_corr < 0 else 'Lower'} Norwegian hydro reservoir fill {_peak_lag} days ago "
+                    f"is associated with {'lower' if _peak_corr < 0 else 'higher'} NO2 day-ahead prices today. "
+                    "This confirms Norwegian hydro as a leading fundamental driver of Nordic spot prices. "
+                    "Hydro reservoir changes — from precipitation, snowmelt, or drawdown — propagate into "
+                    f"spot market pricing with a delay of roughly {_peak_lag} trading day(s)."
+                )
+                _h_status = "warn" if _peak_corr > 0 else "ok"
+            elif abs(_peak_corr) > 0.2:
+                _h_prose = (
+                    f"Moderate hydro→NO2 correlation at lag {_peak_lag}d (ρ = {_peak_corr:.3f}). "
+                    "The hydro signal is present but not dominant — other factors (continental prices, TTF, "
+                    "grid constraints) are likely exerting stronger influence on NO2 in the current sample."
+                )
+                _h_status = "ok"
+            else:
+                _h_prose = (
+                    f"Weak hydro→NO2 correlation across all lags 0–{_MAX_LAG}d (peak ρ = {_peak_corr:.3f}). "
+                    "In the current sample, hydro reservoir level does not show a meaningful predictive "
+                    "relationship with NO2 prices. Continental price spillover (NL via NordLink) or gas price "
+                    "pass-through may be dominating the price formation mechanism."
+                )
+                _h_status = "ok"
+
+            st.markdown(commentary(_h_prose, _h_status), unsafe_allow_html=True)
+
+            # ── Methodology ───────────────────────────────────────────────────
+            with st.expander("Methodology", expanded=False):
+                st.markdown(f"""
+                **Cross-correlation:** For each lag k ∈ [0, {_MAX_LAG}], compute the Pearson correlation
+                coefficient between `hydro_pct[t−k]` and `NO2[t]`:
+
+                `ρ(k) = corr(hydro_pct[t−k], NO2[t])`
+
+                **Expected sign:** Negative. Higher hydro reservoir fill → more hydro generation capacity
+                available → lower marginal cost of supply → lower spot prices. Negative ρ confirms the
+                fundamental hydro supply relationship.
+
+                **Lag interpretation:** The peak lag k* is the number of days by which changes in hydro
+                reservoir fill level lead changes in NO2 spot prices. This reflects how quickly new
+                hydro fundamentals information propagates into market prices.
+
+                **Rolling correlation:** {_roll_win}-day trailing window applied to the lagged pair.
+                Periods of low rolling correlation indicate that other drivers temporarily dominated
+                price formation (e.g. cold snap, gas price shock, continental congestion).
+
+                **Data:** Norwegian hydro reservoir filling level (ENTSO-E B31, TWh), normalised to
+                % of expanding 98th percentile to create a stationary fill-rate signal.
+
+                **Limitations:**
+                - Weekly ENTSO-E hydro data is forward-filled to daily — this reduces the effective
+                  degrees of freedom and may understate lags shorter than 7 days.
+                - Correlation does not imply causality: hydro and prices may both respond to common
+                  factors (temperature, precipitation forecasts).
+                - The relationship may be non-linear at extreme fill levels (very low = scarcity,
+                  very high = spill risk / negative prices).
+
+                **Sample:** {len(_hdf)} overlapping days of hydro_pct and NO2.
+                """)
+
+            st.caption("Sources: ENTSO-E B31 (hydro reservoirs) | ENTSO-E A44 (NO2 day-ahead prices)")
+
+
+# ════════════════════════════════════════════════════════════════════════════
+# TAB 11: TTF SEASONAL NORM TRACKER
+# ════════════════════════════════════════════════════════════════════════════
+with tab_ttf_norm:
+    st.markdown("### TTF Seasonal Norm Tracker")
+    st.caption(
+        "Current TTF prices overlaid on the historical seasonal distribution (prior years). "
+        "Shaded bands show the 10th–90th and 25th–75th percentile range by calendar day. "
+        "Prices trading above the 90th percentile signal historically extreme levels; "
+        "below the 10th percentile signal historically cheap gas."
+    )
+
+    @st.cache_data(ttl=3600, show_spinner=False, persist="disk")
+    def _get_ttf_history_norm():
+        return fetch_ttf_history(years=7)
+
+    with st.spinner("Loading TTF price history…"):
+        _ttf_norm_df = _get_ttf_history_norm()
+
+    if _ttf_norm_df.empty:
+        st.warning(
+            "TTF price history unavailable. yfinance must be installed and TTF=F must be accessible.",
+            icon="⚠️",
+        )
+    else:
+        _ttf_norm_df = _ttf_norm_df.copy()
+        _ttf_norm_df["date"] = pd.to_datetime(_ttf_norm_df["date"])
+        _ttf_norm_df["year"]  = _ttf_norm_df["date"].dt.year
+        _ttf_norm_df["month"] = _ttf_norm_df["date"].dt.month
+        _ttf_norm_df["day"]   = _ttf_norm_df["date"].dt.day
+        _ttf_norm_df["md"]    = _ttf_norm_df["month"] * 100 + _ttf_norm_df["day"]  # MMDD key
+
+        _current_year = _ttf_norm_df["date"].dt.year.max()
+        _hist_df  = _ttf_norm_df[_ttf_norm_df["year"] < _current_year]
+        _curr_df  = _ttf_norm_df[_ttf_norm_df["year"] == _current_year].copy()
+
+        if _hist_df.empty or len(_hist_df["year"].unique()) < 2:
+            st.info("Need at least 2 prior years of history to compute seasonal bands.", icon="ℹ️")
+        else:
+            # ── Compute seasonal bands by calendar day ────────────────────────
+            _bands = (
+                _hist_df.groupby("md")["price"]
+                .agg(
+                    p10=lambda x: x.quantile(0.10),
+                    p25=lambda x: x.quantile(0.25),
+                    p50=lambda x: x.quantile(0.50),
+                    p75=lambda x: x.quantile(0.75),
+                    p90=lambda x: x.quantile(0.90),
+                )
+                .reset_index()
+            )
+
+            # Build a reference date axis using current year (or 2024 as leap-year base)
+            _ref_year = 2024
+            def _md_to_date(md: int) -> pd.Timestamp:
+                m, d = divmod(md, 100)
+                try:
+                    return pd.Timestamp(year=_ref_year, month=m, day=d)
+                except ValueError:
+                    return pd.NaT
+
+            _bands["ref_date"] = _bands["md"].apply(_md_to_date)
+            _bands = _bands.dropna(subset=["ref_date"]).sort_values("ref_date")
+
+            # Map current year prices to ref_date axis for overlay
+            _curr_df = _curr_df.copy()
+            _curr_df["ref_date"] = _curr_df.apply(
+                lambda r: _md_to_date(int(r["md"])), axis=1
+            )
+            _curr_df = _curr_df.dropna(subset=["ref_date"]).sort_values("ref_date")
+
+            # ── Current position in seasonal distribution ─────────────────────
+            _latest_ttf_norm = float(_ttf_norm_df.sort_values("date")["price"].iloc[-1])
+            _latest_md       = int(_ttf_norm_df.sort_values("date")["md"].iloc[-1])
+            _band_row        = _bands[_bands["md"] == _latest_md]
+
+            _pct_rank: float | None = None
+            if not _band_row.empty:
+                _p10 = float(_band_row["p10"].iloc[0])
+                _p90 = float(_band_row["p90"].iloc[0])
+                _p50 = float(_band_row["p50"].iloc[0])
+                # Percentile rank in historical distribution for this calendar day
+                _day_hist = _hist_df[_hist_df["md"] == _latest_md]["price"]
+                if len(_day_hist) >= 2:
+                    _pct_rank = float((_day_hist < _latest_ttf_norm).mean() * 100)
+
+            # ── KPI row ───────────────────────────────────────────────────────
+            _n1, _n2, _n3, _n4 = st.columns(4)
+            with _n1:
+                st.markdown(
+                    kpi_card("TTF current", f"€{_latest_ttf_norm:.1f}/MWh",
+                             delta_span("latest front-month", "blue")),
+                    unsafe_allow_html=True,
+                )
+            if not _band_row.empty:
+                with _n2:
+                    _vs_median = _latest_ttf_norm - _p50
+                    _med_color = "red" if _vs_median > 5 else ("green" if _vs_median < -5 else "blue")
+                    st.markdown(
+                        kpi_card("vs seasonal median", f"{_vs_median:+.1f} EUR/MWh",
+                                 delta_span(f"median: €{_p50:.1f}/MWh", _med_color)),
+                        unsafe_allow_html=True,
+                    )
+                with _n3:
+                    if _pct_rank is not None:
+                        _rank_label = (
+                            "above 90th pct" if _pct_rank > 90 else
+                            "below 10th pct" if _pct_rank < 10 else
+                            f"{_pct_rank:.0f}th percentile"
+                        )
+                        _rank_color = "red" if _pct_rank > 90 else ("green" if _pct_rank < 10 else "blue")
+                        st.markdown(
+                            kpi_card("Seasonal rank", f"{_pct_rank:.0f}th pct",
+                                     delta_span(_rank_label, _rank_color)),
+                            unsafe_allow_html=True,
+                        )
+                with _n4:
+                    _hist_years = sorted(_hist_df["year"].unique())
+                    st.markdown(
+                        kpi_card("History", f"{len(_hist_years)} years",
+                                 delta_span(f"{_hist_years[0]}–{_hist_years[-1]}", "blue")),
+                        unsafe_allow_html=True,
+                    )
+
+            st.divider()
+
+            # ── Seasonal norm chart ───────────────────────────────────────────
+            st.markdown(f"#### TTF {_current_year} vs Seasonal Distribution ({_hist_years[0]}–{_hist_years[-1]})")
+            st.caption(
+                "Dark shaded band = 25th–75th percentile (typical range). "
+                "Light shaded band = 10th–90th percentile (historical extremes). "
+                f"Solid line = {_current_year} actual prices."
+            )
+
+            _fig_norm = go.Figure()
+
+            # 10th–90th outer band
+            _fig_norm.add_trace(go.Scatter(
+                x=list(_bands["ref_date"]) + list(_bands["ref_date"])[::-1],
+                y=list(_bands["p90"]) + list(_bands["p10"])[::-1],
+                fill="toself",
+                fillcolor="rgba(88,166,255,0.10)",
+                line=dict(color="rgba(255,255,255,0)"),
+                hoverinfo="skip",
+                name="10th–90th pct (historical)",
+                showlegend=True,
+            ))
+
+            # 25th–75th inner band
+            _fig_norm.add_trace(go.Scatter(
+                x=list(_bands["ref_date"]) + list(_bands["ref_date"])[::-1],
+                y=list(_bands["p75"]) + list(_bands["p25"])[::-1],
+                fill="toself",
+                fillcolor="rgba(88,166,255,0.22)",
+                line=dict(color="rgba(255,255,255,0)"),
+                hoverinfo="skip",
+                name="25th–75th pct (typical)",
+                showlegend=True,
+            ))
+
+            # Median
+            _fig_norm.add_trace(go.Scatter(
+                x=_bands["ref_date"], y=_bands["p50"],
+                mode="lines",
+                name="Seasonal median",
+                line=dict(color="rgba(88,166,255,0.5)", width=1.5, dash="dot"),
+                hovertemplate="Median: €%{y:.1f}/MWh<extra></extra>",
+            ))
+
+            # Current year actual
+            if not _curr_df.empty:
+                _fig_norm.add_trace(go.Scatter(
+                    x=_curr_df["ref_date"], y=_curr_df["price"],
+                    mode="lines",
+                    name=f"{_current_year} actual",
+                    line=dict(color="#f0e040", width=2),
+                    hovertemplate=f"{_current_year}: €%{{y:.1f}}/MWh<extra></extra>",
+                ))
+
+            _fig_norm.update_layout(
+                template="plotly_dark",
+                paper_bgcolor="#0d1117",
+                plot_bgcolor="#161b22",
+                xaxis=dict(
+                    title="Calendar month",
+                    tickformat="%b",
+                    dtick="M1",
+                    gridcolor="rgba(255,255,255,0.06)",
+                ),
+                yaxis=dict(
+                    title="TTF front-month (EUR/MWh)",
+                    gridcolor="rgba(255,255,255,0.06)",
+                    rangemode="tozero",
+                ),
+                legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="left", x=0,
+                            font=dict(size=10)),
+                margin=dict(l=60, r=20, t=30, b=50),
+                height=420,
+            )
+            st.plotly_chart(_fig_norm, use_container_width=True)
+
+            # ── Commentary ────────────────────────────────────────────────────
+            if _pct_rank is not None:
+                if _pct_rank > 90:
+                    _norm_prose = (
+                        f"TTF at €{_latest_ttf_norm:.1f}/MWh is at the {_pct_rank:.0f}th percentile of "
+                        f"the historical seasonal distribution for this time of year — "
+                        f"€{_latest_ttf_norm - _p50:.1f}/MWh above the seasonal median. "
+                        "This is historically elevated. Such levels typically reflect supply risk "
+                        "(geopolitical disruption, LNG tightness) or cold-weather demand pressure "
+                        "rather than pure storage fundamentals."
+                    )
+                    _norm_status = "warn"
+                elif _pct_rank < 10:
+                    _norm_prose = (
+                        f"TTF at €{_latest_ttf_norm:.1f}/MWh is at the {_pct_rank:.0f}th percentile of "
+                        f"the historical seasonal distribution — "
+                        f"€{abs(_latest_ttf_norm - _p50):.1f}/MWh below the seasonal median. "
+                        "Historically cheap. Possible explanations: strong LNG imports, full storage, "
+                        "mild demand, or a post-shock normalization from prior elevated prices."
+                    )
+                    _norm_status = "ok"
+                else:
+                    _norm_prose = (
+                        f"TTF at €{_latest_ttf_norm:.1f}/MWh sits at the {_pct_rank:.0f}th percentile "
+                        f"of the historical seasonal range — {abs(_latest_ttf_norm - _p50):.1f} EUR/MWh "
+                        f"{'above' if _latest_ttf_norm > _p50 else 'below'} the seasonal median. "
+                        "Within normal seasonal bounds for this time of year."
+                    )
+                    _norm_status = "ok"
+                st.markdown(commentary(_norm_prose, _norm_status), unsafe_allow_html=True)
+
+            # ── Methodology ───────────────────────────────────────────────────
+            with st.expander("Methodology", expanded=False):
+                st.markdown(f"""
+                **Seasonal distribution:** For each calendar day (month-day pair), the prior-year
+                closing prices of TTF front-month futures (TTF=F via Yahoo Finance/ICE) are collected
+                across all available history ({', '.join(str(y) for y in _hist_years)}).
+                The 10th, 25th, 50th, 75th, and 90th percentiles define the seasonal bands.
+
+                **Current year overlay:** {_current_year} prices are plotted on the same calendar axis
+                (Jan 1 → Dec 31) to show where the current year stands relative to prior-year seasonal
+                patterns.
+
+                **Percentile rank:** The current TTF price is ranked against the same calendar-day
+                distribution. A 90th-percentile reading means that for this day of the year, TTF has
+                historically been cheaper in 90% of prior years.
+
+                **Interpretation:**
+                - Above 90th percentile: historically extreme. Indicates supply risk, cold-weather demand,
+                  or market stress beyond seasonal norms.
+                - 25th–75th band: typical seasonal range. No unusual signal.
+                - Below 10th percentile: historically cheap. Watch for demand recovery or LNG supply tightening.
+
+                **Data:** ICE TTF front-month (TTF=F), {len(_hist_years)} years of history,
+                fetched via yfinance. Note: TTF=F is a continuous front-month contract; roll effects
+                may introduce noise around contract expiry dates.
+                """)
+
+            st.caption("Source: ICE/Yahoo Finance (TTF=F)")
 
 
 # ── Footer ────────────────────────────────────────────────────────────────────
