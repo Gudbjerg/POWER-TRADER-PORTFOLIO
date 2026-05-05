@@ -64,6 +64,84 @@ with tab_geo:
 
     render_ttf_chart(ttf, events=chart_events)
 
+    # ── Momentum ribbon ───────────────────────────────────────────────────────
+    _mom_df = ttf["prices"].copy() if not ttf["prices"].empty else pd.DataFrame()
+    if not _mom_df.empty and len(_mom_df) >= 60:
+        _mom_df["date"] = pd.to_datetime(_mom_df["date"])
+        _mom_df = _mom_df.sort_values("date").reset_index(drop=True)
+        for _n in (5, 20, 60):
+            _mom_df[f"mom{_n}"] = (_mom_df["price"] / _mom_df["price"].shift(_n) - 1) * 100
+
+        _m5  = float(_mom_df["mom5"].iloc[-1])
+        _m20 = float(_mom_df["mom20"].iloc[-1])
+        _m60 = float(_mom_df["mom60"].iloc[-1])
+
+        st.markdown("#### TTF Price Momentum (5 / 20 / 60-day)")
+        _mc1, _mc2, _mc3, _mc4 = st.columns(4)
+        def _mom_delta(v):
+            color = "red" if v > 3 else ("green" if v < -3 else "blue")
+            return delta_span(f"{'▲' if v > 0 else '▼'} {abs(v):.1f}%", color)
+        with _mc1:
+            st.markdown(
+                kpi_card("5-day momentum", f"{_m5:+.1f}%", _mom_delta(_m5)),
+                unsafe_allow_html=True,
+            )
+        with _mc2:
+            st.markdown(
+                kpi_card("20-day momentum", f"{_m20:+.1f}%", _mom_delta(_m20)),
+                unsafe_allow_html=True,
+            )
+        with _mc3:
+            st.markdown(
+                kpi_card("60-day momentum", f"{_m60:+.1f}%", _mom_delta(_m60)),
+                unsafe_allow_html=True,
+            )
+        with _mc4:
+            _n_pos = sum(v > 0 for v in (_m5, _m20, _m60))
+            _trend = "Uptrend" if _n_pos == 3 else ("Downtrend" if _n_pos == 0 else "Mixed / consolidating")
+            _trend_color = "red" if _n_pos == 3 else ("green" if _n_pos == 0 else "blue")
+            st.markdown(
+                kpi_card("Trend alignment", _trend,
+                         delta_span(f"{_n_pos}/3 timeframes positive", _trend_color)),
+                unsafe_allow_html=True,
+            )
+
+        # Momentum line chart
+        _fig_mom = go.Figure()
+        for _n, _col, _lbl in [(5, "#f85149", "5d"), (20, "#e07b39", "20d"), (60, "#58a6ff", "60d")]:
+            _col_name = f"mom{_n}"
+            _sub = _mom_df.dropna(subset=[_col_name])
+            _fig_mom.add_trace(go.Scatter(
+                x=_sub["date"], y=_sub[_col_name],
+                name=f"{_lbl} momentum",
+                line=dict(color=_col, width=1.5),
+                hovertemplate=f"{_lbl}: %{{y:+.1f}}%<extra></extra>",
+            ))
+        _fig_mom.add_hline(y=0, line=dict(color="rgba(255,255,255,0.25)", width=1))
+        for _band, _opacity in [(5, 0.08), (10, 0.05)]:
+            _fig_mom.add_hrect(y0=_band, y1=50, fillcolor="rgba(248,81,73,{})".format(_opacity),
+                               line_width=0)
+            _fig_mom.add_hrect(y0=-50, y1=-_band, fillcolor="rgba(63,185,80,{})".format(_opacity),
+                               line_width=0)
+        _fig_mom.update_layout(
+            template="plotly_dark",
+            paper_bgcolor="#0d1117", plot_bgcolor="#161b22",
+            xaxis=dict(title=None, gridcolor="rgba(255,255,255,0.06)"),
+            yaxis=dict(title="Return (%)", gridcolor="rgba(255,255,255,0.06)",
+                       zeroline=False),
+            legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="left", x=0,
+                        font=dict(size=10)),
+            margin=dict(l=60, r=20, t=30, b=50),
+            height=300,
+            hovermode="x unified",
+        )
+        st.plotly_chart(_fig_mom, use_container_width=True)
+        st.caption(
+            "Momentum = (current price / price N days ago − 1) × 100. "
+            "Red shading = historically elevated (+5/+10%). Green = historically cheap (−5/−10%)."
+        )
+
+    st.divider()
     st.markdown("#### Full Event Timeline")
     cat_filter = st.multiselect(
         "Filter by category",

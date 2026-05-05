@@ -44,17 +44,20 @@ Real-time fundamentals refreshed hourly across 10 panels:
 | Gas-to-Power OLS Regression | TTF to NL day-ahead, rolling window | Residual z-score tracker, regime interpretation |
 | Price Spike Detector | Rolling 30-day z-score | Active spike alerts across all Nord Pool bidding zones |
 | TTF Seasonal Backtest | Rules-based injection-withdrawal strategy | Annual P&L, Sharpe ratio, ex-crisis statistics |
-| German Supply Stack | Merit order, dynamic gas/coal SRMC | Marginal fuel identification, theoretical vs actual price |
+| German Supply Stack | Merit order, dynamic gas/coal SRMC | Marginal fuel ID, live A65 demand default, theoretical vs actual price |
 | Nordic Price Decomposition | Rolling 90-day multivariate OLS | Beta time series: NL, TTF, hydro, wind contributions to NO2 |
 | Wind Forecast Error Tracker | ENTSO-E A69 vs B18/B19 actuals | Daily error (GWh/%), 7-day RMSE, correlation with price volatility |
 | Sentiment → TTF Granger Causality | SSR F-test, lags 1–7d | p-value bar chart, significance verdict, sentiment/return overlay |
 | Storage–Price OLS Regression | Linear OLS, full history | Supply-risk premium = actual TTF − storage-implied fair value |
 | Hydro Reservoir Lead/Lag | Pearson cross-correlation, lags 0–21d | Peak lag, rolling 90d correlation, strength of hydro→price signal |
 | TTF Seasonal Norm Tracker | 5-year historical percentile bands | Current TTF vs 10th/25th/50th/75th/90th pct seasonal distribution |
+| NO2/NL Cointegration & Spread | Engle-Granger test, OU half-life | Spread z-score, hedge ratio β, ±1σ reversion backtest hit-rate |
+| Quant Signal Scorecard | 5-signal aggregation | Upside/downside/neutral tally from all quant models |
 
 ### Layer 3: Geopolitical and Macro Signals
 
 - TTF price history with 19 annotated supply event overlays: Iran/Hormuz conflict cluster, Ras Laffan strike, US LNG tariff threats, Norwegian outages, Russian supply cuts, Qatar diversions
+- **TTF momentum ribbon:** 5/20/60-day price momentum (ROC %) with trend alignment KPI and ±5/±10% shading
 - EU gas supply mix by origin, 2020 to present: Russia collapse, US LNG rise, Algerian variability
 - Cross-commodity spillover chain: TTF to European fertiliser to wheat/corn, with rolling 90-day correlations
 

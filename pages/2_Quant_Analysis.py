@@ -1,6 +1,7 @@
 """
 Layer 2: Quantitative Analysis
 """
+import os
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -59,6 +60,45 @@ def _run_ols_cached(reg_df: pd.DataFrame):
 def _get_sentiment_l2():
     return get_sentiment_data()
 
+@st.cache_data(ttl=3600, show_spinner=False, persist="disk")
+def _get_eua():
+    return fetch_eua_price()
+
+@st.cache_data(ttl=3600, show_spinner=False, persist="disk")
+def _get_ttf_history_norm():
+    return fetch_ttf_history(years=7)
+
+@st.cache_data(ttl=1800, show_spinner=False, persist="disk")
+def _get_de_live_load_gw() -> tuple:
+    """
+    Fetch today's German total load from ENTSO-E A65.
+    Returns (load_gw: float | None, source_label: str).
+    Falls back to yesterday if today's data not yet published.
+    """
+    _key = os.getenv("ENTSOE_API_KEY", "")
+    if not _key:
+        return None, "ENTSO-E key required"
+    try:
+        from entsoe import EntsoePandasClient
+        import pytz
+        from datetime import datetime as _dt
+        _tz  = pytz.timezone("Europe/Berlin")
+        _now = _dt.now(_tz)
+        _start = pd.Timestamp(_now.date(), tz="Europe/Berlin")
+        _end   = _start + pd.Timedelta(days=1)
+        _client_a65 = EntsoePandasClient(api_key=_key)
+        _ser = _client_a65.query_load("10Y1001A1001A83F", start=_start, end=_end)
+        if _ser is None or (hasattr(_ser, "empty") and _ser.empty):
+            _start -= pd.Timedelta(days=1)
+            _end   -= pd.Timedelta(days=1)
+            _ser    = _client_a65.query_load("10Y1001A1001A83F", start=_start, end=_end)
+        if _ser is not None and not (hasattr(_ser, "empty") and _ser.empty):
+            _gw = float(_ser.mean()) / 1000.0
+            return _gw, f"ENTSO-E A65 ({_start.date()})"
+        return None, "No load data returned"
+    except Exception as _exc:
+        return None, f"A65 error: {str(_exc)[:60]}"
+
 with st.spinner(""):
     storage = get_storage_data()
     ttf     = get_ttf_data()
@@ -116,12 +156,229 @@ with st.expander("Model overview", expanded=False):
     | Storage–Price OLS Regression | Active |
     | Hydro Reservoir Lead/Lag Analysis | Active |
     | TTF Seasonal Norm Tracker | Active |
+    | NO2/NL Cointegration & Spread Mean-Reversion | Active |
     """)
 
 st.divider()
 
+# ── Quant Signal Scorecard ────────────────────────────────────────────────────
+_PILL = {
+    "up":      "<span style='background:#3d1515;color:#f85149;border-radius:4px;"
+               "padding:2px 7px;font-size:0.78rem;font-weight:600;'>↑ UPSIDE</span>",
+    "down":    "<span style='background:#0f2a1a;color:#3fb950;border-radius:4px;"
+               "padding:2px 7px;font-size:0.78rem;font-weight:600;'>↓ DOWNSIDE</span>",
+    "neutral": "<span style='background:#1a2233;color:#58a6ff;border-radius:4px;"
+               "padding:2px 7px;font-size:0.78rem;font-weight:600;'>→ NEUTRAL</span>",
+    "na":      "<span style='background:#1a1a1a;color:#6e7681;border-radius:4px;"
+               "padding:2px 7px;font-size:0.78rem;font-weight:600;'>⊘ N/A</span>",
+}
+
+def _score_card_html(name: str, value: str, direction: str, note: str) -> str:
+    pill = _PILL[direction]
+    return (
+        f"<div style='background:#161b22;border:1px solid #30363d;border-radius:8px;"
+        f"padding:14px 16px;height:100%;'>"
+        f"<div style='color:#8b949e;font-size:0.74rem;margin-bottom:4px;'>{name}</div>"
+        f"<div style='font-size:1.05rem;font-weight:700;color:#e6edf3;"
+        f"margin-bottom:6px;'>{value}</div>"
+        f"{pill}"
+        f"<div style='color:#8b949e;font-size:0.74rem;margin-top:6px;line-height:1.3;'>{note}</div>"
+        f"</div>"
+    )
+
+_sc_signals: list[dict] = []
+
+# Signal 1: Storage risk premium (OLS residual)
+try:
+    import statsmodels.api as _sm_sc
+    _sc_eu = storage.get("europe", pd.DataFrame())
+    _sc_ttf = ttf.get("prices", pd.DataFrame()).copy()
+    if not _sc_eu.empty and not _sc_ttf.empty and "full" in _sc_eu.columns:
+        _sc_str = _sc_eu[["gasDayStart", "full"]].dropna().rename(
+            columns={"gasDayStart": "date", "full": "storage_pct"}
+        )
+        _sc_str["date"] = pd.to_datetime(_sc_str["date"])
+        _sc_ttf["date"] = pd.to_datetime(_sc_ttf["date"])
+        _sc_m = _sc_str.merge(_sc_ttf[["date", "price"]], on="date", how="inner").dropna()
+        if len(_sc_m) >= 60:
+            _sc_X  = _sm_sc.add_constant(_sc_m["storage_pct"])
+            _sc_fit = _sm_sc.OLS(_sc_m["price"], _sc_X).fit()
+            _sc_latest = _sc_m.iloc[-1]
+            _sc_prem   = float(_sc_latest["price"] - _sc_fit.predict(
+                _sm_sc.add_constant([_sc_latest["storage_pct"]])[0]
+            ))
+            _sc_dir = "up" if _sc_prem > 5 else ("down" if _sc_prem < -5 else "neutral")
+            _sc_note = ("TTF elevated above storage-implied value" if _sc_prem > 5
+                        else ("TTF below storage-implied value" if _sc_prem < -5
+                              else "TTF near storage-implied fair value"))
+            _sc_signals.append({"name": "Supply-Risk Premium", "value": f"{_sc_prem:+.1f} EUR/MWh",
+                                 "direction": _sc_dir, "note": _sc_note})
+        else:
+            _sc_signals.append({"name": "Supply-Risk Premium", "value": "n/a",
+                                 "direction": "na", "note": "Need AGSI key + 60+ obs"})
+    else:
+        _sc_signals.append({"name": "Supply-Risk Premium", "value": "n/a",
+                             "direction": "na", "note": "Storage data unavailable"})
+except Exception:
+    _sc_signals.append({"name": "Supply-Risk Premium", "value": "n/a",
+                         "direction": "na", "note": "Computation error"})
+
+# Signal 2: TTF seasonal percentile rank
+try:
+    _sc_hist = _get_ttf_history_norm()
+    if not _sc_hist.empty:
+        _sc_hist = _sc_hist.copy()
+        _sc_hist["date"]  = pd.to_datetime(_sc_hist["date"])
+        _sc_hist["year"]  = _sc_hist["date"].dt.year
+        _sc_hist["md"]    = _sc_hist["date"].dt.month * 100 + _sc_hist["date"].dt.day
+        _sc_cur_yr  = _sc_hist["year"].max()
+        _sc_latest_ttf_val  = float(_sc_hist.sort_values("date")["price"].iloc[-1])
+        _sc_latest_md       = int(_sc_hist.sort_values("date")["md"].iloc[-1])
+        _sc_day_hist = _sc_hist[(_sc_hist["year"] < _sc_cur_yr) & (_sc_hist["md"] == _sc_latest_md)]["price"]
+        if len(_sc_day_hist) >= 2:
+            _sc_pct_rank = float((_sc_day_hist < _sc_latest_ttf_val).mean() * 100)
+            _sc_dir = "up" if _sc_pct_rank > 75 else ("down" if _sc_pct_rank < 25 else "neutral")
+            _sc_note = (f"Historically elevated for this time of year" if _sc_pct_rank > 75
+                        else (f"Historically cheap for this time of year" if _sc_pct_rank < 25
+                              else "Within typical seasonal range"))
+            _sc_signals.append({"name": "TTF Seasonal Rank", "value": f"{_sc_pct_rank:.0f}th pct",
+                                 "direction": _sc_dir, "note": _sc_note})
+        else:
+            _sc_signals.append({"name": "TTF Seasonal Rank", "value": "n/a",
+                                 "direction": "na", "note": "Insufficient history"})
+    else:
+        _sc_signals.append({"name": "TTF Seasonal Rank", "value": "n/a",
+                             "direction": "na", "note": "yfinance unavailable"})
+except Exception:
+    _sc_signals.append({"name": "TTF Seasonal Rank", "value": "n/a",
+                         "direction": "na", "note": "Computation error"})
+
+# Signal 3: Marginal fuel (supply stack at live demand if available, else 60 GW)
+try:
+    _sc_ttf_px = ttf.get("prices", pd.DataFrame())
+    _sc_ttf_latest = float(_sc_ttf_px["price"].iloc[-1]) if not _sc_ttf_px.empty else 50.0
+    _sc_eua, _ = _get_eua()
+    _sc_live_load, _ = _get_de_live_load_gw()
+    _sc_ref_demand = (
+        float(np.clip(round(_sc_live_load), 30, 90))
+        if _sc_live_load is not None else 60.0
+    )
+    _sc_stack  = build_stack(_sc_ttf_latest, _sc_eua)
+    _sc_marg   = identify_marginal_fuel(_sc_stack, _sc_ref_demand)
+    _sc_fuel   = _sc_marg["fuel"]
+    _sc_dir = ("up" if _sc_fuel in ("gas", "oil")
+               else ("down" if _sc_fuel in ("wind", "solar", "hydro")
+                     else "neutral"))
+    _sc_fuel_note = {
+        "gas":   "Gas-marginal regime — TTF drives power prices",
+        "oil":   "Oil/peaker marginal — demand near capacity ceiling",
+        "coal":  "Coal-marginal — mid-stack clearing",
+        "wind":  "Renewable-marginal — structurally low-cost clearing",
+        "solar": "Renewable-marginal — structurally low-cost clearing",
+        "hydro": "Hydro-marginal — low-cost supply clearing",
+        "lignite": "Lignite-marginal — mid-stack clearing",
+        "biomass": "Biomass-marginal — mid-stack clearing",
+    }.get(_sc_fuel, f"{_sc_fuel} marginal")
+    _sc_demand_label = f"{_sc_ref_demand:.0f} GW" + (" live" if _sc_live_load is not None else " ref")
+    _sc_signals.append({"name": f"Marginal Fuel ({_sc_demand_label})",
+                         "value": _sc_marg["label"].split("/")[0].strip(),
+                         "direction": _sc_dir, "note": _sc_fuel_note})
+except Exception:
+    _sc_signals.append({"name": "Marginal Fuel", "value": "n/a",
+                         "direction": "na", "note": "Computation error"})
+
+# Signal 4: Hydro level vs 90-day mean (session_state — only after Nordic Decomp/Wind visit)
+try:
+    _sc_fm = st.session_state.get("features_l2")
+    if _sc_fm is not None and not _sc_fm.empty and "hydro_pct" in _sc_fm.columns:
+        _sc_hydro_ser = _sc_fm["hydro_pct"].dropna()
+        if len(_sc_hydro_ser) >= 30:
+            _sc_hydro_cur  = float(_sc_hydro_ser.iloc[-1])
+            _sc_hydro_mean = float(_sc_hydro_ser.iloc[-90:].mean())
+            _sc_hydro_dev  = _sc_hydro_cur - _sc_hydro_mean
+            _sc_dir = "down" if _sc_hydro_dev > 5 else ("up" if _sc_hydro_dev < -5 else "neutral")
+            _sc_note = (f"Above 90d mean ({_sc_hydro_mean:.0f}%) — supply comfortable" if _sc_hydro_dev > 5
+                        else (f"Below 90d mean ({_sc_hydro_mean:.0f}%) — hydro tightening" if _sc_hydro_dev < -5
+                              else f"Near 90d mean ({_sc_hydro_mean:.0f}%)"))
+            _sc_signals.append({"name": "Hydro Level", "value": f"{_sc_hydro_cur:.0f}%",
+                                 "direction": _sc_dir, "note": _sc_note})
+        else:
+            _sc_signals.append({"name": "Hydro Level", "value": "n/a",
+                                 "direction": "na", "note": "Visit Nordic Decomp tab to load"})
+    else:
+        _sc_signals.append({"name": "Hydro Level", "value": "n/a",
+                             "direction": "na", "note": "Visit Nordic Decomp tab to load"})
+except Exception:
+    _sc_signals.append({"name": "Hydro Level", "value": "n/a",
+                         "direction": "na", "note": "Computation error"})
+
+# Signal 5: Granger sentiment
+try:
+    _sc_sent = _get_sentiment_l2()
+    _sc_daily_sent = _sc_sent.get("daily", pd.DataFrame())
+    _sc_ttf_px2 = ttf.get("prices", pd.DataFrame()).copy()
+    if not _sc_daily_sent.empty and not _sc_ttf_px2.empty:
+        _sc_daily_sent = _sc_daily_sent.copy()
+        _sc_daily_sent["date"] = pd.to_datetime(_sc_daily_sent["date"])
+        _sc_ttf_px2["date"]   = pd.to_datetime(_sc_ttf_px2["date"])
+        _sc_ttf_px2["return"] = _sc_ttf_px2["price"].pct_change() * 100
+        _sc_gc_merged = _sc_daily_sent[["date", "net_sentiment"]].merge(
+            _sc_ttf_px2[["date", "return"]], on="date", how="inner"
+        ).dropna().sort_values("date")
+        if len(_sc_gc_merged) >= 21:
+            from statsmodels.tsa.stattools import grangercausalitytests as _gct
+            _sc_gc = _gct(_sc_gc_merged[["return", "net_sentiment"]], maxlag=2, verbose=False)
+            _sc_min_p = min(_sc_gc[1][0]["ssr_ftest"][1], _sc_gc[2][0]["ssr_ftest"][1])
+            _sc_recent_sent = float(_sc_gc_merged["net_sentiment"].iloc[-7:].mean())
+            if _sc_min_p < 0.10:
+                _sc_dir = "up" if _sc_recent_sent < 0 else "down"
+                _sc_note = (f"Significant (p={_sc_min_p:.3f}) + negative news flow → upside pressure"
+                            if _sc_recent_sent < 0
+                            else f"Significant (p={_sc_min_p:.3f}) + positive news flow → downside pressure")
+            else:
+                _sc_dir = "neutral"
+                _sc_note = f"Not significant (p={_sc_min_p:.3f}) — no news-driven price signal"
+            _sc_signals.append({"name": "Sentiment → TTF", "value": f"p={_sc_min_p:.3f}",
+                                 "direction": _sc_dir, "note": _sc_note})
+        else:
+            _sc_signals.append({"name": "Sentiment → TTF", "value": "n/a",
+                                 "direction": "na", "note": f"Need 21 aligned days ({len(_sc_gc_merged)} so far)"})
+    else:
+        _sc_signals.append({"name": "Sentiment → TTF", "value": "n/a",
+                             "direction": "na", "note": "Sentiment pipeline unavailable"})
+except Exception:
+    _sc_signals.append({"name": "Sentiment → TTF", "value": "n/a",
+                         "direction": "na", "note": "Computation error"})
+
+# Render scorecard
+_n_up   = sum(1 for s in _sc_signals if s["direction"] == "up")
+_n_down = sum(1 for s in _sc_signals if s["direction"] == "down")
+_n_neu  = sum(1 for s in _sc_signals if s["direction"] == "neutral")
+_agg_color = "#f85149" if _n_up > _n_down + _n_neu else ("#3fb950" if _n_down > _n_up + _n_neu else "#58a6ff")
+_agg_label = (f"<span style='color:{_agg_color};font-weight:700;'>"
+              f"{_n_up} upside &nbsp;/&nbsp; {_n_down} downside &nbsp;/&nbsp; {_n_neu} neutral</span>")
+
+with st.expander("Quant Signal Scorecard", expanded=True):
+    st.markdown(
+        f"<div style='margin-bottom:10px;font-size:0.85rem;color:#8b949e;'>"
+        f"Aggregate: {_agg_label}"
+        f"<span style='color:#484f58;margin-left:12px;font-size:0.72rem;'>"
+        f"Hydro loads after first Nordic Decomp visit · Sentiment accumulates over time</span></div>",
+        unsafe_allow_html=True,
+    )
+    _sc_cols = st.columns(5)
+    for _i, _sig in enumerate(_sc_signals):
+        with _sc_cols[_i]:
+            st.markdown(
+                _score_card_html(_sig["name"], _sig["value"], _sig["direction"], _sig["note"]),
+                unsafe_allow_html=True,
+            )
+    st.markdown("<div style='margin-bottom:4px'></div>", unsafe_allow_html=True)
+
+st.divider()
+
 # ── Model tabs ───────────────────────────────────────────────────────────────
-tab_mc, tab_reg, tab_spike, tab_bt, tab_stack, tab_decomp, tab_wind, tab_granger, tab_storage_reg, tab_hydro_lag, tab_ttf_norm = st.tabs([
+tab_mc, tab_reg, tab_spike, tab_bt, tab_stack, tab_decomp, tab_wind, tab_granger, tab_storage_reg, tab_hydro_lag, tab_ttf_norm, tab_coint = st.tabs([
     "Storage Monte Carlo",
     "Gas-to-Power Regression",
     "Price Spike Detector",
@@ -133,6 +390,7 @@ tab_mc, tab_reg, tab_spike, tab_bt, tab_stack, tab_decomp, tab_wind, tab_granger
     "Storage–Price Regression",
     "Hydro Lead/Lag",
     "TTF Seasonal Norm",
+    "NO2/NL Cointegration",
 ])
 
 
@@ -938,33 +1196,40 @@ with tab_stack:
     ttf_prices = ttf.get("prices", pd.DataFrame())
     ttf_latest = float(ttf_prices["price"].iloc[-1]) if not ttf_prices.empty else 50.0
 
+    _live_load_gw, _load_src = _get_de_live_load_gw()
+    _default_demand = (
+        float(np.clip(round(_live_load_gw), 30, 90))
+        if _live_load_gw is not None
+        else 60.0
+    )
+
     col_left, col_right = st.columns([2, 1])
     with col_left:
         demand_gw = st.slider(
             "Modelled demand (GW)",
-            min_value=30.0, max_value=90.0, value=60.0, step=1.0,
+            min_value=30.0, max_value=90.0, value=_default_demand, step=1.0,
             help=(
+                "Default set to today's ENTSO-E A65 German actual load average. "
                 "German grid load varies from ~35 GW (summer weekend night) to ~85 GW "
-                "(cold winter peak). Slide to see which fuel sets the clearing price at "
-                "different demand levels. ENTSO-E A65 live load data will be added in a "
-                "future update."
+                "(cold winter peak). Slide to override."
             ),
         )
     with col_right:
+        _load_badge = (
+            f"Live demand: {_live_load_gw:.1f} GW ({_load_src})"
+            if _live_load_gw is not None
+            else f"Live demand unavailable — {_load_src}. Using 60 GW default."
+        )
         st.markdown(
             commentary(
                 f"TTF input: €{ttf_latest:.1f}/MWh (live). "
-                "EUA carbon price fetched below.",
-                "ok",
+                f"EUA carbon price fetched below. {_load_badge}",
+                "ok" if _live_load_gw is not None else "warn",
             ),
             unsafe_allow_html=True,
         )
 
     # ── Fetch EUA, build stack ────────────────────────────────────────────────
-    @st.cache_data(ttl=3600, show_spinner=False, persist="disk")
-    def _get_eua():
-        return fetch_eua_price()
-
     eua_price, eua_source = _get_eua()
     stack_df  = build_stack(ttf_latest, eua_price)
     marginal  = identify_marginal_fuel(stack_df, demand_gw)
@@ -1093,6 +1358,7 @@ with tab_stack:
         **Dynamic inputs:**
         - Gas CCGT SRMC = TTF ÷ 0.55 + EUA × 0.37 (live TTF: **€{ttf_latest:.1f}/MWh**, EUA: **€{eua_price:.0f}/t**)
         - Hard coal SRMC = 11 EUR/MWh_th ÷ 0.40 + EUA × 0.85 ≈ **€{coal_srmc:.1f}/MWh** at current EUA
+        - Demand default: **{_default_demand:.0f} GW** — {"ENTSO-E A65 today's average (" + _load_src + ")" if _live_load_gw is not None else "static 60 GW fallback (" + _load_src + ")"}
 
         **Static inputs (Bundesnetzagentur 2024):**
         - Wind: 66 GW installed | Solar: 73 GW | Hydro: 4.5 GW | Biomass: 8.5 GW
@@ -2326,10 +2592,6 @@ with tab_ttf_norm:
         "below the 10th percentile signal historically cheap gas."
     )
 
-    @st.cache_data(ttl=3600, show_spinner=False, persist="disk")
-    def _get_ttf_history_norm():
-        return fetch_ttf_history(years=7)
-
     with st.spinner("Loading TTF price history…"):
         _ttf_norm_df = _get_ttf_history_norm()
 
@@ -2574,6 +2836,296 @@ with tab_ttf_norm:
                 """)
 
             st.caption("Source: ICE/Yahoo Finance (TTF=F)")
+
+
+# ════════════════════════════════════════════════════════════════════════════
+# TAB 12: NO2/NL COINTEGRATION & SPREAD MEAN-REVERSION
+# ════════════════════════════════════════════════════════════════════════════
+with tab_coint:
+    st.markdown("### NO2/NL Cointegration & Spread Mean-Reversion")
+    st.caption(
+        "Engle-Granger cointegration test on the NO2–NL day-ahead price pair. "
+        "If cointegrated, the spread has a long-run equilibrium and mean-reverts. "
+        "The Ornstein-Uhlenbeck half-life quantifies how quickly deviations correct. "
+        "Entry/exit z-score thresholds define a rules-based spread trading signal."
+    )
+
+    # Lazy-load feature matrix
+    if "features_l2" not in st.session_state:
+        with st.spinner("Assembling feature matrix (first visit — subsequent loads are instant)…"):
+            st.session_state["features_l2"] = _get_features_l2()
+    _coint_feat = st.session_state["features_l2"]
+
+    if _coint_feat.empty:
+        st.warning("Feature matrix unavailable. Check ENTSO-E API key.", icon="⚠️")
+    elif "no2" not in _coint_feat.columns or "nl" not in _coint_feat.columns:
+        st.warning("NO2 and NL price series required. Check ENTSO-E A44 API key.", icon="⚠️")
+    else:
+        _ci_df = _coint_feat[["date", "no2", "nl"]].dropna().copy()
+        _ci_df["date"] = pd.to_datetime(_ci_df["date"])
+        _ci_df = _ci_df.sort_values("date").reset_index(drop=True)
+        _ci_df["spread"] = _ci_df["no2"] - _ci_df["nl"]
+
+        _MIN_COINT = 100
+        if len(_ci_df) < _MIN_COINT:
+            st.info(
+                f"Cointegration test requires at least {_MIN_COINT} observations. "
+                f"Currently have {len(_ci_df)}.",
+                icon="ℹ️",
+            )
+        else:
+            try:
+                from statsmodels.tsa.stattools import coint as _eg_coint
+                import statsmodels.api as _sm_ci
+
+                # ── Engle-Granger cointegration test ─────────────────────────
+                _ci_score, _ci_pval, _ci_crit = _eg_coint(_ci_df["no2"], _ci_df["nl"])
+
+                # OLS to get residual (spread series for OU fit)
+                _ci_X   = _sm_ci.add_constant(_ci_df["nl"])
+                _ci_ols = _sm_ci.OLS(_ci_df["no2"], _ci_X).fit()
+                _ci_beta_hedge = float(_ci_ols.params["nl"])
+                _ci_resid = _ci_ols.resid.values.copy()
+
+                # ── Ornstein-Uhlenbeck half-life via OLS on lagged residual ──
+                _ci_resid_lag = _ci_resid[:-1]
+                _ci_resid_d   = np.diff(_ci_resid)
+                _ci_ou_X = _sm_ci.add_constant(_ci_resid_lag)
+                _ci_ou   = _sm_ci.OLS(_ci_resid_d, _ci_ou_X).fit()
+                _ci_lambda = float(_ci_ou.params[1])
+                _ci_halflife = (-np.log(2) / _ci_lambda) if _ci_lambda < 0 else float("inf")
+
+                # ── Spread z-score ────────────────────────────────────────────
+                _ci_spread_mean = float(np.mean(_ci_resid))
+                _ci_spread_std  = float(np.std(_ci_resid))
+                _ci_z_series    = (_ci_resid - _ci_spread_mean) / (_ci_spread_std + 1e-9)
+                _ci_z_now       = float(_ci_z_series[-1])
+                _ci_spread_now  = float(_ci_df["spread"].iloc[-1])
+
+                # ── Backtest: reversion hit-rate at ±1σ entry ─────────────────
+                _ENTRY_Z = 1.0
+                _MAX_HOLD = max(5, int(_ci_halflife * 3)) if np.isfinite(_ci_halflife) else 21
+                _bt_hits, _bt_total, _bt_mean_days = 0, 0, []
+                for _idx in range(len(_ci_z_series) - _MAX_HOLD):
+                    _z = _ci_z_series[_idx]
+                    if abs(_z) > _ENTRY_Z:
+                        _bt_total += 1
+                        _target_sign = -np.sign(_z)
+                        _revert_days = None
+                        for _d in range(1, _MAX_HOLD + 1):
+                            if np.sign(_ci_z_series[_idx + _d]) == _target_sign or abs(_ci_z_series[_idx + _d]) < 0.5:
+                                _revert_days = _d
+                                break
+                        if _revert_days is not None:
+                            _bt_hits += 1
+                            _bt_mean_days.append(_revert_days)
+                _bt_hit_rate = (_bt_hits / _bt_total * 100) if _bt_total > 0 else 0.0
+                _bt_avg_days = float(np.mean(_bt_mean_days)) if _bt_mean_days else float("nan")
+
+                # ── KPI row ───────────────────────────────────────────────────
+                _co1, _co2, _co3, _co4, _co5 = st.columns(5)
+                with _co1:
+                    _coint_verdict = "Cointegrated" if _ci_pval < 0.05 else (
+                        "Borderline" if _ci_pval < 0.10 else "Not cointegrated"
+                    )
+                    _coint_color = "red" if _ci_pval < 0.05 else ("amber" if _ci_pval < 0.10 else "blue")
+                    st.markdown(
+                        kpi_card("Cointegration", _coint_verdict,
+                                 delta_span(f"E-G p={_ci_pval:.3f}", _coint_color)),
+                        unsafe_allow_html=True,
+                    )
+                with _co2:
+                    _hl_str = f"{_ci_halflife:.1f}d" if np.isfinite(_ci_halflife) else "∞ (no reversion)"
+                    st.markdown(
+                        kpi_card("OU Half-life", _hl_str,
+                                 delta_span("spread mean-reversion speed", "blue")),
+                        unsafe_allow_html=True,
+                    )
+                with _co3:
+                    _z_color = "red" if abs(_ci_z_now) > 2 else ("amber" if abs(_ci_z_now) > 1 else "blue")
+                    st.markdown(
+                        kpi_card("Spread z-score", f"{_ci_z_now:+.2f}σ",
+                                 delta_span(f"raw: {_ci_spread_now:+.1f} EUR/MWh", _z_color)),
+                        unsafe_allow_html=True,
+                    )
+                with _co4:
+                    st.markdown(
+                        kpi_card("Hedge ratio β", f"{_ci_beta_hedge:.3f}",
+                                 delta_span("NO2 = α + β·NL + ε", "blue")),
+                        unsafe_allow_html=True,
+                    )
+                with _co5:
+                    st.markdown(
+                        kpi_card("±1σ Reversion rate", f"{_bt_hit_rate:.0f}%",
+                                 delta_span(f"avg {_bt_avg_days:.1f}d | {_bt_total} signals" if not np.isnan(_bt_avg_days) else f"{_bt_total} signals", "blue")),
+                        unsafe_allow_html=True,
+                    )
+
+                st.divider()
+
+                # ── Spread z-score time series ────────────────────────────────
+                st.markdown("#### NO2–NL Spread Z-Score (OLS Residual, Full Sample)")
+                st.caption(
+                    "Z-score of the OLS residual from regressing NO2 on NL. "
+                    "Values beyond ±1σ are potential entry points for mean-reversion trades. "
+                    "Red dot = current position."
+                )
+
+                _ci_dates = _ci_df["date"].values
+                _fig_z_ci = go.Figure()
+                _fig_z_ci.add_trace(go.Scatter(
+                    x=_ci_dates, y=_ci_z_series,
+                    mode="lines",
+                    name="Spread z-score",
+                    line=dict(color="#58a6ff", width=1.2),
+                    hovertemplate="%{x|%Y-%m-%d}: z=%{y:.2f}<extra></extra>",
+                ))
+                # Entry/exit bands
+                for _lv, _col, _lbl in [
+                    (2.0,  "rgba(248,81,73,0.5)",   "±2σ (aggressive entry)"),
+                    (1.0,  "rgba(224,123,57,0.5)",   "±1σ (base entry)"),
+                    (-1.0, "rgba(224,123,57,0.5)",   ""),
+                    (-2.0, "rgba(248,81,73,0.5)",    ""),
+                    (0.0,  "rgba(255,255,255,0.2)",  "Mean"),
+                ]:
+                    _fig_z_ci.add_hline(
+                        y=_lv, line=dict(color=_col, width=1, dash="dot"),
+                        annotation_text=_lbl if _lbl else None,
+                        annotation_font=dict(color=_col, size=9),
+                        annotation_position="top right" if _lv > 0 else "bottom right",
+                    )
+                # Current position
+                _fig_z_ci.add_trace(go.Scatter(
+                    x=[_ci_dates[-1]], y=[_ci_z_now],
+                    mode="markers",
+                    name="Current",
+                    marker=dict(color="#f85149", size=10, symbol="circle",
+                                line=dict(color="white", width=1)),
+                    hovertemplate=f"Now: z={_ci_z_now:+.2f}<extra></extra>",
+                ))
+                _fig_z_ci.update_layout(
+                    template="plotly_dark",
+                    paper_bgcolor="#0d1117", plot_bgcolor="#161b22",
+                    xaxis=dict(title=None, gridcolor="rgba(255,255,255,0.06)"),
+                    yaxis=dict(title="Z-score (σ)", gridcolor="rgba(255,255,255,0.06)"),
+                    legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="left", x=0),
+                    margin=dict(l=60, r=20, t=30, b=50),
+                    height=360,
+                    hovermode="x unified",
+                )
+                st.plotly_chart(_fig_z_ci, use_container_width=True)
+
+                # ── Raw spread + NO2 / NL price overlay ──────────────────────
+                st.markdown("#### NO2 vs NL Day-Ahead Prices")
+                st.caption(
+                    "Visual cointegration check: both series should share a common long-run trend "
+                    "if the pair is cointegrated."
+                )
+                _fig_px = go.Figure()
+                _fig_px.add_trace(go.Scatter(
+                    x=_ci_df["date"], y=_ci_df["no2"], name="NO2",
+                    line=dict(color="#58a6ff", width=1.5),
+                    hovertemplate="NO2: €%{y:.1f}/MWh<extra></extra>",
+                ))
+                _fig_px.add_trace(go.Scatter(
+                    x=_ci_df["date"], y=_ci_df["nl"], name="NL",
+                    line=dict(color="#e07b39", width=1.5),
+                    hovertemplate="NL: €%{y:.1f}/MWh<extra></extra>",
+                ))
+                _fig_px.update_layout(
+                    template="plotly_dark",
+                    paper_bgcolor="#0d1117", plot_bgcolor="#161b22",
+                    xaxis=dict(title=None, gridcolor="rgba(255,255,255,0.06)"),
+                    yaxis=dict(title="EUR/MWh", gridcolor="rgba(255,255,255,0.06)"),
+                    legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="left", x=0),
+                    margin=dict(l=60, r=20, t=30, b=50),
+                    height=300,
+                    hovermode="x unified",
+                )
+                st.plotly_chart(_fig_px, use_container_width=True)
+
+                # ── Commentary ────────────────────────────────────────────────
+                if _ci_pval < 0.05:
+                    if abs(_ci_z_now) > 1.0:
+                        _side = "long NO2 / short NL" if _ci_z_now < -1.0 else "short NO2 / long NL"
+                        _ci_prose = (
+                            f"NO2 and NL are statistically cointegrated (E-G p={_ci_pval:.3f}). "
+                            f"The spread is mean-reverting with an OU half-life of {_ci_halflife:.1f} days. "
+                            f"Current z-score = {_ci_z_now:+.2f}σ — beyond the ±1σ entry threshold. "
+                            f"Signal: {_side}. "
+                            f"Historical ±1σ reversion rate: {_bt_hit_rate:.0f}% within {int(_MAX_HOLD)} days "
+                            f"(avg {_bt_avg_days:.1f}d to revert, {_bt_total} signals in sample)."
+                        )
+                        _ci_status = "warn"
+                    else:
+                        _ci_prose = (
+                            f"NO2 and NL are statistically cointegrated (E-G p={_ci_pval:.3f}). "
+                            f"OU half-life: {_ci_halflife:.1f}d. "
+                            f"Current z-score = {_ci_z_now:+.2f}σ — within the neutral zone (|z| < 1σ). "
+                            "No active spread trade signal."
+                        )
+                        _ci_status = "ok"
+                else:
+                    _ci_prose = (
+                        f"Engle-Granger test does not reject the null of no cointegration "
+                        f"(p={_ci_pval:.3f} > 0.05). "
+                        "In the current sample, NO2 and NL do not share a statistically confirmed "
+                        "long-run equilibrium. Spread trades carry higher risk of trending rather than reverting. "
+                        f"OU half-life estimate ({_ci_halflife:.1f}d) should be treated with caution when "
+                        "cointegration is not confirmed."
+                    )
+                    _ci_status = "ok"
+
+                st.markdown(commentary(_ci_prose, _ci_status), unsafe_allow_html=True)
+
+                # ── Methodology ───────────────────────────────────────────────
+                with st.expander("Methodology", expanded=False):
+                    st.markdown(f"""
+                    **Engle-Granger cointegration test (Engle & Granger 1987):**
+                    Two non-stationary series X and Y are cointegrated if there exists a linear combination
+                    `ε = Y − α − β·X` that is stationary (I(0)). This means deviations from the long-run
+                    equilibrium are transient — the spread mean-reverts.
+
+                    **Step 1 — OLS regression:** `NO2 = α + β·NL + ε`
+                    - Estimated β (hedge ratio) = {_ci_beta_hedge:.3f}
+                    - This means 1 MWh NO2 is hedged by {_ci_beta_hedge:.3f} MWh NL exposure.
+
+                    **Step 2 — Residual stationarity (ADF test on ε):**
+                    - Test statistic = {_ci_score:.3f}
+                    - p-value = {_ci_pval:.4f}
+                    - Critical values: 1% = {_ci_crit[0]:.3f}, 5% = {_ci_crit[1]:.3f}, 10% = {_ci_crit[2]:.3f}
+                    - Conclusion: {"residual is stationary → cointegrated" if _ci_pval < 0.05 else "residual is non-stationary → cointegration not confirmed"}
+
+                    **Ornstein-Uhlenbeck half-life:**
+                    Estimated by regressing `Δε_t = λ·ε_{{t−1}} + const + u_t`.
+                    Half-life = −ln(2) / λ = **{_ci_halflife:.1f} trading days**.
+                    Interpretation: the spread takes ~{_ci_halflife:.0f}d to halve a deviation on average.
+                    Typical Nordic/Continental half-lives: 3–15 days (faster when interconnectors are uncongested).
+
+                    **Z-score:** `z_t = (ε_t − μ_ε) / σ_ε` where μ_ε and σ_ε are full-sample moments.
+                    Entry threshold: |z| > 1σ. Exit: |z| < 0.5σ (or sign flip).
+
+                    **Backtest (simple):** For each historical ±1σ entry, checks whether the z-score
+                    reverted to <0.5σ (or opposite sign) within {_MAX_HOLD} trading days.
+                    Hit rate = {_bt_hit_rate:.0f}% ({_bt_hits}/{_bt_total} signals).
+
+                    **Important limitations:**
+                    - Cointegration is a full-sample result — regime breaks (e.g. the 2021/22 energy crisis)
+                      can cause temporary breakdown of the relationship.
+                    - Hedge ratio β is estimated unconditionally; rolling β from the Nordic Decomp tab
+                      provides a more responsive estimate.
+                    - Transaction costs, bid-ask spreads, and settlement mechanics are not modelled.
+                    - The spread is wholesale day-ahead; intraday or balancing spreads differ.
+
+                    **Data:** ENTSO-E A44 (NO2 and NL day-ahead prices), {len(_ci_df)} trading days.
+                    """)
+
+                st.caption("Sources: ENTSO-E A44 (NO2, NL day-ahead prices)")
+
+            except ImportError:
+                st.warning("statsmodels is required. Run `pip install statsmodels`.", icon="⚠️")
+            except Exception as _e:
+                st.error(f"Cointegration analysis failed: {_e}", icon="🚨")
 
 
 # ── Footer ────────────────────────────────────────────────────────────────────
