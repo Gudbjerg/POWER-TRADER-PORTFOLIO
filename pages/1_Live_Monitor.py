@@ -557,7 +557,10 @@ with tab_prices:
         | Above 50 | High. Industrial demand destruction becomes a factor. Coal switching increases. |
         | Above 100 | Crisis level (2022 peak: approximately 350 EUR/MWh). |
 
-        **Nordic-Continental spread interpretation:**
+        **Nordic-Continental spread (NL − NO2):**
+        Computed as `NL day-ahead − NO2 day-ahead` (EUR/MWh). Source: Nord Pool public endpoint, 365-day history.
+        Reference levels: ±€20/MWh are empirical thresholds — above +€20, NordLink has historically run above 90% utilisation.
+
         - Positive spread (Continental above Nordic): Norwegian hydro has a clear export incentive. Interconnectors are likely constrained.
         - Near zero: Markets are broadly coupled under normal conditions.
         - Negative spread (Nordic above Continental): Atypical. Check Norwegian reservoir levels and interconnector availability.
@@ -622,6 +625,10 @@ with tab_flows:
             - NO2 to DK1 (Skagerrak cables, 1.7 GW): Norway-Denmark West
 
             **Sign convention:** Positive values indicate net import into Norway. Negative values indicate net export from Norway.
+
+            **Utilisation formula:** `utilisation = |net_flow_MWh/day| ÷ (capacity_MW × 24h) × 100%`.
+            Capacities are nameplate thermal limits from ENTSO-E; actual available capacity may be lower
+            due to N-1 reliability margins or maintenance. Colour coding: >90% = red (constrained), >70% = amber, ≤70% = green.
 
             **Key signals to monitor:**
             - Sustained high Norwegian exports imply reservoir draw-down; monitor NVE reservoir data

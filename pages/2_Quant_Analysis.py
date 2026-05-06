@@ -172,6 +172,7 @@ with st.expander("Model overview", expanded=False):
     | Hydro Reservoir Lead/Lag Analysis | Active |
     | TTF Seasonal Norm Tracker | Active |
     | NO2/NL Cointegration & Spread Mean-Reversion | Active |
+    | Quant Signal Scorecard (5-signal aggregate) | Active |
     """)
 
 st.divider()

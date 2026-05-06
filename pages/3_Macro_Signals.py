@@ -72,32 +72,34 @@ with tab_geo:
         for _n in (5, 20, 60):
             _mom_df[f"mom{_n}"] = (_mom_df["price"] / _mom_df["price"].shift(_n) - 1) * 100
 
-        _m5  = float(_mom_df["mom5"].iloc[-1])
-        _m20 = float(_mom_df["mom20"].iloc[-1])
-        _m60 = float(_mom_df["mom60"].iloc[-1])
+        _m5  = float(_mom_df["mom5"].dropna().iloc[-1])  if _mom_df["mom5"].notna().any()  else float("nan")
+        _m20 = float(_mom_df["mom20"].dropna().iloc[-1]) if _mom_df["mom20"].notna().any() else float("nan")
+        _m60 = float(_mom_df["mom60"].dropna().iloc[-1]) if _mom_df["mom60"].notna().any() else float("nan")
 
         st.markdown("#### TTF Price Momentum (5 / 20 / 60-day)")
         _mc1, _mc2, _mc3, _mc4 = st.columns(4)
         def _mom_delta(v):
+            if np.isnan(v):
+                return delta_span("n/a", "blue")
             color = "red" if v > 3 else ("green" if v < -3 else "blue")
             return delta_span(f"{'▲' if v > 0 else '▼'} {abs(v):.1f}%", color)
         with _mc1:
             st.markdown(
-                kpi_card("5-day momentum", f"{_m5:+.1f}%", _mom_delta(_m5)),
+                kpi_card("5-day momentum", f"{_m5:+.1f}%" if not np.isnan(_m5) else "n/a", _mom_delta(_m5)),
                 unsafe_allow_html=True,
             )
         with _mc2:
             st.markdown(
-                kpi_card("20-day momentum", f"{_m20:+.1f}%", _mom_delta(_m20)),
+                kpi_card("20-day momentum", f"{_m20:+.1f}%" if not np.isnan(_m20) else "n/a", _mom_delta(_m20)),
                 unsafe_allow_html=True,
             )
         with _mc3:
             st.markdown(
-                kpi_card("60-day momentum", f"{_m60:+.1f}%", _mom_delta(_m60)),
+                kpi_card("60-day momentum", f"{_m60:+.1f}%" if not np.isnan(_m60) else "n/a", _mom_delta(_m60)),
                 unsafe_allow_html=True,
             )
         with _mc4:
-            _n_pos = sum(v > 0 for v in (_m5, _m20, _m60))
+            _n_pos = sum(v > 0 for v in (_m5, _m20, _m60) if not np.isnan(v))
             _trend = "Uptrend" if _n_pos == 3 else ("Downtrend" if _n_pos == 0 else "Mixed / consolidating")
             _trend_color = "red" if _n_pos == 3 else ("green" if _n_pos == 0 else "blue")
             st.markdown(
