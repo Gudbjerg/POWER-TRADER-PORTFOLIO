@@ -12,6 +12,8 @@ from datetime import date as _date
 
 load_dotenv()
 
+_PAGE_T0 = _time.perf_counter()
+
 st.set_page_config(
     page_title="Quantitative Analysis",
     page_icon="Q",
@@ -20,6 +22,10 @@ st.set_page_config(
 )
 
 from utils.helpers import apply_dark_theme, kpi_card, delta_span, commentary
+from config.settings import (
+    SCORE_RISK_PREMIUM_EUR, SCORE_SEASONAL_HI_PCT, SCORE_SEASONAL_LO_PCT,
+    COINT_ENTRY_Z, COINT_MIN_OBS, COINT_MIN_MATCH, HYDRO_MAX_LAG,
+)
 from data.gas_storage import get_storage_data
 from data.prices import get_ttf_data
 from data.spot_prices import fetch_spot_prices
@@ -67,6 +73,21 @@ def _get_eua():
 @st.cache_data(ttl=3600, show_spinner=False, persist="disk")
 def _get_ttf_history_norm():
     return fetch_ttf_history(years=7)
+
+@st.cache_data(show_spinner=False)
+def _run_sc_ols_cached(sc_m_df: pd.DataFrame) -> float:
+    import statsmodels.api as _sm_ols
+    _X   = _sm_ols.add_constant(sc_m_df["storage_pct"])
+    _fit = _sm_ols.OLS(sc_m_df["price"], _X).fit()
+    _row = sc_m_df.iloc[-1]
+    return float(_row["price"] - (_fit.params[0] + _fit.params[1] * float(_row["storage_pct"])))
+
+@st.cache_data(show_spinner=False)
+def _run_sc_granger_cached(gc_df: pd.DataFrame) -> tuple:
+    from statsmodels.tsa.stattools import grangercausalitytests as _gct
+    _gc    = _gct(gc_df[["return", "net_sentiment"]], maxlag=2, verbose=False)
+    _min_p = min(_gc[1][0]["ssr_ftest"][1], _gc[2][0]["ssr_ftest"][1])
+    return _min_p, float(gc_df["net_sentiment"].iloc[-7:].mean())
 
 @st.cache_data(ttl=1800, show_spinner=False, persist="disk")
 def _get_de_live_load_gw() -> tuple:
@@ -135,6 +156,10 @@ with st.sidebar:
     else:
         st.caption("Feature matrix: loads on first visit to Nordic Decomp or Wind tab")
     st.divider()
+    st.markdown("#### Debug")
+    st.caption(f"Page rendered in {_time.perf_counter() - _PAGE_T0:.1f}s")
+    st.caption("Slow (>15s) = cold start; fast (<1s) = all caches warm.")
+    st.divider()
 
 # ── Header ───────────────────────────────────────────────────────────────────
 st.markdown("## Layer 2: Quantitative Analysis")
@@ -157,6 +182,7 @@ with st.expander("Model overview", expanded=False):
     | Hydro Reservoir Lead/Lag Analysis | Active |
     | TTF Seasonal Norm Tracker | Active |
     | NO2/NL Cointegration & Spread Mean-Reversion | Active |
+    | Quant Signal Scorecard (5-signal aggregate) | Active |
     """)
 
 st.divider()
@@ -190,7 +216,6 @@ _sc_signals: list[dict] = []
 
 # Signal 1: Storage risk premium (OLS residual)
 try:
-    import statsmodels.api as _sm_sc
     _sc_eu = storage.get("europe", pd.DataFrame())
     _sc_ttf = ttf.get("prices", pd.DataFrame()).copy()
     if not _sc_eu.empty and not _sc_ttf.empty and "full" in _sc_eu.columns:
@@ -200,16 +225,11 @@ try:
         _sc_str["date"] = pd.to_datetime(_sc_str["date"])
         _sc_ttf["date"] = pd.to_datetime(_sc_ttf["date"])
         _sc_m = _sc_str.merge(_sc_ttf[["date", "price"]], on="date", how="inner").dropna()
-        if len(_sc_m) >= 60:
-            _sc_X  = _sm_sc.add_constant(_sc_m["storage_pct"])
-            _sc_fit = _sm_sc.OLS(_sc_m["price"], _sc_X).fit()
-            _sc_latest = _sc_m.iloc[-1]
-            _sc_prem   = float(_sc_latest["price"] - _sc_fit.predict(
-                _sm_sc.add_constant([_sc_latest["storage_pct"]])[0]
-            ))
-            _sc_dir = "up" if _sc_prem > 5 else ("down" if _sc_prem < -5 else "neutral")
-            _sc_note = ("TTF elevated above storage-implied value" if _sc_prem > 5
-                        else ("TTF below storage-implied value" if _sc_prem < -5
+        if len(_sc_m) >= COINT_MIN_MATCH:
+            _sc_prem = _run_sc_ols_cached(_sc_m)
+            _sc_dir = "up" if _sc_prem > SCORE_RISK_PREMIUM_EUR else ("down" if _sc_prem < -SCORE_RISK_PREMIUM_EUR else "neutral")
+            _sc_note = ("TTF elevated above storage-implied value" if _sc_prem > SCORE_RISK_PREMIUM_EUR
+                        else ("TTF below storage-implied value" if _sc_prem < -SCORE_RISK_PREMIUM_EUR
                               else "TTF near storage-implied fair value"))
             _sc_signals.append({"name": "Supply-Risk Premium", "value": f"{_sc_prem:+.1f} EUR/MWh",
                                  "direction": _sc_dir, "note": _sc_note})
@@ -219,6 +239,9 @@ try:
     else:
         _sc_signals.append({"name": "Supply-Risk Premium", "value": "n/a",
                              "direction": "na", "note": "Storage data unavailable"})
+except ImportError:
+    _sc_signals.append({"name": "Supply-Risk Premium", "value": "n/a",
+                         "direction": "na", "note": "statsmodels not available"})
 except Exception:
     _sc_signals.append({"name": "Supply-Risk Premium", "value": "n/a",
                          "direction": "na", "note": "Computation error"})
@@ -237,9 +260,9 @@ try:
         _sc_day_hist = _sc_hist[(_sc_hist["year"] < _sc_cur_yr) & (_sc_hist["md"] == _sc_latest_md)]["price"]
         if len(_sc_day_hist) >= 2:
             _sc_pct_rank = float((_sc_day_hist < _sc_latest_ttf_val).mean() * 100)
-            _sc_dir = "up" if _sc_pct_rank > 75 else ("down" if _sc_pct_rank < 25 else "neutral")
-            _sc_note = (f"Historically elevated for this time of year" if _sc_pct_rank > 75
-                        else (f"Historically cheap for this time of year" if _sc_pct_rank < 25
+            _sc_dir = "up" if _sc_pct_rank > SCORE_SEASONAL_HI_PCT else ("down" if _sc_pct_rank < SCORE_SEASONAL_LO_PCT else "neutral")
+            _sc_note = (f"Historically elevated for this time of year" if _sc_pct_rank > SCORE_SEASONAL_HI_PCT
+                        else (f"Historically cheap for this time of year" if _sc_pct_rank < SCORE_SEASONAL_LO_PCT
                               else "Within typical seasonal range"))
             _sc_signals.append({"name": "TTF Seasonal Rank", "value": f"{_sc_pct_rank:.0f}th pct",
                                  "direction": _sc_dir, "note": _sc_note})
@@ -326,10 +349,7 @@ try:
             _sc_ttf_px2[["date", "return"]], on="date", how="inner"
         ).dropna().sort_values("date")
         if len(_sc_gc_merged) >= 21:
-            from statsmodels.tsa.stattools import grangercausalitytests as _gct
-            _sc_gc = _gct(_sc_gc_merged[["return", "net_sentiment"]], maxlag=2, verbose=False)
-            _sc_min_p = min(_sc_gc[1][0]["ssr_ftest"][1], _sc_gc[2][0]["ssr_ftest"][1])
-            _sc_recent_sent = float(_sc_gc_merged["net_sentiment"].iloc[-7:].mean())
+            _sc_min_p, _sc_recent_sent = _run_sc_granger_cached(_sc_gc_merged)
             if _sc_min_p < 0.10:
                 _sc_dir = "up" if _sc_recent_sent < 0 else "down"
                 _sc_note = (f"Significant (p={_sc_min_p:.3f}) + negative news flow → upside pressure"
@@ -346,6 +366,9 @@ try:
     else:
         _sc_signals.append({"name": "Sentiment → TTF", "value": "n/a",
                              "direction": "na", "note": "Sentiment pipeline unavailable"})
+except ImportError:
+    _sc_signals.append({"name": "Sentiment → TTF", "value": "n/a",
+                         "direction": "na", "note": "statsmodels not available"})
 except Exception:
     _sc_signals.append({"name": "Sentiment → TTF", "value": "n/a",
                          "direction": "na", "note": "Computation error"})
@@ -2090,7 +2113,7 @@ with tab_storage_reg:
 
         _sreg = _str_df.merge(_ttf_r, on="date", how="inner").dropna().sort_values("date")
 
-        _MIN_OBS = 60
+        _MIN_OBS = COINT_MIN_MATCH
         if len(_sreg) < _MIN_OBS:
             st.info(
                 f"Storage regression requires {_MIN_OBS} overlapping observations. "
@@ -2367,7 +2390,7 @@ with tab_hydro_lag:
             icon="ℹ️",
         )
     else:
-        _MAX_LAG = 21
+        _MAX_LAG = HYDRO_MAX_LAG
 
         _hdf = _hydro_feat_df[["date", "no2", "hydro_pct"]].dropna().copy()
         _hdf["date"] = pd.to_datetime(_hdf["date"])
@@ -2866,7 +2889,7 @@ with tab_coint:
         _ci_df = _ci_df.sort_values("date").reset_index(drop=True)
         _ci_df["spread"] = _ci_df["no2"] - _ci_df["nl"]
 
-        _MIN_COINT = 100
+        _MIN_COINT = COINT_MIN_OBS
         if len(_ci_df) < _MIN_COINT:
             st.info(
                 f"Cointegration test requires at least {_MIN_COINT} observations. "
@@ -2895,25 +2918,28 @@ with tab_coint:
                 _ci_lambda = float(_ci_ou.params[1])
                 _ci_halflife = (-np.log(2) / _ci_lambda) if _ci_lambda < 0 else float("inf")
 
-                # ── Spread z-score ────────────────────────────────────────────
-                _ci_spread_mean = float(np.mean(_ci_resid))
-                _ci_spread_std  = float(np.std(_ci_resid))
-                _ci_z_series    = (_ci_resid - _ci_spread_mean) / (_ci_spread_std + 1e-9)
-                _ci_z_now       = float(_ci_z_series[-1])
+                # ── Spread z-score (expanding window — no look-ahead bias) ───
+                _ci_resid_s  = pd.Series(_ci_resid, dtype=float)
+                _ci_exp_mean = _ci_resid_s.expanding(min_periods=30).mean()
+                _ci_exp_std  = _ci_resid_s.expanding(min_periods=30).std()
+                _ci_z_series = ((_ci_resid_s - _ci_exp_mean) / (_ci_exp_std + 1e-9)).values
+                _ci_z_valid  = _ci_z_series[~np.isnan(_ci_z_series)]
+                _ci_z_now    = float(_ci_z_valid[-1]) if len(_ci_z_valid) else 0.0
                 _ci_spread_now  = float(_ci_df["spread"].iloc[-1])
 
                 # ── Backtest: reversion hit-rate at ±1σ entry ─────────────────
-                _ENTRY_Z = 1.0
-                _MAX_HOLD = max(5, int(_ci_halflife * 3)) if np.isfinite(_ci_halflife) else 21
+                _ENTRY_Z = COINT_ENTRY_Z
+                _MAX_HOLD = min(60, max(5, int(_ci_halflife * 3))) if np.isfinite(_ci_halflife) else 21
                 _bt_hits, _bt_total, _bt_mean_days = 0, 0, []
                 for _idx in range(len(_ci_z_series) - _MAX_HOLD):
                     _z = _ci_z_series[_idx]
-                    if abs(_z) > _ENTRY_Z:
+                    if not np.isnan(_z) and abs(_z) > _ENTRY_Z:
                         _bt_total += 1
                         _target_sign = -np.sign(_z)
                         _revert_days = None
                         for _d in range(1, _MAX_HOLD + 1):
-                            if np.sign(_ci_z_series[_idx + _d]) == _target_sign or abs(_ci_z_series[_idx + _d]) < 0.5:
+                            _zf = _ci_z_series[_idx + _d]
+                            if not np.isnan(_zf) and (np.sign(_zf) == _target_sign or abs(_zf) < 0.5):
                                 _revert_days = _d
                                 break
                         if _revert_days is not None:
@@ -2921,6 +2947,8 @@ with tab_coint:
                             _bt_mean_days.append(_revert_days)
                 _bt_hit_rate = (_bt_hits / _bt_total * 100) if _bt_total > 0 else 0.0
                 _bt_avg_days = float(np.mean(_bt_mean_days)) if _bt_mean_days else float("nan")
+                _ci_hl_prose = f"{_ci_halflife:.1f}d" if np.isfinite(_ci_halflife) else "∞"
+                _bt_avg_str  = f"{_bt_avg_days:.1f}d" if not np.isnan(_bt_avg_days) else "n/a"
 
                 # ── KPI row ───────────────────────────────────────────────────
                 _co1, _co2, _co3, _co4, _co5 = st.columns(5)
@@ -2990,7 +3018,7 @@ with tab_coint:
                 ]:
                     _fig_z_ci.add_hline(
                         y=_lv, line=dict(color=_col, width=1, dash="dot"),
-                        annotation_text=_lbl if _lbl else None,
+                        annotation_text=_lbl if _lbl else "",
                         annotation_font=dict(color=_col, size=9),
                         annotation_position="top right" if _lv > 0 else "bottom right",
                     )
@@ -3050,17 +3078,17 @@ with tab_coint:
                         _side = "long NO2 / short NL" if _ci_z_now < -1.0 else "short NO2 / long NL"
                         _ci_prose = (
                             f"NO2 and NL are statistically cointegrated (E-G p={_ci_pval:.3f}). "
-                            f"The spread is mean-reverting with an OU half-life of {_ci_halflife:.1f} days. "
+                            f"The spread is mean-reverting with an OU half-life of {_ci_hl_prose}. "
                             f"Current z-score = {_ci_z_now:+.2f}σ — beyond the ±1σ entry threshold. "
                             f"Signal: {_side}. "
                             f"Historical ±1σ reversion rate: {_bt_hit_rate:.0f}% within {int(_MAX_HOLD)} days "
-                            f"(avg {_bt_avg_days:.1f}d to revert, {_bt_total} signals in sample)."
+                            f"(avg {_bt_avg_str} to revert, {_bt_total} signals in sample)."
                         )
                         _ci_status = "warn"
                     else:
                         _ci_prose = (
                             f"NO2 and NL are statistically cointegrated (E-G p={_ci_pval:.3f}). "
-                            f"OU half-life: {_ci_halflife:.1f}d. "
+                            f"OU half-life: {_ci_hl_prose}. "
                             f"Current z-score = {_ci_z_now:+.2f}σ — within the neutral zone (|z| < 1σ). "
                             "No active spread trade signal."
                         )
@@ -3071,7 +3099,7 @@ with tab_coint:
                         f"(p={_ci_pval:.3f} > 0.05). "
                         "In the current sample, NO2 and NL do not share a statistically confirmed "
                         "long-run equilibrium. Spread trades carry higher risk of trending rather than reverting. "
-                        f"OU half-life estimate ({_ci_halflife:.1f}d) should be treated with caution when "
+                        f"OU half-life estimate ({_ci_hl_prose}) should be treated with caution when "
                         "cointegration is not confirmed."
                     )
                     _ci_status = "ok"
@@ -3098,12 +3126,13 @@ with tab_coint:
 
                     **Ornstein-Uhlenbeck half-life:**
                     Estimated by regressing `Δε_t = λ·ε_{{t−1}} + const + u_t`.
-                    Half-life = −ln(2) / λ = **{_ci_halflife:.1f} trading days**.
-                    Interpretation: the spread takes ~{_ci_halflife:.0f}d to halve a deviation on average.
+                    Half-life = −ln(2) / λ = **{_ci_hl_prose}**.
+                    Interpretation: the spread takes ~{_ci_hl_prose} to halve a deviation on average.
                     Typical Nordic/Continental half-lives: 3–15 days (faster when interconnectors are uncongested).
 
-                    **Z-score:** `z_t = (ε_t − μ_ε) / σ_ε` where μ_ε and σ_ε are full-sample moments.
-                    Entry threshold: |z| > 1σ. Exit: |z| < 0.5σ (or sign flip).
+                    **Z-score:** `z_t = (ε_t − μ_ε(t)) / σ_ε(t)` where μ_ε(t) and σ_ε(t) are
+                    expanding-window moments (min 30 obs, no look-ahead). Entry threshold: |z| > 1σ.
+                    Exit: |z| < 0.5σ (or sign flip).
 
                     **Backtest (simple):** For each historical ±1σ entry, checks whether the z-score
                     reverted to <0.5σ (or opposite sign) within {_MAX_HOLD} trading days.

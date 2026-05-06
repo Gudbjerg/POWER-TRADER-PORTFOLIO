@@ -62,6 +62,26 @@ INTERCONNECTOR_CAPACITY_MW: dict[str, float] = {
     "NO1->SE3":   500.0,  # NO1-SE3 (approximate, varies seasonally)
 }
 
+# ── Scorecard signal thresholds ─────────────────────────────────────────────
+SCORE_RISK_PREMIUM_EUR  = 5.0    # ±EUR/MWh boundary for supply-risk premium direction
+SCORE_SEASONAL_HI_PCT   = 75.0   # percentile above which TTF is "historically elevated"
+SCORE_SEASONAL_LO_PCT   = 25.0   # percentile below which TTF is "historically cheap"
+
+# ── Nordic spread chart reference ────────────────────────────────────────────
+SPREAD_CHART_REF_EUR = 20.0   # ±EUR/MWh annotation level on NL−NO2 spread chart
+
+# ── Interconnector utilisation display thresholds ────────────────────────────
+INTERCONNECTOR_UTIL_HIGH_PCT = 90.0   # >= red  (constrained)
+INTERCONNECTOR_UTIL_MED_PCT  = 70.0   # >= amber (elevated)
+
+# ── Cointegration & regression model parameters ──────────────────────────────
+COINT_ENTRY_Z   = 1.0    # |z-score| threshold to signal a spread trade entry
+COINT_MIN_OBS   = 100    # minimum observations required for Engle-Granger test
+COINT_MIN_MATCH =  60    # minimum overlapping obs (scorecard OLS, storage regression)
+
+# ── Hydro lead/lag analysis ───────────────────────────────────────────────────
+HYDRO_MAX_LAG = 21   # maximum cross-correlation lag in days
+
 # ── LNG countries (GIE ALSI) ────────────────────────────────────────────────
 LNG_COUNTRIES = {
     "BE": "Belgium (Zeebrugge)",

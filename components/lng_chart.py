@@ -96,10 +96,20 @@ def render_lng_chart(lng_data: dict):
     st.plotly_chart(fig, use_container_width=True)
 
     if missing_countries:
-        st.caption(
-            f"No sendout data available for: {', '.join(missing_countries)}. "
-            "GIE ALSI may not have reported data for this terminal in the selected window."
-        )
+        _gb_missing = any("Great Britain" in c or c == "GB" for c in missing_countries)
+        if _gb_missing:
+            st.info(
+                "Great Britain (South Hook / Dragon LNG) data unavailable from GIE ALSI. "
+                "South Hook (21 bcm/yr) and Dragon LNG (5 bcm/yr) represent the largest "
+                "NW European LNG import cluster. The total shown above understates true sendout "
+                "until GB data resumes. Check terminal status at alsi.gie.eu.",
+                icon="ℹ️",
+            )
+        else:
+            st.caption(
+                f"No sendout data for: {', '.join(missing_countries)}. "
+                "GIE ALSI may not have reported data for this terminal in the selected window."
+            )
 
     if alert and wow_change is not None:
         st.error(

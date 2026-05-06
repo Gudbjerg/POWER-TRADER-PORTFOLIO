@@ -1,8 +1,11 @@
 """
 Layer 1: European Power and Gas Live Market Monitor
 """
+import time as _time
 import streamlit as st
 from dotenv import load_dotenv
+
+_PAGE_T0 = _time.perf_counter()
 
 load_dotenv()
 
@@ -41,8 +44,18 @@ from utils.scenarios import (
 )
 import pandas as pd
 from datetime import date as _date, timedelta as _timedelta
+from config.settings import (
+    INTERCONNECTOR_CAPACITY_MW,
+    INTERCONNECTOR_UTIL_HIGH_PCT, INTERCONNECTOR_UTIL_MED_PCT,
+    SPREAD_CHART_REF_EUR,
+)
 
 apply_dark_theme()
+
+
+@st.cache_data(ttl=3600, persist="disk", show_spinner=False)
+def _get_spot_history_l1():
+    return fetch_spot_prices(days=365)
 
 
 # ── Load all data (cached) ─────────────────────────────────────────────────
@@ -471,10 +484,6 @@ with tab_prices:
         "Norway has an export incentive and NordLink/NorNed flow toward the Continent."
     )
 
-    @st.cache_data(ttl=3600, persist="disk", show_spinner=False)
-    def _get_spot_history_l1():
-        return fetch_spot_prices(days=365)
-
     _spread_df = _get_spot_history_l1()
     if not _spread_df.empty:
         _no2  = _spread_df[_spread_df["zone"] == "NO2"][["date", "price_eur_mwh"]].rename(
@@ -488,10 +497,10 @@ with tab_prices:
 
         if not _sp.empty:
             _current_spread = float(_sp["spread"].iloc[-1])
-            _sp_color = "red" if _current_spread > 20 else ("green" if _current_spread < -20 else "blue")
+            _sp_color = "red" if _current_spread > SPREAD_CHART_REF_EUR else ("green" if _current_spread < -SPREAD_CHART_REF_EUR else "blue")
             _sp_label = (
-                "strong NL premium — NordLink near capacity" if _current_spread > 20
-                else "Nordic premium — atypical, check reservoirs" if _current_spread < -20
+                "strong NL premium — NordLink near capacity" if _current_spread > SPREAD_CHART_REF_EUR
+                else "Nordic premium — atypical, check reservoirs" if _current_spread < -SPREAD_CHART_REF_EUR
                 else "balanced"
             )
             st.markdown(
@@ -516,14 +525,14 @@ with tab_prices:
             ))
             _fig_sp.add_hline(y=0, line=dict(color="rgba(255,255,255,0.25)", width=1))
             _fig_sp.add_hline(
-                y=20, line=dict(color="#d4ac3a", width=1, dash="dot"),
-                annotation_text="  +€20 (NordLink historically >90% utilised)",
+                y=SPREAD_CHART_REF_EUR, line=dict(color="#d4ac3a", width=1, dash="dot"),
+                annotation_text=f"  +€{SPREAD_CHART_REF_EUR:.0f} (NordLink historically >90% utilised)",
                 annotation_font=dict(color="#d4ac3a", size=10),
                 annotation_position="right",
             )
             _fig_sp.add_hline(
-                y=-20, line=dict(color="#3fb950", width=1, dash="dot"),
-                annotation_text="  −€20 (Nordic premium, atypical)",
+                y=-SPREAD_CHART_REF_EUR, line=dict(color="#3fb950", width=1, dash="dot"),
+                annotation_text=f"  −€{SPREAD_CHART_REF_EUR:.0f} (Nordic premium, atypical)",
                 annotation_font=dict(color="#3fb950", size=10),
                 annotation_position="right",
             )
@@ -557,7 +566,10 @@ with tab_prices:
         | Above 50 | High. Industrial demand destruction becomes a factor. Coal switching increases. |
         | Above 100 | Crisis level (2022 peak: approximately 350 EUR/MWh). |
 
-        **Nordic-Continental spread interpretation:**
+        **Nordic-Continental spread (NL − NO2):**
+        Computed as `NL day-ahead − NO2 day-ahead` (EUR/MWh). Source: Nord Pool public endpoint, 365-day history.
+        Reference levels: ±€20/MWh are empirical thresholds — above +€20, NordLink has historically run above 90% utilisation.
+
         - Positive spread (Continental above Nordic): Norwegian hydro has a clear export incentive. Interconnectors are likely constrained.
         - Near zero: Markets are broadly coupled under normal conditions.
         - Negative spread (Nordic above Continental): Atypical. Check Norwegian reservoir levels and interconnector availability.
@@ -579,7 +591,6 @@ with tab_flows:
         render_flows_chart(flows)
 
         # ── B5: Interconnector utilisation KPIs ───────────────────────────────
-        from config.settings import INTERCONNECTOR_CAPACITY_MW
         _flows_df = flows.get("flows", pd.DataFrame())
         if not _flows_df.empty:
             _latest_day = _flows_df["date"].max()
@@ -597,7 +608,7 @@ with tab_flows:
                             _cap_mwh  = _cap_mw * 24.0  # MWh/day at full capacity
                             _util_pct = min(_flow_mwh / _cap_mwh * 100.0, 100.0)
                             _dir      = "→ NO" if float(_row["net_flow_mwh"].iloc[0]) > 0 else "→ EU"
-                            _u_color  = "red" if _util_pct > 90 else ("amber" if _util_pct > 70 else "green")
+                            _u_color  = "red" if _util_pct > INTERCONNECTOR_UTIL_HIGH_PCT else ("amber" if _util_pct > INTERCONNECTOR_UTIL_MED_PCT else "green")
                             st.markdown(
                                 kpi_card(
                                     _pair.replace("->", " → "),
@@ -622,6 +633,10 @@ with tab_flows:
             - NO2 to DK1 (Skagerrak cables, 1.7 GW): Norway-Denmark West
 
             **Sign convention:** Positive values indicate net import into Norway. Negative values indicate net export from Norway.
+
+            **Utilisation formula:** `utilisation = |net_flow_MWh/day| ÷ (capacity_MW × 24h) × 100%`.
+            Capacities are nameplate thermal limits from ENTSO-E; actual available capacity may be lower
+            due to N-1 reliability margins or maintenance. Colour coding: >90% = red (constrained), >70% = amber, ≤70% = green.
 
             **Key signals to monitor:**
             - Sustained high Norwegian exports imply reservoir draw-down; monitor NVE reservoir data
@@ -736,6 +751,11 @@ with tab_hydro:
 
 
 # ── Footer ─────────────────────────────────────────────────────────────────
+with st.sidebar:
+    st.markdown("#### Debug")
+    st.caption(f"Page rendered in {_time.perf_counter() - _PAGE_T0:.1f}s")
+    st.caption("Slow (>10s) = cold start; fast (<1s) = all caches warm.")
+
 st.divider()
 st.markdown(
     """<div style="color:#484f58;font-size:0.72rem;line-height:1.8;">

@@ -51,7 +51,7 @@ Real-time fundamentals refreshed hourly across 10 panels:
 | Storage–Price OLS Regression | Linear OLS, full history | Supply-risk premium = actual TTF − storage-implied fair value |
 | Hydro Reservoir Lead/Lag | Pearson cross-correlation, lags 0–21d | Peak lag, rolling 90d correlation, strength of hydro→price signal |
 | TTF Seasonal Norm Tracker | 5-year historical percentile bands | Current TTF vs 10th/25th/50th/75th/90th pct seasonal distribution |
-| NO2/NL Cointegration & Spread | Engle-Granger test, OU half-life | Spread z-score, hedge ratio β, ±1σ reversion backtest hit-rate |
+| NO2/NL Cointegration & Spread | Engle-Granger test, OU half-life | Expanding-window spread z-score (no look-ahead), hedge ratio β, honest ±1σ reversion backtest hit-rate |
 | Quant Signal Scorecard | 5-signal aggregation | Upside/downside/neutral tally from all quant models |
 
 ### Layer 3: Geopolitical and Macro Signals

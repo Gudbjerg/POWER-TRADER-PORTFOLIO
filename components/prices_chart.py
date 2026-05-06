@@ -62,12 +62,23 @@ def render_ttf_chart(ttf_data: dict, events: list | None = None):
         from data.events import CATEGORY_COLORS, IMPACT_DASH
         x_min = df["date"].min()
         x_max = df["date"].max()
-        for ev in events:
+        visible = [ev for ev in events if x_min <= pd.Timestamp(ev["date"]) <= x_max]
+        visible.sort(key=lambda e: e["date"])
+        # Stagger labels for densely clustered events (within CLUSTER_DAYS of prior event)
+        _CLUSTER_DAYS = 8
+        _stagger_offsets = [0, -55, -110, -165]  # px — 4 stagger slots
+        _cluster_idx = 0
+        _last_date = None
+        for ev in visible:
             ev_date = pd.Timestamp(ev["date"])
-            if not (x_min <= ev_date <= x_max):
-                continue
             color = CATEGORY_COLORS.get(ev.get("category", "policy"), "#888")
             dash  = IMPACT_DASH.get(ev.get("impact", "warn"), "dot")
+            if _last_date is not None and (ev_date - _last_date).days <= _CLUSTER_DAYS:
+                _cluster_idx += 1
+            else:
+                _cluster_idx = 0
+            _yshift = _stagger_offsets[_cluster_idx % len(_stagger_offsets)]
+            _last_date = ev_date
             fig.add_vline(
                 x=ev_date.timestamp() * 1000,
                 line_dash=dash,
@@ -77,6 +88,7 @@ def render_ttf_chart(ttf_data: dict, events: list | None = None):
                 annotation_position="top left",
                 annotation_font=dict(size=9, color=color),
                 annotation_textangle=-90,
+                annotation_yshift=_yshift,
             )
 
     # Reference threshold lines
