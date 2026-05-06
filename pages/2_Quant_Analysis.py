@@ -12,6 +12,8 @@ from datetime import date as _date
 
 load_dotenv()
 
+_PAGE_T0 = _time.perf_counter()
+
 st.set_page_config(
     page_title="Quantitative Analysis",
     page_icon="Q",
@@ -153,6 +155,10 @@ with st.sidebar:
         st.caption(f"Feature matrix: {len(_fm)} rows through {_fm_latest}")
     else:
         st.caption("Feature matrix: loads on first visit to Nordic Decomp or Wind tab")
+    st.divider()
+    st.markdown("#### Debug")
+    st.caption(f"Page rendered in {_time.perf_counter() - _PAGE_T0:.1f}s")
+    st.caption("Slow (>15s) = cold start; fast (<1s) = all caches warm.")
     st.divider()
 
 # ── Header ───────────────────────────────────────────────────────────────────

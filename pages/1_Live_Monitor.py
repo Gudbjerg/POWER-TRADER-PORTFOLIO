@@ -1,8 +1,11 @@
 """
 Layer 1: European Power and Gas Live Market Monitor
 """
+import time as _time
 import streamlit as st
 from dotenv import load_dotenv
+
+_PAGE_T0 = _time.perf_counter()
 
 load_dotenv()
 
@@ -748,6 +751,11 @@ with tab_hydro:
 
 
 # ── Footer ─────────────────────────────────────────────────────────────────
+with st.sidebar:
+    st.markdown("#### Debug")
+    st.caption(f"Page rendered in {_time.perf_counter() - _PAGE_T0:.1f}s")
+    st.caption("Slow (>10s) = cold start; fast (<1s) = all caches warm.")
+
 st.divider()
 st.markdown(
     """<div style="color:#484f58;font-size:0.72rem;line-height:1.8;">
