@@ -24,6 +24,14 @@ from components.prices_chart import render_ttf_chart
 
 apply_dark_theme()
 
+
+def _mom_delta(v: float) -> str:
+    if np.isnan(v):
+        return delta_span("n/a", "blue")
+    color = "red" if v > 3 else ("green" if v < -3 else "blue")
+    return delta_span(f"{'▲' if v > 0 else '▼'} {abs(v):.1f}%", color)
+
+
 # ── Load data ────────────────────────────────────────────────────────────────
 with st.spinner(""):
     ttf         = get_ttf_data()
@@ -78,11 +86,6 @@ with tab_geo:
 
         st.markdown("#### TTF Price Momentum (5 / 20 / 60-day)")
         _mc1, _mc2, _mc3, _mc4 = st.columns(4)
-        def _mom_delta(v):
-            if np.isnan(v):
-                return delta_span("n/a", "blue")
-            color = "red" if v > 3 else ("green" if v < -3 else "blue")
-            return delta_span(f"{'▲' if v > 0 else '▼'} {abs(v):.1f}%", color)
         with _mc1:
             st.markdown(
                 kpi_card("5-day momentum", f"{_m5:+.1f}%" if not np.isnan(_m5) else "n/a", _mom_delta(_m5)),

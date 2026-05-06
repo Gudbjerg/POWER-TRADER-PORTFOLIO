@@ -41,8 +41,18 @@ from utils.scenarios import (
 )
 import pandas as pd
 from datetime import date as _date, timedelta as _timedelta
+from config.settings import (
+    INTERCONNECTOR_CAPACITY_MW,
+    INTERCONNECTOR_UTIL_HIGH_PCT, INTERCONNECTOR_UTIL_MED_PCT,
+    SPREAD_CHART_REF_EUR,
+)
 
 apply_dark_theme()
+
+
+@st.cache_data(ttl=3600, persist="disk", show_spinner=False)
+def _get_spot_history_l1():
+    return fetch_spot_prices(days=365)
 
 
 # ── Load all data (cached) ─────────────────────────────────────────────────
@@ -471,10 +481,6 @@ with tab_prices:
         "Norway has an export incentive and NordLink/NorNed flow toward the Continent."
     )
 
-    @st.cache_data(ttl=3600, persist="disk", show_spinner=False)
-    def _get_spot_history_l1():
-        return fetch_spot_prices(days=365)
-
     _spread_df = _get_spot_history_l1()
     if not _spread_df.empty:
         _no2  = _spread_df[_spread_df["zone"] == "NO2"][["date", "price_eur_mwh"]].rename(
@@ -488,10 +494,10 @@ with tab_prices:
 
         if not _sp.empty:
             _current_spread = float(_sp["spread"].iloc[-1])
-            _sp_color = "red" if _current_spread > 20 else ("green" if _current_spread < -20 else "blue")
+            _sp_color = "red" if _current_spread > SPREAD_CHART_REF_EUR else ("green" if _current_spread < -SPREAD_CHART_REF_EUR else "blue")
             _sp_label = (
-                "strong NL premium — NordLink near capacity" if _current_spread > 20
-                else "Nordic premium — atypical, check reservoirs" if _current_spread < -20
+                "strong NL premium — NordLink near capacity" if _current_spread > SPREAD_CHART_REF_EUR
+                else "Nordic premium — atypical, check reservoirs" if _current_spread < -SPREAD_CHART_REF_EUR
                 else "balanced"
             )
             st.markdown(
@@ -516,14 +522,14 @@ with tab_prices:
             ))
             _fig_sp.add_hline(y=0, line=dict(color="rgba(255,255,255,0.25)", width=1))
             _fig_sp.add_hline(
-                y=20, line=dict(color="#d4ac3a", width=1, dash="dot"),
-                annotation_text="  +€20 (NordLink historically >90% utilised)",
+                y=SPREAD_CHART_REF_EUR, line=dict(color="#d4ac3a", width=1, dash="dot"),
+                annotation_text=f"  +€{SPREAD_CHART_REF_EUR:.0f} (NordLink historically >90% utilised)",
                 annotation_font=dict(color="#d4ac3a", size=10),
                 annotation_position="right",
             )
             _fig_sp.add_hline(
-                y=-20, line=dict(color="#3fb950", width=1, dash="dot"),
-                annotation_text="  −€20 (Nordic premium, atypical)",
+                y=-SPREAD_CHART_REF_EUR, line=dict(color="#3fb950", width=1, dash="dot"),
+                annotation_text=f"  −€{SPREAD_CHART_REF_EUR:.0f} (Nordic premium, atypical)",
                 annotation_font=dict(color="#3fb950", size=10),
                 annotation_position="right",
             )
@@ -582,7 +588,6 @@ with tab_flows:
         render_flows_chart(flows)
 
         # ── B5: Interconnector utilisation KPIs ───────────────────────────────
-        from config.settings import INTERCONNECTOR_CAPACITY_MW
         _flows_df = flows.get("flows", pd.DataFrame())
         if not _flows_df.empty:
             _latest_day = _flows_df["date"].max()
@@ -600,7 +605,7 @@ with tab_flows:
                             _cap_mwh  = _cap_mw * 24.0  # MWh/day at full capacity
                             _util_pct = min(_flow_mwh / _cap_mwh * 100.0, 100.0)
                             _dir      = "→ NO" if float(_row["net_flow_mwh"].iloc[0]) > 0 else "→ EU"
-                            _u_color  = "red" if _util_pct > 90 else ("amber" if _util_pct > 70 else "green")
+                            _u_color  = "red" if _util_pct > INTERCONNECTOR_UTIL_HIGH_PCT else ("amber" if _util_pct > INTERCONNECTOR_UTIL_MED_PCT else "green")
                             st.markdown(
                                 kpi_card(
                                     _pair.replace("->", " → "),

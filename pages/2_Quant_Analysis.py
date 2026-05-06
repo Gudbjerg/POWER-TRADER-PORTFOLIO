@@ -20,6 +20,10 @@ st.set_page_config(
 )
 
 from utils.helpers import apply_dark_theme, kpi_card, delta_span, commentary
+from config.settings import (
+    SCORE_RISK_PREMIUM_EUR, SCORE_SEASONAL_HI_PCT, SCORE_SEASONAL_LO_PCT,
+    COINT_ENTRY_Z, COINT_MIN_OBS, COINT_MIN_MATCH, HYDRO_MAX_LAG,
+)
 from data.gas_storage import get_storage_data
 from data.prices import get_ttf_data
 from data.spot_prices import fetch_spot_prices
@@ -215,11 +219,11 @@ try:
         _sc_str["date"] = pd.to_datetime(_sc_str["date"])
         _sc_ttf["date"] = pd.to_datetime(_sc_ttf["date"])
         _sc_m = _sc_str.merge(_sc_ttf[["date", "price"]], on="date", how="inner").dropna()
-        if len(_sc_m) >= 60:
+        if len(_sc_m) >= COINT_MIN_MATCH:
             _sc_prem = _run_sc_ols_cached(_sc_m)
-            _sc_dir = "up" if _sc_prem > 5 else ("down" if _sc_prem < -5 else "neutral")
-            _sc_note = ("TTF elevated above storage-implied value" if _sc_prem > 5
-                        else ("TTF below storage-implied value" if _sc_prem < -5
+            _sc_dir = "up" if _sc_prem > SCORE_RISK_PREMIUM_EUR else ("down" if _sc_prem < -SCORE_RISK_PREMIUM_EUR else "neutral")
+            _sc_note = ("TTF elevated above storage-implied value" if _sc_prem > SCORE_RISK_PREMIUM_EUR
+                        else ("TTF below storage-implied value" if _sc_prem < -SCORE_RISK_PREMIUM_EUR
                               else "TTF near storage-implied fair value"))
             _sc_signals.append({"name": "Supply-Risk Premium", "value": f"{_sc_prem:+.1f} EUR/MWh",
                                  "direction": _sc_dir, "note": _sc_note})
@@ -250,9 +254,9 @@ try:
         _sc_day_hist = _sc_hist[(_sc_hist["year"] < _sc_cur_yr) & (_sc_hist["md"] == _sc_latest_md)]["price"]
         if len(_sc_day_hist) >= 2:
             _sc_pct_rank = float((_sc_day_hist < _sc_latest_ttf_val).mean() * 100)
-            _sc_dir = "up" if _sc_pct_rank > 75 else ("down" if _sc_pct_rank < 25 else "neutral")
-            _sc_note = (f"Historically elevated for this time of year" if _sc_pct_rank > 75
-                        else (f"Historically cheap for this time of year" if _sc_pct_rank < 25
+            _sc_dir = "up" if _sc_pct_rank > SCORE_SEASONAL_HI_PCT else ("down" if _sc_pct_rank < SCORE_SEASONAL_LO_PCT else "neutral")
+            _sc_note = (f"Historically elevated for this time of year" if _sc_pct_rank > SCORE_SEASONAL_HI_PCT
+                        else (f"Historically cheap for this time of year" if _sc_pct_rank < SCORE_SEASONAL_LO_PCT
                               else "Within typical seasonal range"))
             _sc_signals.append({"name": "TTF Seasonal Rank", "value": f"{_sc_pct_rank:.0f}th pct",
                                  "direction": _sc_dir, "note": _sc_note})
@@ -2103,7 +2107,7 @@ with tab_storage_reg:
 
         _sreg = _str_df.merge(_ttf_r, on="date", how="inner").dropna().sort_values("date")
 
-        _MIN_OBS = 60
+        _MIN_OBS = COINT_MIN_MATCH
         if len(_sreg) < _MIN_OBS:
             st.info(
                 f"Storage regression requires {_MIN_OBS} overlapping observations. "
@@ -2380,7 +2384,7 @@ with tab_hydro_lag:
             icon="ℹ️",
         )
     else:
-        _MAX_LAG = 21
+        _MAX_LAG = HYDRO_MAX_LAG
 
         _hdf = _hydro_feat_df[["date", "no2", "hydro_pct"]].dropna().copy()
         _hdf["date"] = pd.to_datetime(_hdf["date"])
@@ -2879,7 +2883,7 @@ with tab_coint:
         _ci_df = _ci_df.sort_values("date").reset_index(drop=True)
         _ci_df["spread"] = _ci_df["no2"] - _ci_df["nl"]
 
-        _MIN_COINT = 100
+        _MIN_COINT = COINT_MIN_OBS
         if len(_ci_df) < _MIN_COINT:
             st.info(
                 f"Cointegration test requires at least {_MIN_COINT} observations. "
@@ -2918,7 +2922,7 @@ with tab_coint:
                 _ci_spread_now  = float(_ci_df["spread"].iloc[-1])
 
                 # ── Backtest: reversion hit-rate at ±1σ entry ─────────────────
-                _ENTRY_Z = 1.0
+                _ENTRY_Z = COINT_ENTRY_Z
                 _MAX_HOLD = min(60, max(5, int(_ci_halflife * 3))) if np.isfinite(_ci_halflife) else 21
                 _bt_hits, _bt_total, _bt_mean_days = 0, 0, []
                 for _idx in range(len(_ci_z_series) - _MAX_HOLD):
@@ -3008,7 +3012,7 @@ with tab_coint:
                 ]:
                     _fig_z_ci.add_hline(
                         y=_lv, line=dict(color=_col, width=1, dash="dot"),
-                        annotation_text=_lbl if _lbl else None,
+                        annotation_text=_lbl if _lbl else "",
                         annotation_font=dict(color=_col, size=9),
                         annotation_position="top right" if _lv > 0 else "bottom right",
                     )
