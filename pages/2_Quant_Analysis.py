@@ -89,6 +89,141 @@ def _run_sc_granger_cached(gc_df: pd.DataFrame) -> tuple:
     _min_p = min(_gc[1][0]["ssr_ftest"][1], _gc[2][0]["ssr_ftest"][1])
     return _min_p, float(gc_df["net_sentiment"].iloc[-7:].mean())
 
+
+@st.cache_data(ttl=3600, show_spinner=False, persist="disk")
+def _get_scanner_prices(years: int = 3) -> pd.DataFrame:
+    """Wide-format daily prices for cointegration scanner: NO2, NL, TTF + DE, FR (ENTSO-E A44) + NBP (yfinance)."""
+    _base = _get_features_l2()
+    if _base.empty:
+        return pd.DataFrame()
+    _out = _base[["date", "no2", "nl", "ttf"]].dropna(subset=["no2", "nl", "ttf"]).copy()
+    _out["date"] = pd.to_datetime(_out["date"])
+    _key = os.getenv("ENTSOE_API_KEY", "")
+    if _key:
+        try:
+            from entsoe import EntsoePandasClient as _EPC
+            _cli = _EPC(api_key=_key)
+            _end = pd.Timestamp.now(tz="UTC").normalize()
+            _st0 = _end - pd.Timedelta(days=int(years * 365))
+            for _lbl, _eic in [("de", "10Y1001A1001A83F"), ("fr", "10YFR-RTE------C")]:
+                _chunks: list = []
+                _cs = _st0
+                while _cs < _end:
+                    _ce = min(_cs + pd.Timedelta(days=365), _end)
+                    try:
+                        _s = _cli.query_day_ahead_prices(_eic, start=_cs, end=_ce)
+                        if _s is not None and not _s.empty:
+                            _chunks.append(_s)
+                    except Exception:
+                        pass
+                    _cs = _ce
+                if _chunks:
+                    _comb  = pd.concat(_chunks)
+                    _comb  = _comb[~_comb.index.duplicated(keep="last")]
+                    _daily = _comb.tz_convert("UTC").resample("D").mean()
+                    _daily.index = pd.to_datetime(_daily.index).tz_localize(None).normalize()
+                    _zdf   = pd.DataFrame({"date": _daily.index, _lbl: _daily.values})
+                    _out   = _out.merge(_zdf, on="date", how="left")
+        except Exception:
+            pass
+    try:
+        import yfinance as _yf
+        _nbp_raw = _yf.Ticker("NBP=F").history(
+            start=(pd.Timestamp.now() - pd.Timedelta(days=int(years * 365))).strftime("%Y-%m-%d"),
+            end=pd.Timestamp.now().strftime("%Y-%m-%d"),
+        )
+        if not _nbp_raw.empty:
+            _nbp_idx = pd.to_datetime(_nbp_raw.index).tz_localize(None).normalize()
+            _nbp_df  = pd.DataFrame({"date": _nbp_idx, "nbp": _nbp_raw["Close"].values})
+            _out = _out.merge(_nbp_df, on="date", how="left")
+    except Exception:
+        pass
+    return _out.sort_values("date").reset_index(drop=True)
+
+
+@st.cache_data(show_spinner=False)
+def _run_coint_scanner(price_df: pd.DataFrame) -> list[dict]:
+    """Engle-Granger cointegration for all available pair combinations. Returns list of result dicts sorted by p-value."""
+    try:
+        from statsmodels.tsa.stattools import coint as _coint_fn
+        import statsmodels.api as _sm_sc
+    except ImportError:
+        return []
+    _pcols   = [c for c in price_df.columns if c != "date"]
+    _results = []
+    for _i, _a in enumerate(_pcols):
+        for _b in _pcols[_i + 1:]:
+            _pf = price_df[["date", _a, _b]].dropna()
+            _n  = len(_pf)
+            if _n < COINT_MIN_OBS:
+                continue
+            _ya = _pf[_a].values.astype(float)
+            _yb = _pf[_b].values.astype(float)
+            try:
+                _, _pab, _ = _coint_fn(_ya, _yb)
+                _, _pba, _ = _coint_fn(_yb, _ya)
+            except Exception:
+                continue
+            if _pab <= _pba:
+                _pval, _dep, _indep, _dn, _in_ = _pab, _ya, _yb, _a, _b
+            else:
+                _pval, _dep, _indep, _dn, _in_ = _pba, _yb, _ya, _b, _a
+            _X_sc    = _sm_sc.add_constant(_indep)
+            _ols_sc  = _sm_sc.OLS(_dep, _X_sc).fit()
+            _beta_sc = float(_ols_sc.params[1])
+            _resid_sc = _ols_sc.resid.values.copy()
+            _rl  = _resid_sc[:-1]
+            _rd  = np.diff(_resid_sc)
+            _ou  = _sm_sc.OLS(_rd, _sm_sc.add_constant(_rl)).fit()
+            _lam = float(_ou.params[1])
+            _hl  = (-np.log(2) / _lam) if _lam < 0 else float("inf")
+            _rs  = pd.Series(_resid_sc, dtype=float)
+            _em  = _rs.expanding(min_periods=30).mean()
+            _es  = _rs.expanding(min_periods=30).std()
+            _zs  = ((_rs - _em) / (_es + 1e-9)).values
+            _zv  = _zs[~np.isnan(_zs)]
+            _znow = float(_zv[-1]) if len(_zv) else 0.0
+            _mh  = min(60, max(5, int(_hl * 3))) if np.isfinite(_hl) else 21
+            _hits, _tot, _bdays = 0, 0, []
+            for _ix in range(len(_zs) - _mh):
+                _z = _zs[_ix]
+                if not np.isnan(_z) and abs(_z) > COINT_ENTRY_Z:
+                    _tot += 1
+                    _tsgn = -np.sign(_z)
+                    for _d in range(1, _mh + 1):
+                        _zf = _zs[_ix + _d]
+                        if not np.isnan(_zf) and (np.sign(_zf) == _tsgn or abs(_zf) < 0.5):
+                            _hits += 1
+                            _bdays.append(_d)
+                            break
+            _hit_rate = _hits / _tot * 100 if _tot > 0 else float("nan")
+            _avg_d    = float(np.mean(_bdays)) if _bdays else float("nan")
+            _status   = "Not cointegrated"
+            if _pval < 0.05:
+                _status = "Actionable" if abs(_znow) > COINT_ENTRY_Z else "Wait"
+            _results.append({
+                "pair":      f"{_dn.upper()}/{_in_.upper()}",
+                "a":         _dn,
+                "b":         _in_,
+                "n_obs":     _n,
+                "pval":      round(float(_pval), 4),
+                "half_life": float(_hl),
+                "z_now":     round(float(_znow), 3),
+                "hit_rate":  float(_hit_rate),
+                "n_signals": _tot,
+                "avg_days":  float(_avg_d),
+                "max_hold":  _mh,
+                "beta":      round(float(_beta_sc), 4),
+                "status":    _status,
+                "z_series":  _zs,
+                "dates":     _pf["date"].values,
+                "ya":        _dep,
+                "yb":        _indep,
+            })
+    _results.sort(key=lambda r: r["pval"])
+    return _results
+
+
 @st.cache_data(ttl=1800, show_spinner=False, persist="disk")
 def _get_de_live_load_gw() -> tuple:
     """
@@ -182,6 +317,7 @@ with st.expander("Model overview", expanded=False):
     | Hydro Reservoir Lead/Lag Analysis | Active |
     | TTF Seasonal Norm Tracker | Active |
     | NO2/NL Cointegration & Spread Mean-Reversion | Active |
+    | Multi-Pair Cointegration Scanner (D1) | Active |
     | Quant Signal Scorecard (5-signal aggregate) | Active |
     """)
 
@@ -401,7 +537,7 @@ with st.expander("Quant Signal Scorecard", expanded=True):
 st.divider()
 
 # ── Model tabs ───────────────────────────────────────────────────────────────
-tab_mc, tab_reg, tab_spike, tab_bt, tab_stack, tab_decomp, tab_wind, tab_granger, tab_storage_reg, tab_hydro_lag, tab_ttf_norm, tab_coint = st.tabs([
+tab_mc, tab_reg, tab_spike, tab_bt, tab_stack, tab_decomp, tab_wind, tab_granger, tab_storage_reg, tab_hydro_lag, tab_ttf_norm, tab_coint, tab_scanner = st.tabs([
     "Storage Monte Carlo",
     "Gas-to-Power Regression",
     "Price Spike Detector",
@@ -414,6 +550,7 @@ tab_mc, tab_reg, tab_spike, tab_bt, tab_stack, tab_decomp, tab_wind, tab_granger
     "Hydro Lead/Lag",
     "TTF Seasonal Norm",
     "NO2/NL Cointegration",
+    "Cointegration Scanner",
 ])
 
 
@@ -3155,6 +3292,315 @@ with tab_coint:
                 st.warning("statsmodels is required. Run `pip install statsmodels`.", icon="⚠️")
             except Exception as _e:
                 st.error(f"Cointegration analysis failed: {_e}", icon="🚨")
+
+
+# ════════════════════════════════════════════════════════════════════════════
+# TAB 13: MULTI-PAIR COINTEGRATION SCANNER
+# ════════════════════════════════════════════════════════════════════════════
+with tab_scanner:
+    st.markdown("### Multi-Pair Cointegration Scanner")
+    st.caption(
+        "Engle-Granger cointegration tests across the full European gas-hub and power-zone universe. "
+        "For each cointegrated pair the Ornstein-Uhlenbeck half-life and current z-score determine "
+        "whether a spread trade is actionable today. "
+        "Universe: NO2, NL, TTF (base) + DE, FR (ENTSO-E A44) + NBP (yfinance, when available)."
+    )
+
+    _SCANNER_YEARS = 3
+
+    if "scanner_prices" not in st.session_state:
+        with st.spinner("Fetching extended universe prices (DE, FR via ENTSO-E A44)…"):
+            st.session_state["scanner_prices"] = _get_scanner_prices(years=_SCANNER_YEARS)
+    _scan_px = st.session_state["scanner_prices"]
+
+    _scan_cols = [c for c in _scan_px.columns if c != "date"] if not _scan_px.empty else []
+
+    if _scan_px.empty or len(_scan_cols) < 2:
+        st.warning(
+            "Scanner requires at least 2 price series. Check ENTSO-E API key for DE and FR data.",
+            icon="⚠️",
+        )
+    else:
+        _scan_universe = " · ".join(c.upper() for c in _scan_cols)
+        st.caption(f"Universe loaded: **{_scan_universe}** — {len(_scan_px):,} daily obs (longest common window)")
+
+        try:
+            with st.spinner("Running Engle-Granger tests across all pairs…"):
+                _scan_res = _run_coint_scanner(_scan_px)
+        except Exception as _scan_err:
+            st.error(f"Scanner failed: {_scan_err}", icon="🚨")
+            _scan_res = []
+
+        if not _scan_res:
+            st.info(
+                "No pairs tested — check that statsmodels is installed and data has "
+                f"≥{COINT_MIN_OBS} observations per pair.",
+                icon="ℹ️",
+            )
+        else:
+            # ── Summary KPI row ───────────────────────────────────────────────────
+            _sc_n_coint = sum(1 for r in _scan_res if r["pval"] < 0.05)
+            _sc_n_act   = sum(1 for r in _scan_res if r["status"] == "Actionable")
+            _sc_top     = _scan_res[0]
+
+            _sck1, _sck2, _sck3 = st.columns(3)
+            with _sck1:
+                st.markdown(
+                    kpi_card("Cointegrated pairs",
+                             f"{_sc_n_coint} / {len(_scan_res)}",
+                             delta_span("E-G p < 0.05", "blue")),
+                    unsafe_allow_html=True,
+                )
+            with _sck2:
+                st.markdown(
+                    kpi_card("Actionable signals",
+                             str(_sc_n_act),
+                             delta_span(f"|z| > {COINT_ENTRY_Z}σ today",
+                                        "red" if _sc_n_act > 0 else "blue")),
+                    unsafe_allow_html=True,
+                )
+            with _sck3:
+                _top_col = "red" if _sc_top["pval"] < 0.05 else ("amber" if _sc_top["pval"] < 0.10 else "blue")
+                st.markdown(
+                    kpi_card("Strongest pair",
+                             _sc_top["pair"],
+                             delta_span(f"E-G p={_sc_top['pval']:.3f}", _top_col)),
+                    unsafe_allow_html=True,
+                )
+
+            st.divider()
+
+            # ── Ranked table ──────────────────────────────────────────────────────
+            st.markdown("#### All Pairs — Ranked by Cointegration Strength")
+
+            _STATUS_BADGE = {
+                "Actionable": ("<span style='background:#3d1515;color:#f85149;border-radius:4px;"
+                               "padding:2px 8px;font-size:0.78rem;font-weight:600'>Actionable</span>"),
+                "Wait":       ("<span style='background:#2d2008;color:#d4ac3a;border-radius:4px;"
+                               "padding:2px 8px;font-size:0.78rem;font-weight:600'>Wait</span>"),
+                "Not cointegrated": ("<span style='background:#1c1c1c;color:#484f58;border-radius:4px;"
+                                     "padding:2px 8px;font-size:0.78rem;font-weight:600'>Not cointegrated</span>"),
+            }
+
+            _tbl_rows_html = []
+            for _r in _scan_res:
+                _hl_s = f"{_r['half_life']:.1f}d" if np.isfinite(_r["half_life"]) else "∞"
+                _hr_s = f"{_r['hit_rate']:.0f}%" if not np.isnan(_r["hit_rate"]) else "n/a"
+                _zc   = "#f85149" if abs(_r["z_now"]) > 2 else ("#d4ac3a" if abs(_r["z_now"]) > 1 else "#8b949e")
+                _pc   = "#3fb950" if _r["pval"] < 0.05 else ("#d4ac3a" if _r["pval"] < 0.10 else "#484f58")
+                _tbl_rows_html.append(
+                    f"<tr style='border-bottom:1px solid #21262d'>"
+                    f"<td style='padding:5px 10px;font-weight:600;color:#e6edf3'>{_r['pair']}</td>"
+                    f"<td style='padding:5px 10px;text-align:right;color:#8b949e'>{_r['n_obs']:,}</td>"
+                    f"<td style='padding:5px 10px;text-align:right;color:{_pc}'>{_r['pval']:.3f}</td>"
+                    f"<td style='padding:5px 10px;text-align:right;color:#8b949e'>{_hl_s}</td>"
+                    f"<td style='padding:5px 10px;text-align:right;color:{_zc};font-weight:600'>{_r['z_now']:+.2f}σ</td>"
+                    f"<td style='padding:5px 10px;text-align:right;color:#8b949e'>{_hr_s}</td>"
+                    f"<td style='padding:5px 10px'>{_STATUS_BADGE.get(_r['status'], _r['status'])}</td>"
+                    f"</tr>"
+                )
+
+            _tbl_header = (
+                "<table style='width:100%;border-collapse:collapse;font-size:0.88rem;margin-top:4px'>"
+                "<thead><tr style='border-bottom:2px solid #30363d;color:#8b949e;text-align:left'>"
+                "<th style='padding:6px 10px'>Pair</th>"
+                "<th style='padding:6px 10px;text-align:right'>Obs</th>"
+                "<th style='padding:6px 10px;text-align:right'>E-G p-value</th>"
+                "<th style='padding:6px 10px;text-align:right'>OU Half-life</th>"
+                "<th style='padding:6px 10px;text-align:right'>z now</th>"
+                "<th style='padding:6px 10px;text-align:right'>±1σ hit rate</th>"
+                "<th style='padding:6px 10px'>Status</th>"
+                "</tr></thead><tbody>"
+            )
+            st.markdown(
+                _tbl_header + "".join(_tbl_rows_html) + "</tbody></table>",
+                unsafe_allow_html=True,
+            )
+
+            # ── Pair detail charts ────────────────────────────────────────────────
+            _coint_pairs = [r for r in _scan_res if r["pval"] < 0.05]
+            if _coint_pairs:
+                st.markdown("<div style='margin-top:24px'></div>", unsafe_allow_html=True)
+                st.markdown("#### Cointegrated Pair Detail")
+                st.caption(
+                    "Expand any cointegrated pair to view its spread z-score history and "
+                    "raw price overlay. Actionable pairs are expanded by default."
+                )
+
+                for _cp in _coint_pairs:
+                    _cp_is_act = _cp["status"] == "Actionable"
+                    _cp_hl_s   = f"{_cp['half_life']:.1f}d" if np.isfinite(_cp["half_life"]) else "∞"
+                    _exp_lbl   = (f"{_cp['pair']}  ·  {_cp['status']}  ·  "
+                                  f"z = {_cp['z_now']:+.2f}σ  ·  OU ½-life {_cp_hl_s}")
+
+                    with st.expander(_exp_lbl, expanded=_cp_is_act):
+                        # KPI row
+                        _dk1, _dk2, _dk3, _dk4 = st.columns(4)
+                        with _dk1:
+                            _dvc = "red" if _cp["pval"] < 0.05 else "amber"
+                            st.markdown(
+                                kpi_card("Cointegration",
+                                         "Confirmed" if _cp["pval"] < 0.05 else "Borderline",
+                                         delta_span(f"E-G p={_cp['pval']:.3f}", _dvc)),
+                                unsafe_allow_html=True,
+                            )
+                        with _dk2:
+                            st.markdown(
+                                kpi_card("OU Half-life", _cp_hl_s,
+                                         delta_span("mean-reversion speed", "blue")),
+                                unsafe_allow_html=True,
+                            )
+                        with _dk3:
+                            _dzc = "red" if abs(_cp["z_now"]) > 2 else ("amber" if abs(_cp["z_now"]) > 1 else "blue")
+                            st.markdown(
+                                kpi_card("Spread z-score", f"{_cp['z_now']:+.2f}σ",
+                                         delta_span(_cp["status"], _dzc)),
+                                unsafe_allow_html=True,
+                            )
+                        with _dk4:
+                            _dhr_s = f"{_cp['hit_rate']:.0f}%" if not np.isnan(_cp["hit_rate"]) else "n/a"
+                            _davg_s = (f"avg {_cp['avg_days']:.1f}d | {_cp['n_signals']} signals"
+                                       if not np.isnan(_cp["avg_days"])
+                                       else f"{_cp['n_signals']} signals")
+                            st.markdown(
+                                kpi_card("±1σ Hit rate", _dhr_s,
+                                         delta_span(_davg_s, "blue")),
+                                unsafe_allow_html=True,
+                            )
+
+                        # Z-score time series
+                        _dfig_z = go.Figure()
+                        _dfig_z.add_trace(go.Scatter(
+                            x=_cp["dates"], y=_cp["z_series"],
+                            mode="lines", name="Z-score",
+                            line=dict(color="#58a6ff", width=1.2),
+                            hovertemplate="%{x|%Y-%m-%d}: z=%{y:.2f}<extra></extra>",
+                        ))
+                        for _dlv, _dcol, _dlbl in [
+                            ( 2.0, "rgba(248,81,73,0.5)",   "±2σ"),
+                            ( 1.0, "rgba(224,123,57,0.5)",  "±1σ"),
+                            (-1.0, "rgba(224,123,57,0.5)",  ""),
+                            (-2.0, "rgba(248,81,73,0.5)",   ""),
+                            ( 0.0, "rgba(255,255,255,0.2)", "Mean"),
+                        ]:
+                            _dfig_z.add_hline(
+                                y=_dlv,
+                                line=dict(color=_dcol, width=1, dash="dot"),
+                                annotation_text=_dlbl if _dlbl else "",
+                                annotation_font=dict(color=_dcol, size=9),
+                                annotation_position="top right" if _dlv >= 0 else "bottom right",
+                            )
+                        _dfig_z.add_trace(go.Scatter(
+                            x=[_cp["dates"][-1]], y=[_cp["z_now"]],
+                            mode="markers", name="Current",
+                            marker=dict(color="#f85149", size=9, symbol="circle",
+                                        line=dict(color="white", width=1)),
+                            hovertemplate=f"Now: z={_cp['z_now']:+.2f}<extra></extra>",
+                        ))
+                        _dfig_z.update_layout(
+                            template="plotly_dark",
+                            paper_bgcolor="#0d1117", plot_bgcolor="#161b22",
+                            xaxis=dict(title=None, gridcolor="rgba(255,255,255,0.06)"),
+                            yaxis=dict(title="Z-score (σ)", gridcolor="rgba(255,255,255,0.06)"),
+                            legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="left", x=0),
+                            margin=dict(l=60, r=20, t=30, b=50),
+                            height=300,
+                            hovermode="x unified",
+                        )
+                        _cp_key = _cp["pair"].replace("/", "_")
+                        st.plotly_chart(_dfig_z, use_container_width=True, key=f"sc_z_{_cp_key}")
+
+                        # Price overlay
+                        _dfig_px = go.Figure()
+                        _dfig_px.add_trace(go.Scatter(
+                            x=_cp["dates"], y=_cp["ya"],
+                            name=_cp["a"].upper(),
+                            line=dict(color="#58a6ff", width=1.3),
+                            hovertemplate=f"{_cp['a'].upper()}: €%{{y:.1f}}/MWh<extra></extra>",
+                        ))
+                        _dfig_px.add_trace(go.Scatter(
+                            x=_cp["dates"], y=_cp["yb"],
+                            name=_cp["b"].upper(),
+                            line=dict(color="#e07b39", width=1.3),
+                            hovertemplate=f"{_cp['b'].upper()}: €%{{y:.1f}}/MWh<extra></extra>",
+                        ))
+                        _dfig_px.update_layout(
+                            template="plotly_dark",
+                            paper_bgcolor="#0d1117", plot_bgcolor="#161b22",
+                            xaxis=dict(title=None, gridcolor="rgba(255,255,255,0.06)"),
+                            yaxis=dict(title="EUR/MWh", gridcolor="rgba(255,255,255,0.06)"),
+                            legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="left", x=0),
+                            margin=dict(l=60, r=20, t=20, b=50),
+                            height=260,
+                            hovermode="x unified",
+                        )
+                        st.plotly_chart(_dfig_px, use_container_width=True, key=f"sc_px_{_cp_key}")
+
+                        # Trade signal commentary
+                        if _cp["status"] == "Actionable":
+                            _dside = (f"long {_cp['a'].upper()} / short {_cp['b'].upper()}"
+                                      if _cp["z_now"] < -COINT_ENTRY_Z
+                                      else f"short {_cp['a'].upper()} / long {_cp['b'].upper()}")
+                            _dpr = (
+                                f"{_cp['pair']} is statistically cointegrated (E-G p={_cp['pval']:.3f}). "
+                                f"Spread mean-reverts with OU half-life {_cp_hl_s}. "
+                                f"Current z-score = {_cp['z_now']:+.2f}σ — beyond the "
+                                f"±{COINT_ENTRY_Z}σ entry threshold. "
+                                f"Signal: {_dside}. "
+                                f"Historical ±{COINT_ENTRY_Z}σ reversion rate: {_dhr_s} within "
+                                f"{_cp['max_hold']}d ({_cp['n_signals']} signals in sample)."
+                            )
+                            st.markdown(commentary(_dpr, "warn"), unsafe_allow_html=True)
+                        else:
+                            _dpr = (
+                                f"{_cp['pair']} is cointegrated (E-G p={_cp['pval']:.3f}), "
+                                f"OU half-life {_cp_hl_s}. "
+                                f"Current z-score = {_cp['z_now']:+.2f}σ — within the neutral band. "
+                                "No active spread entry signal."
+                            )
+                            st.markdown(commentary(_dpr, "ok"), unsafe_allow_html=True)
+
+            # ── Methodology ───────────────────────────────────────────────────────
+            with st.expander("Methodology", expanded=False):
+                st.markdown(f"""
+                **Universe:** Day-ahead prices for NO2 and NL (ENTSO-E A44), TTF front-month
+                (ICE/yfinance), DE and FR day-ahead prices (ENTSO-E A44, when available),
+                NBP (ICE/yfinance, when available). All power prices in EUR/MWh; gas prices
+                converted where possible. NBP from yfinance may include FX/unit differences
+                relative to EUR/MWh — treat gas-to-gas pairs with additional caution.
+
+                **Pair selection:** All unique combinations of available series with
+                ≥{COINT_MIN_OBS} overlapping daily observations are tested.
+                Results are ranked by E-G p-value (most cointegrated first).
+
+                **Test direction:** Engle-Granger is run in both directions (Y on X and X on Y);
+                the direction with the lower p-value is retained. OLS regression
+                `Y = α + β·X + ε` defines the spread residual series.
+
+                **Z-score:** `z_t = (ε_t − μ_ε(t)) / σ_ε(t)` — expanding-window moments
+                (min 30 obs, no look-ahead bias). Entry threshold: |z| > {COINT_ENTRY_Z}σ.
+                Exit: sign flip or |z| < 0.5σ.
+
+                **Status logic:**
+                - *Actionable* — E-G p < 0.05 AND |z_now| > {COINT_ENTRY_Z}σ
+                - *Wait* — E-G p < 0.05 but |z_now| ≤ {COINT_ENTRY_Z}σ (spread in neutral zone)
+                - *Not cointegrated* — E-G p ≥ 0.05
+
+                **OU half-life:** Estimated via `Δε_t = λ·ε_{{t−1}} + const`; half-life = −ln(2)/λ.
+                Capped maximum hold at {min(60, max(5, 21))}–60 days for backtest integrity.
+
+                **Limitations:** All Tab 12 caveats apply. Gas-to-power pairs may show spurious
+                cointegration during structural breaks. Rolling-window cointegration (Phase D2)
+                will provide more robust entry timing signals.
+
+                **Data:** ENTSO-E A44 (power zone day-ahead prices) | ICE/Yahoo Finance (TTF, NBP).
+                History: {_SCANNER_YEARS} years requested per series.
+                """)
+
+            st.caption(
+                "Sources: ENTSO-E A44 (NO2, NL, DE, FR day-ahead) | "
+                "ICE/Yahoo Finance (TTF, NBP)"
+            )
 
 
 # ── Footer ────────────────────────────────────────────────────────────────────
