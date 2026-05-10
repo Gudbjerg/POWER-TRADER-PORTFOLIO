@@ -105,7 +105,7 @@ def _get_scanner_prices(years: int = 3) -> pd.DataFrame:
             _cli = _EPC(api_key=_key)
             _end = pd.Timestamp.now(tz="UTC").normalize()
             _st0 = _end - pd.Timedelta(days=int(years * 365))
-            for _lbl, _eic in [("de", "10Y1001A1001A83F"), ("fr", "10YFR-RTE------C")]:
+            for _lbl, _eic in [("de", "10Y1001A1001A63L"), ("fr", "10YFR-RTE------C")]:
                 _chunks: list = []
                 _cs = _st0
                 while _cs < _end:
@@ -171,7 +171,7 @@ def _run_coint_scanner(price_df: pd.DataFrame) -> list[dict]:
             _X_sc    = _sm_sc.add_constant(_indep)
             _ols_sc  = _sm_sc.OLS(_dep, _X_sc).fit()
             _beta_sc = float(_ols_sc.params[1])
-            _resid_sc = _ols_sc.resid.values.copy()
+            _resid_sc = np.asarray(_ols_sc.resid, dtype=float).copy()
             _rl  = _resid_sc[:-1]
             _rd  = np.diff(_resid_sc)
             _ou  = _sm_sc.OLS(_rd, _sm_sc.add_constant(_rl)).fit()
@@ -417,7 +417,7 @@ try:
     _sc_ttf_px = ttf.get("prices", pd.DataFrame())
     _sc_ttf_latest = float(_sc_ttf_px["price"].iloc[-1]) if not _sc_ttf_px.empty else 50.0
     _sc_eua, _ = _get_eua()
-    _sc_live_load, _ = _get_de_live_load_gw()
+    _sc_live_load, _sc_load_src = _get_de_live_load_gw()
     _sc_ref_demand = (
         float(np.clip(round(_sc_live_load), 30, 90))
         if _sc_live_load is not None else 60.0
@@ -438,7 +438,13 @@ try:
         "lignite": "Lignite-marginal — mid-stack clearing",
         "biomass": "Biomass-marginal — mid-stack clearing",
     }.get(_sc_fuel, f"{_sc_fuel} marginal")
-    _sc_demand_label = f"{_sc_ref_demand:.0f} GW" + (" live" if _sc_live_load is not None else " ref")
+    if _sc_live_load is None:
+        _sc_fuel_note += f" · A65 n/a: {_sc_load_src}"
+    _sc_demand_label = (
+        f"{_sc_ref_demand:.0f} GW live"
+        if _sc_live_load is not None
+        else f"{_sc_ref_demand:.0f} GW ref"
+    )
     _sc_signals.append({"name": f"Marginal Fuel ({_sc_demand_label})",
                          "value": _sc_marg["label"].split("/")[0].strip(),
                          "direction": _sc_dir, "note": _sc_fuel_note})
@@ -3323,18 +3329,28 @@ with tab_scanner:
     else:
         _scan_universe = " · ".join(c.upper() for c in _scan_cols)
         st.caption(f"Universe loaded: **{_scan_universe}** — {len(_scan_px):,} daily obs (longest common window)")
+        _expected_extra = {"de", "fr", "nbp"}
+        _missing_extra  = _expected_extra - set(_scan_cols)
+        if _missing_extra:
+            st.caption(
+                "Not loaded: " + ", ".join(m.upper() for m in sorted(_missing_extra))
+                + " — ENTSO-E A44 key required for DE/FR; NBP requires yfinance (ICE/Yahoo Finance)."
+            )
 
+        _scan_err_msg = None
         try:
             with st.spinner("Running Engle-Granger tests across all pairs…"):
                 _scan_res = _run_coint_scanner(_scan_px)
-        except Exception as _scan_err:
-            st.error(f"Scanner failed: {_scan_err}", icon="🚨")
+        except Exception as _scan_ex:
+            _scan_err_msg = f"{type(_scan_ex).__name__}: {_scan_ex}"
             _scan_res = []
 
-        if not _scan_res:
+        if _scan_err_msg:
+            st.error(f"Scanner failed — {_scan_err_msg}", icon="🚨")
+        elif not _scan_res:
             st.info(
-                "No pairs tested — check that statsmodels is installed and data has "
-                f"≥{COINT_MIN_OBS} observations per pair.",
+                "No pairs tested — no pair had sufficient overlapping data "
+                f"(≥{COINT_MIN_OBS} obs required per pair).",
                 icon="ℹ️",
             )
         else:
