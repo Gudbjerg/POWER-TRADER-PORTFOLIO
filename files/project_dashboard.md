@@ -88,3 +88,21 @@ git commit -m "Refresh disk cache for HF cold-start"
 
 - URL: https://github.com/Gudbjerg/POWER-TRADER-PORTFOLIO
 - Streamlit Community Cloud: auto-deploys from `origin/main`
+
+---
+
+## Outreach status
+
+**Outreach-ready as of 2026-05-19.**
+
+Lead link: https://huggingface.co/spaces/TobGud/power-trader-portfolio
+
+Platform at outreach cut: 5 pages · 14 Layer 2 tabs · 4 Layer 3 tabs · Mispricing Dashboard (8 signals) · HF commit `0b9a1f6`
+
+### Remaining deferred work (post first-wave outreach)
+
+| Item | Description |
+|------|-------------|
+| Phase C-arch | Render migration, 15-min MTU granularity, DataSourceRegistry abstraction |
+| D2_alt | Rolling cointegration stability heatmap — which pairs consistently cointegrated vs episodic; feeds D3 confidence scores |
+| Phase E (BESS) | Battery storage arbitrage optimiser — multi-session build, high positioning value for storage-focused roles |
