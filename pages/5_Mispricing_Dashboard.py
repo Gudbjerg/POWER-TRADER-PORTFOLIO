@@ -17,7 +17,7 @@ _PAGE_T0 = _time.perf_counter()
 
 st.set_page_config(
     page_title="Mispricing Dashboard",
-    page_icon="M",
+    page_icon="⚡",
     layout="wide",
     initial_sidebar_state="collapsed",
 )
@@ -562,12 +562,6 @@ with st.expander("Methodology", expanded=False):
     GIE AGSI+ (EU storage), ENTSO-E B31 (hydro), ENTSO-E A65 (DE load).
     Signals with missing data sources are silently omitted from the table.
     """)
-
-# ── Sidebar debug ─────────────────────────────────────────────────────────────
-with st.sidebar:
-    st.markdown("#### Debug")
-    st.caption(f"Page rendered in {_time.perf_counter() - _PAGE_T0:.1f}s")
-    st.caption(f"Signals computed: {len(_signals)}")
 
 # ── Footer ────────────────────────────────────────────────────────────────────
 st.divider()

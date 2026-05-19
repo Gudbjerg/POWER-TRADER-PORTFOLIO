@@ -1,5 +1,5 @@
 """
-European Power and Gas Analysis Platform - Landing Page
+European Gas & Power Market Intelligence Platform — Landing Page
 """
 import streamlit as st
 from dotenv import load_dotenv
@@ -7,36 +7,35 @@ from dotenv import load_dotenv
 load_dotenv()
 
 st.set_page_config(
-    page_title="European Power and Gas Analysis Platform",
-    page_icon="P",
+    page_title="European Gas & Power — Market Intelligence Platform",
+    page_icon="⚡",
     layout="wide",
-    initial_sidebar_state="expanded",
+    initial_sidebar_state="collapsed",
 )
 
 from utils.helpers import has_entsoe_key, has_agsi_key, apply_dark_theme
 
 apply_dark_theme()
 
-# ── Hero ───────────────────────────────────────────────────────────────────
-st.markdown("# European Power and Gas Analysis Platform")
+# ── Hero ───────────────────────────────────────────────────────────────────────
+st.markdown("# European Gas & Power Market Intelligence Platform")
 st.markdown(
-    "<p style='color:#8b949e;font-size:1.05rem;line-height:1.7;max-width:820px;'>"
-    "A four-layer market intelligence platform for European power and gas markets. "
-    "Integrates live fundamental data, quantitative models, geopolitical context, "
-    "and market analytics: the tools a physical energy trader uses daily, built from scratch."
+    "<p style='color:#8b949e;font-size:1.05rem;line-height:1.7;max-width:860px;'>"
+    "A four-layer market intelligence platform built to mirror the analytical workflow of a European gas and power trader. "
+    "Live fundamental surveillance, quantitative signal generation, cross-commodity macro analysis, "
+    "and machine learning — integrated across five pages and 19 analytical modules."
     "</p>",
     unsafe_allow_html=True,
 )
 st.info(
-    "First page load fetches live data from ENTSO-E, GIE AGSI+, Nord Pool, and Yahoo Finance. "
-    "Allow 1–2 minutes for all panels to populate, particularly on Layer 1 and Layer 4. "
-    "Subsequent loads are cached and near-instant.",
+    "First load fetches live data from ENTSO-E, GIE AGSI+, Nord Pool, and Yahoo Finance. "
+    "Allow 1–2 minutes for all panels to populate. Subsequent loads are cached and near-instant.",
     icon="⏱",
 )
 
 st.divider()
 
-# ── Data source status ─────────────────────────────────────────────────────
+# ── Data source status ─────────────────────────────────────────────────────────
 st.markdown("#### Data Source Status")
 s1, s2, s3 = st.columns(3)
 with s1:
@@ -54,7 +53,7 @@ with s3:
 
 st.divider()
 
-# ── Layer cards ────────────────────────────────────────────────────────────
+# ── Layer cards ────────────────────────────────────────────────────────────────
 st.markdown("#### Platform Layers")
 
 c1, c2 = st.columns(2)
@@ -65,175 +64,120 @@ with c1:
   <div style="color:#58a6ff;font-size:0.72rem;text-transform:uppercase;letter-spacing:1px;font-weight:600;">Layer 1</div>
   <div style="color:#e6edf3;font-size:1.05rem;font-weight:600;margin:4px 0 10px;">Live Market Monitor</div>
   <div style="color:#8b949e;font-size:0.88rem;line-height:1.65;">
-    Real-time European energy data refreshed hourly: EU and German gas storage versus the 5-year historical band,
-    NW European LNG terminal sendout (Zeebrugge, Gate, South Hook, Dunkirk), TTF gas price with moving averages
-    and spike alerts, day-ahead spot prices across NO1, NO2, SE3, NL and FI, the TTF seasonal forward curve,
-    plus Norwegian hydro reservoir levels, Nordic cross-border flows, and the solar duck curve (ENTSO-E).
+    Fundamental surveillance across ten real-time panels: EU and German gas storage against the 5-year
+    historical band, NW European LNG terminal sendout (Zeebrugge, Gate, South Hook, Dunkirk), TTF spot
+    with 30/90-day moving averages and spike alerts, day-ahead prices across NO1/NO2/SE3/NL/FI with
+    Nordic–Continental spread history, TTF seasonal forward strip (M+1–M+18), Norwegian hydro reservoir
+    levels (P10/P50/P90), Nordic cross-border flow utilisation percentages, and the German intraday
+    solar duck curve with cannibalisation signal.
   </div>
 </div>
 """, unsafe_allow_html=True)
-    st.page_link("pages/1_Live_Monitor.py", label="Open Live Monitor")
+    st.page_link("pages/1_Live_Monitor.py", label="Open Live Monitor →")
 
 with c2:
     st.markdown("""
 <div style="background:#161b22;border:1px solid rgba(255,255,255,0.08);border-radius:8px;padding:20px 22px;margin-bottom:12px;">
-  <div style="color:#3fb950;font-size:0.72rem;text-transform:uppercase;letter-spacing:1px;font-weight:600;">Layer 2</div>
+  <div style="color:#3fb950;font-size:0.72rem;text-transform:uppercase;letter-spacing:1px;font-weight:600;">Layer 2 · 14 models</div>
   <div style="color:#e6edf3;font-size:1.05rem;font-weight:600;margin:4px 0 10px;">Quantitative Analysis</div>
   <div style="color:#8b949e;font-size:0.88rem;line-height:1.65;">
-    Quantitative models used by physical power traders: gas-to-power OLS regression with rolling residual
-    z-score tracker, storage refill Monte Carlo simulation across 1,000 paths with an empirical injection
-    rate bootstrap, and a rolling 30-day price spike detector covering all major Nordic and Continental
-    bidding zones.
+    Full quant stack for gas and power trading: storage refill Monte Carlo (1,000 bootstrap paths against
+    the EU 90% mandate), gas-to-power OLS regression with rolling residual z-score, German merit order
+    with live ENTSO-E demand, multi-pair cointegration scanner across a 6-asset universe
+    (Engle-Granger, OU half-life, ranked entry signals), TTF forward curve PCA decomposing the M+1–M+18
+    strip into level/slope/curvature factors with calendar-spread and butterfly trade signals,
+    plus TTF seasonal norm tracker, hydro lead/lag, and further models.
   </div>
 </div>
 """, unsafe_allow_html=True)
-    st.page_link("pages/2_Quant_Analysis.py", label="Open Quant Analysis")
+    st.page_link("pages/2_Quant_Analysis.py", label="Open Quant Analysis →")
 
 c3, c4 = st.columns(2)
 
 with c3:
     st.markdown("""
 <div style="background:#161b22;border:1px solid rgba(255,255,255,0.08);border-radius:8px;padding:20px 22px;margin-bottom:12px;">
-  <div style="color:#d29922;font-size:0.72rem;text-transform:uppercase;letter-spacing:1px;font-weight:600;">Layer 3</div>
-  <div style="color:#e6edf3;font-size:1.05rem;font-weight:600;margin:4px 0 10px;">Geopolitical and Macro Signals</div>
+  <div style="color:#d29922;font-size:0.72rem;text-transform:uppercase;letter-spacing:1px;font-weight:600;">Layer 3 · 4 panels</div>
+  <div style="color:#e6edf3;font-size:1.05rem;font-weight:600;margin:4px 0 10px;">Geopolitical & Macro Signals</div>
   <div style="color:#8b949e;font-size:0.88rem;line-height:1.65;">
-    Macro and geopolitical context for European energy markets: TTF price history with annotated supply
-    event overlays (Iran nuclear risk, US LNG tariff threats, Norwegian outages), EU gas supply mix by
-    origin from 2020 to present (Russia collapse, US LNG rise), and a cross-commodity spillover chain
-    linking gas prices to fertiliser and agricultural markets.
+    Four macro panels: TTF price timeline with 19 annotated supply disruptions and a 5/20/60-day momentum
+    ribbon, EU gas supply-mix evolution 2020–2026 (Russia phase-out, US LNG ramp, Algerian shift),
+    gas-to-fertiliser-to-agriculture spillover chain with rolling 90-day correlations, and a 7×7
+    cross-commodity correlation grid (TTF, Brent, API2 coal, EUA, copper, aluminium, Baltic Dry)
+    with 90-day Pearson heatmap and ±10-day lead-lag analysis.
   </div>
 </div>
 """, unsafe_allow_html=True)
-    st.page_link("pages/3_Macro_Signals.py", label="Open Macro Signals")
+    st.page_link("pages/3_Macro_Signals.py", label="Open Macro Signals →")
 
 with c4:
     st.markdown("""
 <div style="background:#161b22;border:1px solid rgba(255,255,255,0.08);border-radius:8px;padding:20px 22px;margin-bottom:12px;">
   <div style="color:#8b949e;font-size:0.72rem;text-transform:uppercase;letter-spacing:1px;font-weight:600;">Layer 4</div>
-  <div style="color:#e6edf3;font-size:1.05rem;font-weight:600;margin:4px 0 10px;">ML and Advanced Models</div>
+  <div style="color:#e6edf3;font-size:1.05rem;font-weight:600;margin:4px 0 10px;">ML Models</div>
   <div style="color:#8b949e;font-size:0.88rem;line-height:1.65;">
-    Machine learning applied to energy market forecasting: LSTM next-day power price forecaster,
-    Hidden Markov Model market regime classifier (hydro, gas, wind, stress states),
-    and NLP news sentiment signal using FinBERT on energy headlines.
-    Train buttons included — models run on available hardware.
+    Machine learning applied to energy price formation: a 2-layer PyTorch LSTM next-day power price
+    forecaster with honest baseline comparison (model flagged if MAE exceeds the naïve benchmark),
+    a 4-state Gaussian HMM regime classifier (hydro-driven, gas-driven, renewables-driven, geopolitical
+    stress) with current regime badge and 30-day history, and a FinBERT news sentiment signal with
+    Granger causality test against TTF returns.
   </div>
 </div>
 """, unsafe_allow_html=True)
-    st.page_link("pages/4_ML_Models.py", label="Open ML Models")
+    st.page_link("pages/4_ML_Models.py", label="Open ML Models →")
+
+st.markdown("""
+<div style="background:#161b22;border:1px solid rgba(255,255,255,0.08);border-left:3px solid #f85149;border-radius:0 8px 8px 0;padding:20px 22px;margin-top:4px;margin-bottom:12px;">
+  <div style="color:#f85149;font-size:0.72rem;text-transform:uppercase;letter-spacing:1px;font-weight:600;">Layer 5 · Signals Aggregator</div>
+  <div style="color:#e6edf3;font-size:1.05rem;font-weight:600;margin:4px 0 10px;">Mispricing Dashboard</div>
+  <div style="color:#8b949e;font-size:0.88rem;line-height:1.65;">
+    Eight rich/cheap signals from Layers 1–4 ranked into a single composite view: historical percentile
+    context (how extreme is the current reading vs 2–3 years of history), direction badge
+    (Bullish/Bearish/Neutral), confidence classification (High/Medium/Low by distance from the 50th
+    percentile), and composite commentary. Signals sorted by extremity — most off-centre first.
+    Covers TTF seasonal position, EU storage fill, NO2/NL spread z-score, NO2 vs TTF regression
+    residual, Clean Spark Spread, Norwegian hydro level, TTF vs storage residual, and marginal fuel regime.
+  </div>
+</div>
+""", unsafe_allow_html=True)
+st.page_link("pages/5_Mispricing_Dashboard.py", label="Open Mispricing Dashboard →")
 
 st.divider()
 
-# ── Research Pipeline ──────────────────────────────────────────────────────
-st.markdown("#### Research Pipeline")
-st.markdown(
-    "<p style='color:#8b949e;font-size:0.88rem;margin-bottom:16px;'>"
-    "Independent analyses and platform extensions in progress or under consideration. "
-    "Each is framed as a specific market question, not just a feature."
-    "</p>",
-    unsafe_allow_html=True,
-)
-
-rp1, rp2, rp3 = st.columns(3)
-
-with rp1:
-    st.markdown("""
-<div style="background:#161b22;border:1px solid rgba(255,255,255,0.08);border-left:3px solid #4caf8f;border-radius:0 8px 8px 0;padding:16px 18px;margin-bottom:10px;">
-  <div style="color:#4caf8f;font-size:0.68rem;text-transform:uppercase;letter-spacing:1px;font-weight:600;margin-bottom:6px;">Independent Analysis</div>
-  <div style="color:#e6edf3;font-size:0.92rem;font-weight:600;margin-bottom:8px;">Norwegian Hydro and NO2 Winter Prices</div>
-  <div style="color:#8b949e;font-size:0.82rem;line-height:1.65;">
-    What is the historical relationship between autumn reservoir levels and NO2 winter day-ahead prices?
-    Using ENTSO-E B31 data, build a simple regression and form a quantitative view on winter 2026/27
-    given current reservoir drawdown. Does low hydro in September predict a winter premium, and by how much?
-  </div>
-</div>
-<div style="background:#161b22;border:1px solid rgba(255,255,255,0.08);border-left:3px solid #4caf8f;border-radius:0 8px 8px 0;padding:16px 18px;">
-  <div style="color:#4caf8f;font-size:0.68rem;text-transform:uppercase;letter-spacing:1px;font-weight:600;margin-bottom:6px;">Platform: Layer 2</div>
-  <div style="color:#e6edf3;font-size:0.92rem;font-weight:600;margin-bottom:8px;">Nordic Price Decomposition</div>
-  <div style="color:#8b949e;font-size:0.82rem;line-height:1.65;">
-    Decompose NO2 day-ahead prices into hydro, wind, gas, and Continental components using
-    multivariate regression on ENTSO-E generation and hydro data. Identify which factor
-    is driving the marginal price on any given day. This is the analytical foundation for the HMM regime model.
-  </div>
-</div>
-""", unsafe_allow_html=True)
-
-with rp2:
-    st.markdown("""
-<div style="background:#161b22;border:1px solid rgba(255,255,255,0.08);border-left:3px solid #58a6ff;border-radius:0 8px 8px 0;padding:16px 18px;margin-bottom:10px;">
-  <div style="color:#58a6ff;font-size:0.68rem;text-transform:uppercase;letter-spacing:1px;font-weight:600;margin-bottom:6px;">Independent Analysis</div>
-  <div style="color:#e6edf3;font-size:0.92rem;font-weight:600;margin-bottom:8px;">Qatar LNG Diversion: Event Study</div>
-  <div style="color:#8b949e;font-size:0.82rem;line-height:1.65;">
-    Reconstruct the March 2026 Qatar LNG diversion using GIE ALSI sendout data, TTF prices,
-    and the JKM-TTF spread. How quickly did the LNG sendout drop translate into a TTF price response?
-    What was the lag? How long did it persist? A precise, data-driven account of one specific
-    supply shock, using data already in this platform.
-  </div>
-</div>
-<div style="background:#161b22;border:1px solid rgba(255,255,255,0.08);border-left:3px solid #58a6ff;border-radius:0 8px 8px 0;padding:16px 18px;">
-  <div style="color:#58a6ff;font-size:0.68rem;text-transform:uppercase;letter-spacing:1px;font-weight:600;margin-bottom:6px;">Platform: Layer 2</div>
-  <div style="color:#e6edf3;font-size:0.92rem;font-weight:600;margin-bottom:8px;">Merit Order and Supply Stack</div>
-  <div style="color:#8b949e;font-size:0.82rem;line-height:1.65;">
-    Build a simplified German merit order using ENTSO-E generation capacity data,
-    fuel prices (coal, gas, carbon), and capacity factors. Visualise the supply stack
-    and estimate where the marginal plant sits at current gas and coal prices.
-    Shows how much of the stack is displaced when gas falls below a given threshold.
-  </div>
-</div>
-""", unsafe_allow_html=True)
-
-with rp3:
-    st.markdown("""
-<div style="background:#161b22;border:1px solid rgba(255,255,255,0.08);border-left:3px solid #d29922;border-radius:0 8px 8px 0;padding:16px 18px;margin-bottom:10px;">
-  <div style="color:#d29922;font-size:0.68rem;text-transform:uppercase;letter-spacing:1px;font-weight:600;margin-bottom:6px;">Independent Analysis</div>
-  <div style="color:#e6edf3;font-size:0.92rem;font-weight:600;margin-bottom:8px;">Backtested TTF Seasonal Injection Strategy</div>
-  <div style="color:#8b949e;font-size:0.82rem;line-height:1.65;">
-    Can a simple rules-based strategy (buy summer TTF, sell winter TTF when the seasonal spread
-    exceeds storage cost) generate consistent returns historically? Backtest over 2019-2025
-    using ICE settlement prices. Account for storage costs (~€4/MWh round-trip), transaction costs,
-    and capital. Compare Sharpe ratio against a naive buy-and-hold benchmark.
-  </div>
-</div>
-<div style="background:#161b22;border:1px solid rgba(255,255,255,0.08);border-left:3px solid #d29922;border-radius:0 8px 8px 0;padding:16px 18px;">
-  <div style="color:#d29922;font-size:0.68rem;text-transform:uppercase;letter-spacing:1px;font-weight:600;margin-bottom:6px;">Platform: Layer 4</div>
-  <div style="color:#e6edf3;font-size:0.92rem;font-weight:600;margin-bottom:8px;">FinBERT Energy Sentiment Signal</div>
-  <div style="color:#8b949e;font-size:0.82rem;line-height:1.65;">
-    Daily sentiment scoring of energy headlines (Reuters, Montel, Recharge) using FinBERT.
-    Does news sentiment Granger-cause next-day TTF price changes? The March 2026 Hormuz
-    escalation (a 40% TTF spike in three days) is a natural test case: was the sentiment
-    shift detectable before prices fully adjusted?
-  </div>
-</div>
-""", unsafe_allow_html=True)
-
-st.divider()
-
-# ── About ──────────────────────────────────────────────────────────────────
-st.markdown("#### About This Platform")
-col_about, col_stack = st.columns([2, 1])
-with col_about:
+# ── About ──────────────────────────────────────────────────────────────────────
+with st.expander("About this platform", expanded=False):
     st.markdown(
-        "<div style='color:#8b949e;font-size:0.88rem;line-height:1.75;'>"
-        "Built to demonstrate the intersection of energy market knowledge and data engineering. "
-        "Each layer mirrors the analytical workflow of a physical power trader: "
-        "monitoring live fundamentals, running quantitative supply-demand models, "
-        "contextualising moves against geopolitical events, and applying machine learning "
-        "to identify structural market regimes.<br><br>"
-        "Data is sourced exclusively from public APIs (GIE, ENTSO-E, Nord Pool, ICE/Yahoo Finance). "
-        "All models are built from scratch in Python."
+        "<div style='color:#c9d1d9;font-size:0.90rem;line-height:1.85;max-width:820px;'>"
+        "Built by <strong>Tobias Gudbjerg</strong>, currently in equity sales at ABG Sundal Collier, "
+        "to apply commodity markets and quantitative methods to European gas and power trading. "
+        "The analytical framework draws on coursework from Bayes Business School: "
+        "SMM591 Commodity Derivatives &amp; Trading, SMM284 Applied Machine Learning, "
+        "SMM620 FX Trading &amp; Hedging, and SMM921 Market Microstructure. "
+        "All data is sourced from public APIs (GIE AGSI+, ENTSO-E Transparency, Nord Pool, ICE/Yahoo Finance); "
+        "all models are implemented from scratch in Python."
         "</div>",
         unsafe_allow_html=True,
     )
-with col_stack:
-    st.markdown(
-        "<div style='color:#8b949e;font-size:0.82rem;line-height:1.8;'>"
-        "<strong style='color:#c9d1d9;'>Stack</strong><br>"
-        "Python 3.11+ &nbsp;·&nbsp; Streamlit<br>"
-        "Plotly &nbsp;·&nbsp; Pandas &nbsp;·&nbsp; NumPy<br>"
-        "scikit-learn &nbsp;·&nbsp; statsmodels<br>"
-        "yfinance &nbsp;·&nbsp; entsoe-py<br>"
-        "</div>",
-        unsafe_allow_html=True,
-    )
+    _ac1, _ac2 = st.columns(2)
+    with _ac1:
+        st.markdown(
+            "<div style='color:#8b949e;font-size:0.82rem;line-height:1.9;margin-top:10px;'>"
+            "<strong style='color:#c9d1d9;'>Analytics</strong><br>"
+            "scikit-learn &nbsp;·&nbsp; statsmodels &nbsp;·&nbsp; PyTorch<br>"
+            "hmmlearn &nbsp;·&nbsp; HuggingFace Transformers (FinBERT)"
+            "</div>",
+            unsafe_allow_html=True,
+        )
+    with _ac2:
+        st.markdown(
+            "<div style='color:#8b949e;font-size:0.82rem;line-height:1.9;margin-top:10px;'>"
+            "<strong style='color:#c9d1d9;'>Data &amp; Infrastructure</strong><br>"
+            "Python 3.11+ &nbsp;·&nbsp; Streamlit &nbsp;·&nbsp; Plotly<br>"
+            "Pandas &nbsp;·&nbsp; NumPy &nbsp;·&nbsp; yfinance &nbsp;·&nbsp; entsoe-py<br>"
+            "Deployed on HuggingFace Spaces"
+            "</div>",
+            unsafe_allow_html=True,
+        )
 
 st.divider()
 st.markdown(

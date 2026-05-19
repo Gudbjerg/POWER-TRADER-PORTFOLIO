@@ -11,7 +11,7 @@ load_dotenv()
 
 st.set_page_config(
     page_title="Macro Signals",
-    page_icon="M",
+    page_icon="⚡",
     layout="wide",
     initial_sidebar_state="collapsed",
 )

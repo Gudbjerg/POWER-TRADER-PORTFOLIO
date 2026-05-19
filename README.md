@@ -9,71 +9,78 @@ app_file: app.py
 pinned: false
 ---
 
-# European Power and Gas Analysis Platform
+# ⚡ European Gas & Power Market Intelligence Platform
 
-A four-layer market intelligence platform for European power and gas markets, built to mirror the analytical workflow of a physical energy trader. All data from public APIs. All models built from scratch in Python.
+**A four-layer market intelligence platform built to mirror the analytical workflow of a European gas and power trader.** Live fundamental surveillance, quantitative signal generation, cross-commodity macro context, and machine learning — integrated across five pages and 19 analytical modules.
 
-**Live demo:** [power-trader-portfolio.streamlit.app](https://power-trader-portfolio.streamlit.app)
+**→ Live demo: [huggingface.co/spaces/TobGud/power-trader-portfolio](https://huggingface.co/spaces/TobGud/power-trader-portfolio)**
 
 ---
 
-## Platform Overview
+## What it does
 
-### Layer 1: Live Market Monitor
+The platform covers the full analytical stack of a physical gas and power trading desk. All data is sourced from public APIs (GIE AGSI+, ENTSO-E Transparency, Nord Pool, ICE/Yahoo Finance). All models are implemented from scratch in Python.
 
-Real-time fundamentals refreshed hourly across 10 panels:
+### Layer 1 — Live Market Monitor
 
-| Panel | Data source | What it shows |
+Real-time fundamentals refreshed hourly across ten panels:
+
+| Panel | Source | Signal |
 |---|---|---|
-| EU gas storage vs 5-year band | GIE AGSI+ | Current fill % against historical min/mean/max range |
-| German gas storage | GIE AGSI+ | Germany-specific storage, 25% of annual consumption |
-| NW EU LNG sendout | GIE ALSI | Daily sendout from Zeebrugge, Gate, South Hook, Dunkirk |
-| TTF gas price | ICE via Yahoo Finance | Spot price, 30/90-day MA, spike alerts |
-| TTF seasonal forward curve | Yahoo Finance | 18-month implied strip, Winter/Summer spread, Cal 26/27 |
-| Day-ahead spot prices | Nord Pool | NO1, NO2, SE3, NL, FI with Nordic-Continental spread + 365-day spread history |
-| Norwegian hydro reservoirs | ENTSO-E B31 | Weekly fill level vs P10/P50/P90 historical percentiles |
-| Nordic cross-border flows | ENTSO-E | NordLink, NorNed, NSN, Skagerrak + interconnector utilisation % |
-| Solar duck curve | ENTSO-E / Fraunhofer ISE | Germany intraday price vs solar output, 14-day average |
-| German coal generation | ENTSO-E A75 | Quarterly hard coal + lignite dispatch, fuel switching indicator |
+| EU gas storage vs 5-year band | GIE AGSI+ | Fill % vs historical min/mean/max |
+| German gas storage | GIE AGSI+ | Country-level fill, ~25% of EU working volume |
+| NW EU LNG terminal sendout | GIE ALSI | Daily sendout: Zeebrugge, Gate, South Hook, Dunkirk |
+| TTF gas price | ICE / Yahoo Finance | Spot, 30/90d MA, spike alerts at ±2σ |
+| TTF seasonal forward strip | Yahoo Finance | M+1–M+18 implied curve, Winter/Summer spread, Cal 26/27 |
+| Day-ahead spot prices | Nord Pool | NO1, NO2, SE3, NL, FI — Nordic–Continental spread + 365-day history |
+| Norwegian hydro reservoirs | ENTSO-E B31 | Weekly fill vs P10/P50/P90 percentile bands |
+| Nordic cross-border flows | ENTSO-E B09 | NordLink, NorNed, NSN, Skagerrak + interconnector utilisation % |
+| German solar duck curve | ENTSO-E / Fraunhofer ISE | Intraday price vs solar output, 14-day average |
+| German coal generation | ENTSO-E A75 | Quarterly hard coal + lignite dispatch, fuel-switching indicator |
 
-### Layer 2: Quantitative Analysis
+### Layer 2 — Quantitative Analysis (14 models)
 
-| Model | Method | Key output |
+| Model | Method | Output |
 |---|---|---|
 | Storage Refill Monte Carlo | Empirical bootstrap, 1,000 paths | Probability of reaching EU 90% mandate by Nov 1 |
-| Gas-to-Power OLS Regression | TTF to NL day-ahead, rolling window | Residual z-score tracker, regime interpretation |
-| Price Spike Detector | Rolling 30-day z-score | Active spike alerts across all Nord Pool bidding zones |
-| TTF Seasonal Backtest | Rules-based injection-withdrawal strategy | Annual P&L, Sharpe ratio, ex-crisis statistics |
-| German Supply Stack | Merit order, dynamic gas/coal SRMC | Marginal fuel ID, live A65 demand default, theoretical vs actual price |
-| Nordic Price Decomposition | Rolling 90-day multivariate OLS | Beta time series: NL, TTF, hydro, wind contributions to NO2 |
-| Wind Forecast Error Tracker | ENTSO-E A69 vs B18/B19 actuals | Daily error (GWh/%), 7-day RMSE, correlation with price volatility |
-| Sentiment → TTF Granger Causality | SSR F-test, lags 1–7d | p-value bar chart, significance verdict, sentiment/return overlay |
-| Storage–Price OLS Regression | Linear OLS, full history | Supply-risk premium = actual TTF − storage-implied fair value |
-| Hydro Reservoir Lead/Lag | Pearson cross-correlation, lags 0–21d | Peak lag, rolling 90d correlation, strength of hydro→price signal |
-| TTF Seasonal Norm Tracker | 5-year historical percentile bands | Current TTF vs 10th/25th/50th/75th/90th pct seasonal distribution |
-| NO2/NL Cointegration & Spread | Engle-Granger test, OU half-life | Expanding-window spread z-score (no look-ahead), hedge ratio β, honest ±1σ reversion backtest hit-rate |
-| Quant Signal Scorecard | 5-signal aggregation | Upside/downside/neutral tally from all quant models |
+| Gas-to-Power OLS Regression | TTF→NL day-ahead, rolling window | Residual z-score tracker |
+| Price Spike Detector | Rolling 30-day z-score | Active alerts across all Nord Pool zones |
+| TTF Seasonal Backtest | Rules-based injection-withdrawal strategy | Annual P&L, Sharpe ratio, ex-crisis stats |
+| German Supply Stack | Merit order, dynamic gas/coal SRMC | Marginal fuel ID, live ENTSO-E demand override |
+| Nordic Price Decomposition | Rolling 90-day multivariate OLS | Beta time series: NL, TTF, hydro, wind → NO2 |
+| Wind Forecast Error Tracker | ENTSO-E A69 vs B18/B19 actuals | Daily error (GWh/%), 7-day RMSE, price correlation |
+| Granger Causality (Sentiment→TTF) | SSR F-test, lags 1–7d | p-value, significance verdict, sentiment/return overlay |
+| Storage–Price OLS Regression | Linear OLS, full history | Supply-risk premium: actual TTF − storage-implied fair value |
+| Hydro Lead/Lag | Pearson cross-correlation, lags 0–21d | Peak lag, rolling 90d correlation |
+| TTF Seasonal Norm Tracker | 5-year historical percentile bands | Current TTF vs 10th/25th/50th/75th/90th pct |
+| NO2/NL Cointegration & Spread | Engle-Granger, OU half-life | Expanding z-score (no look-ahead), hedge ratio, backtest hit-rate |
+| Multi-Pair Cointegration Scanner | 6-asset universe (NO2/NL/TTF/DE/FR/NBP) | All pairs ranked by E-G p-value, OU half-life, entry signal |
+| Forward Curve PCA | sklearn PCA on model-derived M+1–M+18 panel | Level/slope/curvature factors, PC2/PC3 z-score trade signals |
 
-### Layer 3: Geopolitical and Macro Signals
+### Layer 3 — Geopolitical & Macro Signals (4 panels)
 
-- TTF price history with 19 annotated supply event overlays: Iran/Hormuz conflict cluster, Ras Laffan strike, US LNG tariff threats, Norwegian outages, Russian supply cuts, Qatar diversions
-- **TTF momentum ribbon:** 5/20/60-day price momentum (ROC %) with trend alignment KPI and ±5/±10% shading
-- EU gas supply mix by origin, 2020 to present: Russia collapse, US LNG rise, Algerian variability
-- Cross-commodity spillover chain: TTF to European fertiliser to wheat/corn, with rolling 90-day correlations
+- **Geopolitical overlay:** TTF price history with 19 annotated supply disruptions (Iran/Hormuz conflict cluster, Ras Laffan strike, US LNG tariff threat, Norwegian outages, Russian cut-off, Qatar diversions) plus 5/20/60-day momentum ribbon
+- **EU gas supply mix 2020–2026:** Russia collapse from 40% → 3%, US LNG rise from 7% → 29%, Algerian variability — structural shift in European supply security
+- **Cross-commodity spillover chain:** TTF → European fertiliser (Haber-Bosch economics) → global wheat/corn, with rolling 90-day Pearson correlations
+- **7×7 Correlation Grid:** 90-day rolling Pearson heatmap across TTF, Brent, API2 coal, EUA, copper, aluminium, and Baltic Dry — with lead-lag analysis (±10-day lag sweep, top 15 pairs ranked by |ρ|)
 
-### Layer 4: ML Models
+### Layer 4 — ML Models
 
-- **LSTM price forecaster** (Model 1): 2-layer PyTorch LSTM, 64-32 units, dropout 0.2. Features: NO2 and NL prices, TTF, spread, volatility, hydro, calendar. Train/predict UI with progress callback. Requires local training before first use.
-- **HMM regime classifier** (Model 2): 4-state Gaussian HMM via hmmlearn. Regimes: hydro-driven, gas-driven, renewables-driven, geopolitical stress. Current regime badge with confidence and 30-day history.
-- **FinBERT sentiment signal** (Model 3): Live scoring of energy headlines from Reuters, Montel, and Recharge RSS feeds. Daily net sentiment score. Granger causality test against NO2 price changes.
+- **LSTM price forecaster:** 2-layer PyTorch LSTM, 64→32 units, dropout 0.2. Features: NO2/NL prices, TTF, spread, volatility, hydro, calendar. Honest baseline comparison — model flagged if MAE exceeds naïve benchmark.
+- **HMM regime classifier:** 4-state Gaussian HMM (hmmlearn). Regimes: hydro-driven, gas-driven, renewables-driven, geopolitical stress. Current regime badge with confidence and 30-day history.
+- **FinBERT sentiment signal:** Live scoring of energy headlines from Reuters, Montel, and Recharge RSS. Daily net sentiment, Granger causality test vs TTF returns.
+
+### Layer 5 — Mispricing Dashboard
+
+Eight rich/cheap signals aggregated into a single ranked view: historical percentile context, Bullish/Bearish/Neutral badge, High/Medium/Low confidence, and composite commentary. Signals sorted by extremity — most off-centre first. Covers TTF seasonal position, EU storage fill, NO2/NL spread z-score, NO2 vs TTF residual, Clean Spark Spread, Norwegian hydro level, TTF vs storage residual, and marginal fuel regime.
 
 ---
 
-## Running Locally
+## Running locally
 
-**Prerequisites:** Python 3.11+. Free API keys from:
-- [GIE AGSI+](https://agsi.gie.eu): gas storage and LNG
-- [ENTSO-E Transparency Platform](https://transparency.entsoe.eu): power, hydro, solar, generation
+**Prerequisites:** Python 3.11+. Free API keys:
+- [GIE AGSI+](https://agsi.gie.eu) — gas storage and LNG sendout
+- [ENTSO-E Transparency](https://transparency.entsoe.eu) — power prices, hydro, generation, flows
 
 ```bash
 git clone https://github.com/Gudbjerg/POWER-TRADER-PORTFOLIO.git
@@ -92,124 +99,31 @@ ENTSOE_API_KEY=your_entsoe_key_here
 streamlit run app.py
 ```
 
-Opens at `http://localhost:8501`. All panels show a clear status message when API keys are absent.
-
----
-
-## Deploying to Streamlit Community Cloud
-
-1. Fork or clone this repository to your GitHub account
-2. Go to [share.streamlit.io](https://share.streamlit.io) and connect your repo
-3. Set the main file to `app.py`
-4. Under **Settings > Secrets**, add:
-
-```toml
-AGSI_API_KEY = "your_gie_key_here"
-ENTSOE_API_KEY = "your_entsoe_key_here"
-```
-
-The app reads from `st.secrets` on Cloud and `.env` locally. No code changes needed.
-
-**Note on ML models:** LSTM and HMM weights are not included in the repository. Train locally first (click Train in Layer 4), then commit the files in `models/weights/` before deploying. FinBERT sentiment history accumulates on disk automatically after deployment.
-
----
-
-## Data Source Status
-
-| Source | Status | Notes |
-|---|---|---|
-| GIE AGSI+ (storage) | Live | Updated daily at 19:30 CET |
-| GIE ALSI (LNG) | Live | Daily sendout per terminal |
-| Yahoo Finance / TTF=F | Live | Front-month continuous |
-| Nord Pool (spot prices) | Live | DE-LU returns null due to licensing; NL used as proxy |
-| ENTSO-E B31 (hydro) | Live | Weekly filling levels, Norway aggregate |
-| ENTSO-E A75 (generation) | Live | German coal by production type |
-| ENTSO-E A44 (day-ahead prices) | Live | Used for ML training data (NO2, NL, 3-year history) |
-| ENTSO-E A69 (wind forecast) | Live | Day-ahead wind forecast for DE, DK1, NO, GB |
-| ENTSO-E B09/B10 (flows) | Degraded | Server issue since March 2026; panel built and waiting |
-| ENTSO-E B16/B19 (wind/solar) | Degraded | Same server issue; Fraunhofer ISE fallback active for solar |
-| Fraunhofer ISE / energy-charts.info | Fallback | Activates automatically when ENTSO-E B16 is unavailable |
-
----
-
-## Architecture
-
-```
-app.py                          # Landing page with layer cards and data source status
-pages/
-  1_Live_Monitor.py             # Layer 1: 10-tab live dashboard
-  2_Quant_Analysis.py           # Layer 2: 7-tab quantitative models
-  3_Macro_Signals.py            # Layer 3: geopolitical and macro panels
-  4_ML_Models.py                # Layer 4: ML model specs and live inference
-data/
-  gas_storage.py                # GIE AGSI+ (EU + DE storage, historical bands)
-  lng_terminals.py              # GIE ALSI (NW EU LNG sendout)
-  prices.py                     # TTF front-month via yfinance
-  forward_curve.py              # TTF seasonal forward strip construction
-  spot_prices.py                # Nord Pool day-ahead prices (public endpoint)
-  power_flows.py                # ENTSO-E cross-border physical flows
-  solar.py                      # ENTSO-E B16 solar + Fraunhofer ISE fallback
-  hydro.py                      # ENTSO-E B31 hydro reservoir levels
-  generation.py                 # ENTSO-E A75 German generation by fuel type
-  wind.py                       # ENTSO-E B18/B19 wind actuals + A69 day-ahead forecast
-  commodities.py                # Cross-commodity prices via yfinance
-  events.py / events.json       # Geopolitical event catalogue (19 annotated events)
-  sentiment.py                  # FinBERT pipeline with 60-day disk persistence
-components/
-  storage_chart.py              # Gas storage vs historical band
-  lng_chart.py                  # LNG sendout stacked area
-  prices_chart.py               # TTF spot with event overlays
-  forward_curve_chart.py        # Seasonal forward curve bar chart
-  spot_prices_chart.py          # Multi-zone day-ahead price comparison
-  flows_chart.py                # Cross-border flows + NO2-GB trade balance
-  solar_chart.py                # Intraday solar cannibalisation (duck curve)
-  hydro_chart.py                # Hydro reservoir vs percentile bands
-  coal_chart.py                 # German coal generation fuel switching chart
-models/
-  storage_monte_carlo.py        # Bootstrap refill simulation, 1,000 paths
-  gas_power_regression.py       # OLS regression with rolling residuals
-  spike_detector.py             # Rolling z-score across all bidding zones
-  ttf_backtest.py               # Seasonal injection-withdrawal backtest
-  supply_stack.py               # German merit order, dynamic SRMC, EUA live price
-  nordic_decomp.py              # Rolling multivariate OLS, NO2 factor decomposition
-  wind_forecast_error.py        # A69 vs actuals: error, RMSE, price correlation
-  feature_assembly.py           # Daily feature matrix from all sources
-  lstm_model.py                 # PyTorch LSTM definition, training, inference
-  hmm_model.py                  # hmmlearn HMM, regime labelling, inference
-utils/
-  helpers.py                    # CSS theme, HTML KPI components, API key checks
-  scenarios.py                  # Signal interpretation (status, headline, detail text)
-config/
-  settings.py                   # ENTSO-E EIC codes, alert thresholds
-```
+All panels display a clear status message when API keys are absent. The platform degrades gracefully — public data (TTF, Nord Pool spot, yfinance) loads without any keys.
 
 ---
 
 ## Stack
 
-**Language:** Python 3.11+
-
-**Dashboard:** Streamlit 1.38.0, Plotly
-
-**Data:** Pandas, NumPy, yfinance, entsoe-py, requests, feedparser
-
-**Models:** scikit-learn, statsmodels, PyTorch, hmmlearn, transformers (FinBERT)
-
-**Deploy:** Streamlit Community Cloud (GitHub integration, auto-redeploy on push)
+| Layer | Libraries |
+|---|---|
+| Dashboard | Streamlit 1.38+, Plotly |
+| Data | Pandas, NumPy, yfinance, entsoe-py, requests, feedparser |
+| Quant models | scikit-learn, statsmodels |
+| ML | PyTorch, hmmlearn, HuggingFace Transformers (FinBERT) |
+| Deploy | HuggingFace Spaces |
 
 ---
 
-## Key Design Decisions
+## Key design decisions
 
-**No lookahead in ML pipeline.** The scaler is fit on training data only. Rolling z-scores are computed backward-looking. Hydro percentile uses an expanding quantile, not a full-sample quantile.
+**No look-ahead in quantitative models.** Rolling z-scores are computed backward-looking. Expanding-window z-scores (cointegration, PCA factor scores) use only data available at each historical date.
 
-**All fallbacks are visible.** Every panel that switches to a fallback data source shows an `st.info` banner identifying the alternative source and explaining the switch. No silent degradation.
+**All fallbacks are visible.** Every panel that switches to a fallback source (e.g. Fraunhofer ISE when ENTSO-E B16 is unavailable) shows a banner identifying the alternative. No silent degradation.
 
-**Ex-crisis statistics.** The TTF backtest reports both full-sample and ex-crisis averages. GY2021 and GY2022 are flagged as energy crisis outliers that dominate the unconditional mean.
+**Honest ML benchmarks.** The LSTM forecaster displays a banner when its MAE exceeds the naïve persistence baseline — distinguishing "model trains" from "model adds value."
 
-**EU storage mandate is 90%, not 80%.** The original 2022 emergency regulation (EU 2022/1032) set an 80% target. Extended regulations raised this to 90% by November 1. All references use 90%.
-
-**Disk-persisted cache.** All major data fetchers use `@st.cache_data(persist="disk")`. Cached data survives Streamlit process restarts (e.g. HuggingFace Space cold starts), reducing repeated API call latency from 25-30s to under 1s on warm loads.
+**Model-derived data disclosed.** The Forward Curve PCA panel uses a storage-carry model to construct a synthetic TTF strip. The methodology expander and a prominent KPI card both state clearly that this is model-derived, not observed futures quotes.
 
 ---
 

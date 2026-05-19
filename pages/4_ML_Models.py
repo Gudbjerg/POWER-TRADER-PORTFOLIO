@@ -11,7 +11,7 @@ load_dotenv()
 
 st.set_page_config(
     page_title="ML Models",
-    page_icon="L",
+    page_icon="⚡",
     layout="wide",
     initial_sidebar_state="collapsed",
 )

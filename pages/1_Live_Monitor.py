@@ -11,7 +11,7 @@ load_dotenv()
 
 st.set_page_config(
     page_title="Live Monitor",
-    page_icon="E",
+    page_icon="⚡",
     layout="wide",
     initial_sidebar_state="collapsed",
 )
@@ -751,10 +751,6 @@ with tab_hydro:
 
 
 # ── Footer ─────────────────────────────────────────────────────────────────
-with st.sidebar:
-    st.markdown("#### Debug")
-    st.caption(f"Page rendered in {_time.perf_counter() - _PAGE_T0:.1f}s")
-    st.caption("Slow (>10s) = cold start; fast (<1s) = all caches warm.")
 
 st.divider()
 st.markdown(
