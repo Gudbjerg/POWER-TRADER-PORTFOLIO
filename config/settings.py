@@ -95,6 +95,15 @@ ALUM_ELEC_INTENSITY_MWH  = 14.5   # MWh electricity consumed per tonne of alumin
 ALUM_TTF_TO_ELEC_FACTOR  = 2.0    # TTF→electricity proxy (CCGT marginal cost conversion)
 ALUM_EURUSD_APPROX       = 1.10   # fixed EUR/USD for revenue conversion (stated assumption)
 
+# ── BESS Optimiser (Phase E) ────────────────────────────────────────────────
+BESS_FCR_N_EUR_PER_MW_YEAR = 8_000.0    # Nordic FCR-N average (€/MW/year); approximate, varies by auction
+BESS_FCR_D_EUR_PER_MW_YEAR = 12_000.0   # Nordic FCR-D average (€/MW/year); approximate
+BESS_FCR_D_AVAIL_DISC      = 0.30       # FCR-D availability discount (battery must hold ~50% SoC)
+BESS_DAM_VIABLE_DAYS_PCT   = 0.20       # fraction of days with viable DAM spread (top-20% filter)
+BESS_DAM_DISPATCH_HOURS    = 2.0        # hours of peak dispatch per DAM cycle
+BESS_OPEX_PCT_CAPEX        = 0.01       # annual OPEX as fraction of CAPEX
+BESS_DEFAULT_DISCOUNT_PCT  = 8.0        # default NPV discount rate (%)
+
 # ── LNG countries (GIE ALSI) ────────────────────────────────────────────────
 LNG_COUNTRIES = {
     "BE": "Belgium (Zeebrugge)",

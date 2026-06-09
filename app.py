@@ -23,7 +23,7 @@ st.markdown(
     "<p style='color:#8b949e;font-size:1.05rem;line-height:1.7;max-width:860px;'>"
     "A five-layer market intelligence platform built to mirror the analytical workflow of a European gas and power trader. "
     "Live fundamental surveillance, quantitative signal generation, cross-commodity macro analysis, "
-    "machine learning, and portfolio risk simulation — integrated across six pages and 20 analytical modules."
+    "machine learning, portfolio risk simulation, and BESS project economics — integrated across seven pages and 21 analytical modules."
     "</p>",
     unsafe_allow_html=True,
 )
@@ -158,6 +158,24 @@ st.markdown("""
 </div>
 """, unsafe_allow_html=True)
 st.page_link("pages/6_Risk_Dashboard.py", label="Open Risk Dashboard →")
+
+st.markdown("""
+<div style="background:#161b22;border:1px solid rgba(255,255,255,0.08);border-left:3px solid #3fb950;border-radius:0 8px 8px 0;padding:20px 22px;margin-top:4px;margin-bottom:12px;">
+  <div style="color:#3fb950;font-size:0.72rem;text-transform:uppercase;letter-spacing:1px;font-weight:600;">Phase E · Project Toolkit</div>
+  <div style="color:#e6edf3;font-size:1.05rem;font-weight:600;margin:4px 0 10px;">BESS Optimiser</div>
+  <div style="color:#8b949e;font-size:0.88rem;line-height:1.65;">
+    Battery Energy Storage System project economics calculator for Nordic power markets.
+    Configure asset parameters (capacity, power, efficiency, degradation, CAPEX) and select market
+    participation (DAM arbitrage, FCR-N, FCR-D, intraday). Outputs: annual revenue stacked bar by market,
+    year-1 cash flow waterfall, cumulative P&amp;L with breakeven annotation, four KPI cards
+    (year-1 revenue, simple payback, NPV, IRR), and a sensitivity table across ±20% CAPEX,
+    FCR prices, and energy spread. DAM spread estimated from historical NO2 prices; FCR revenues
+    use Nordic market averages (FCR-N ≈ €8k/MW/yr, FCR-D ≈ €12k/MW/yr with availability discount).
+    For analytical purposes only — not financial advice.
+  </div>
+</div>
+""", unsafe_allow_html=True)
+st.page_link("pages/7_BESS_Optimiser.py", label="Open BESS Optimiser →")
 
 st.divider()
 
