@@ -11,7 +11,7 @@ load_dotenv()
 
 st.set_page_config(
     page_title="Macro Signals",
-    page_icon="M",
+    page_icon="⚡",
     layout="wide",
     initial_sidebar_state="collapsed",
 )
@@ -21,6 +21,10 @@ from data.prices import get_ttf_data
 from data.events import load_events, events_in_range, CATEGORY_COLORS
 from data.commodities import get_commodity_data
 from components.prices_chart import render_ttf_chart
+from config.settings import (
+    ALUM_STRESS_ELEVATED, ALUM_STRESS_CRITICAL,
+    ALUM_ELEC_INTENSITY_MWH, ALUM_TTF_TO_ELEC_FACTOR, ALUM_EURUSD_APPROX,
+)
 
 apply_dark_theme()
 
@@ -495,6 +499,499 @@ with tab_spill:
     st.caption(
         "Sources: ICE/Yahoo Finance (TTF=F, ZW=F, ZC=F) | "
         "GIE ALSI | IEA Gas Market Report | Eurostat"
+    )
+
+    # ── NEW1: Copper–Power Grid Investment Linkage ────────────────────────────
+    st.divider()
+    st.markdown("#### Copper–Power Grid Investment Linkage")
+    st.caption(
+        "LME copper (HG=F) vs European gas price (TTF=F, used as power cost proxy). "
+        "Copper is a leading indicator for power grid capex: grid expansion requires copper wiring, "
+        "transformers, and cabling. Rolling 90-day correlation and 6-month copper change "
+        "signal the strength of the grid-investment transmission channel."
+    )
+
+    with st.spinner("Loading copper and gas prices…"):
+        _cu_wide = _fetch_7x7_prices(days=210)
+
+    if _cu_wide.empty or "Copper" not in _cu_wide.columns or "TTF" not in _cu_wide.columns:
+        st.caption("Copper or TTF data unavailable from Yahoo Finance.")
+    else:
+        _cu = _cu_wide[["TTF", "Copper"]].dropna()
+        if len(_cu) >= 90:
+            # Normalised index (base 100)
+            _cu_norm = _cu / _cu.iloc[0] * 100
+
+            _fig_cu = go.Figure()
+            _fig_cu.add_trace(go.Scatter(
+                x=_cu_norm.index, y=_cu_norm["TTF"],
+                name="TTF gas (EUR/MWh, power proxy)",
+                line=dict(color="#e07b39", width=1.8),
+                hovertemplate="TTF index: %{y:.1f}<extra></extra>",
+            ))
+            _fig_cu.add_trace(go.Scatter(
+                x=_cu_norm.index, y=_cu_norm["Copper"],
+                name="LME Copper (USD/lb, HG=F)",
+                line=dict(color="#58a6ff", width=1.8),
+                hovertemplate="Copper index: %{y:.1f}<extra></extra>",
+            ))
+            _fig_cu.update_layout(
+                template="plotly_dark",
+                paper_bgcolor="#0d1117", plot_bgcolor="#161b22",
+                height=220,
+                margin=dict(l=50, r=20, t=10, b=35),
+                legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1,
+                            font=dict(size=10)),
+                xaxis=dict(gridcolor="rgba(255,255,255,0.06)", tickfont=dict(size=10, color="#8b949e")),
+                yaxis=dict(title="Index (100 = start)", gridcolor="rgba(255,255,255,0.06)",
+                           tickfont=dict(size=10, color="#8b949e"), zeroline=False),
+                hovermode="x unified",
+            )
+            st.plotly_chart(_fig_cu, use_container_width=True)
+
+            # Rolling 90-day correlation chart
+            _cu_lr = np.log(_cu / _cu.shift(1)).dropna()
+            _roll_corr_cu = _cu_lr["TTF"].rolling(90).corr(_cu_lr["Copper"]).dropna()
+
+            _fig_cu_corr = go.Figure()
+            _fig_cu_corr.add_trace(go.Scatter(
+                x=_roll_corr_cu.index, y=_roll_corr_cu,
+                name="90-day rolling Pearson",
+                line=dict(color="#8e6bbf", width=1.8),
+                fill="tozeroy", fillcolor="rgba(142,107,191,0.07)",
+                hovertemplate="ρ(TTF,Copper): %{y:.2f}<extra></extra>",
+            ))
+            _fig_cu_corr.add_hline(y=0, line=dict(color="rgba(255,255,255,0.2)", width=1))
+            _fig_cu_corr.add_hline(y=0.5, line=dict(color="#3fb950", width=1, dash="dot"),
+                                   annotation_text="  0.5", annotation_font=dict(color="#3fb950", size=9))
+            _fig_cu_corr.add_hline(y=-0.5, line=dict(color="#f85149", width=1, dash="dot"),
+                                   annotation_text="  −0.5", annotation_font=dict(color="#f85149", size=9))
+            _fig_cu_corr.update_layout(
+                template="plotly_dark",
+                paper_bgcolor="#0d1117", plot_bgcolor="#161b22",
+                height=160,
+                margin=dict(l=50, r=60, t=5, b=35),
+                xaxis=dict(gridcolor="rgba(255,255,255,0.06)", tickfont=dict(size=10, color="#8b949e")),
+                yaxis=dict(title="Pearson ρ", gridcolor="rgba(255,255,255,0.06)",
+                           tickfont=dict(size=10, color="#8b949e"), range=[-1, 1]),
+                showlegend=False, hovermode="x unified",
+            )
+            st.plotly_chart(_fig_cu_corr, use_container_width=True)
+
+            # KPI row
+            _cu_corr_now = float(_roll_corr_cu.iloc[-1])
+            _cu_corr_color = "green" if abs(_cu_corr_now) >= 0.5 else ("amber" if abs(_cu_corr_now) >= 0.3 else "blue")
+
+            # 6-month copper change
+            _cu_6m_idx = max(0, len(_cu) - 126)
+            _cu_6m_chg = (_cu["Copper"].iloc[-1] / _cu["Copper"].iloc[_cu_6m_idx] - 1) * 100
+            _cu_6m_color = "red" if _cu_6m_chg > 15 else ("green" if _cu_6m_chg > 5 else "amber" if _cu_6m_chg < -5 else "blue")
+            _cu_signal = (
+                "strong grid demand signal" if _cu_6m_chg > 15
+                else "moderate upward pressure" if _cu_6m_chg > 5
+                else "weak / no signal" if abs(_cu_6m_chg) <= 5
+                else "easing"
+            )
+
+            _kc1, _kc2, _kc3 = st.columns(3)
+            with _kc1:
+                st.markdown(
+                    kpi_card("90-day TTF–Copper ρ", f"{_cu_corr_now:+.2f}",
+                             delta_span("rolling Pearson", _cu_corr_color)),
+                    unsafe_allow_html=True,
+                )
+            with _kc2:
+                st.markdown(
+                    kpi_card("6-month copper change", f"{_cu_6m_chg:+.1f}%",
+                             delta_span(_cu_signal, _cu_6m_color)),
+                    unsafe_allow_html=True,
+                )
+            with _kc3:
+                _cu_latest_usd = float(_cu["Copper"].iloc[-1])
+                st.markdown(
+                    kpi_card("LME Copper (latest)", f"${_cu_latest_usd:.3f}/lb",
+                             delta_span("HG=F front-month", "blue")),
+                    unsafe_allow_html=True,
+                )
+        else:
+            st.caption("Insufficient copper history (requires ≥90 days).")
+
+        with st.expander("Grid investment linkage — methodology", expanded=False):
+            st.markdown("""
+            **Why copper leads power grid investment:**
+            Copper is the primary conductor in high-voltage transmission lines, transformers, and
+            EV charging infrastructure. European grid operators (ENTSO-E TYNDPs, national TSO
+            investment programmes) require large volumes of copper for network reinforcement projects.
+            As grid build-out accelerates — driven by renewable integration, offshore wind connections,
+            and cross-border interconnector upgrades — copper demand rises, supporting LME prices.
+
+            **Transmission channel to power prices:**
+            A sustained copper rally (+15%+ over 6 months) has historically preceded grid capex
+            announcements by 3–9 months, as project developers lock in material costs early in
+            the procurement cycle. For power traders, rising copper can be a leading indicator of
+            grid constraint relief (new interconnectors reducing congestion) or increasing renewable
+            penetration (downward pressure on baseload prices).
+
+            **TTF as power proxy:** TTF gas price is used here as a European power cost proxy because
+            gas-fired CCGTs set the marginal price in the European day-ahead market for a large
+            fraction of hours. Rolling Pearson correlation is computed on daily log-returns; a positive
+            correlation indicates both assets move together (risk-on / demand-driven regimes). The
+            correlation frequently flips sign as the dominant driver shifts between energy demand
+            (positive) and inflation/cost shocks (negative: high gas crushes industrial copper demand).
+            """)
+
+    # ── NEW2: Aluminium Smelter Stress Indicator ──────────────────────────────
+    st.divider()
+    st.markdown("#### Aluminium Smelter Stress Indicator")
+    st.caption(
+        "European aluminium smelters are among the most electricity-intensive industrial users. "
+        "This indicator estimates power cost as a percentage of smelter revenue using TTF as a "
+        "European power price proxy and LME aluminium (ALI=F) as the revenue reference."
+    )
+
+    with st.spinner("Loading aluminium and gas prices…"):
+        _al_wide = _fetch_7x7_prices(days=365)
+
+    if _al_wide.empty or "Alum" not in _al_wide.columns or "TTF" not in _al_wide.columns:
+        st.caption("Aluminium or TTF data unavailable from Yahoo Finance.")
+    else:
+        _al = _al_wide[["TTF", "Alum"]].dropna()
+        if len(_al) < 30:
+            st.caption("Insufficient aluminium history (requires ≥30 days).")
+        else:
+            # power_cost_EUR/t = TTF × intensity × elec_factor
+            # revenue_EUR/t    = ALI_USD / EURUSD_approx
+            # stress_pct       = power_cost / revenue × 100
+            _pc = _al["TTF"] * ALUM_ELEC_INTENSITY_MWH * ALUM_TTF_TO_ELEC_FACTOR
+            _rv = _al["Alum"] / ALUM_EURUSD_APPROX
+            _stress = (_pc / _rv * 100).rename("stress_pct")
+
+            _latest_stress = float(_stress.iloc[-1])
+            if _latest_stress >= ALUM_STRESS_CRITICAL:
+                _stress_label, _stress_color = "CRITICAL", "red"
+            elif _latest_stress >= ALUM_STRESS_ELEVATED:
+                _stress_label, _stress_color = "ELEVATED", "amber"
+            else:
+                _stress_label, _stress_color = "NORMAL", "green"
+
+            # Stress time series chart
+            _fig_al = go.Figure()
+            _fig_al.add_trace(go.Scatter(
+                x=_stress.index, y=_stress.values,
+                name="Power cost % of revenue",
+                line=dict(color="#d4ac3a", width=1.8),
+                fill="tozeroy", fillcolor="rgba(212,172,58,0.07)",
+                hovertemplate="Stress: %{y:.1f}%<extra></extra>",
+            ))
+            _fig_al.add_hline(
+                y=ALUM_STRESS_ELEVATED,
+                line=dict(color="#d4ac3a", width=1, dash="dot"),
+                annotation_text=f"  {ALUM_STRESS_ELEVATED:.0f}% ELEVATED",
+                annotation_font=dict(color="#d4ac3a", size=9),
+                annotation_position="right",
+            )
+            _fig_al.add_hline(
+                y=ALUM_STRESS_CRITICAL,
+                line=dict(color="#f85149", width=1, dash="dot"),
+                annotation_text=f"  {ALUM_STRESS_CRITICAL:.0f}% CRITICAL",
+                annotation_font=dict(color="#f85149", size=9),
+                annotation_position="right",
+            )
+            _fig_al.update_layout(
+                template="plotly_dark",
+                paper_bgcolor="#0d1117", plot_bgcolor="#161b22",
+                height=230,
+                margin=dict(l=50, r=100, t=10, b=35),
+                xaxis=dict(gridcolor="rgba(255,255,255,0.06)", tickfont=dict(size=10, color="#8b949e")),
+                yaxis=dict(title="Power cost %", gridcolor="rgba(255,255,255,0.06)",
+                           tickfont=dict(size=10, color="#8b949e"), zeroline=False),
+                showlegend=False, hovermode="x unified",
+            )
+            st.plotly_chart(_fig_al, use_container_width=True)
+
+            # KPI row
+            _al1, _al2, _al3 = st.columns(3)
+            with _al1:
+                st.markdown(
+                    kpi_card("Smelter stress", f"{_latest_stress:.1f}%",
+                             delta_span(_stress_label, _stress_color)),
+                    unsafe_allow_html=True,
+                )
+            with _al2:
+                _al_latest_usd = float(_al["Alum"].iloc[-1])
+                st.markdown(
+                    kpi_card("LME Aluminium", f"${_al_latest_usd:,.0f}/t",
+                             delta_span("ALI=F front-month", "blue")),
+                    unsafe_allow_html=True,
+                )
+            with _al3:
+                _ttf_for_al = float(_al["TTF"].iloc[-1])
+                _power_cost_t = float(_pc.iloc[-1])
+                st.markdown(
+                    kpi_card("Implied power cost", f"€{_power_cost_t:,.0f}/t",
+                             delta_span(f"TTF {_ttf_for_al:.1f} × {ALUM_ELEC_INTENSITY_MWH}×{ALUM_TTF_TO_ELEC_FACTOR}", "blue")),
+                    unsafe_allow_html=True,
+                )
+
+        with st.expander("Smelter stress — methodology", expanded=False):
+            st.markdown(f"""
+            **Electricity intensity:** European primary aluminium smelters consume approximately
+            {ALUM_ELEC_INTENSITY_MWH} MWh of electricity per tonne of aluminium produced via the
+            Hall-Héroult electrolytic process. This is the dominant variable cost, accounting for
+            roughly 35–45% of total production cost at European facilities.
+
+            **Power cost proxy:** TTF day-ahead gas price (EUR/MWh) is used as a proxy for European
+            electricity costs, multiplied by a factor of {ALUM_TTF_TO_ELEC_FACTOR} to approximate
+            the gas-to-power conversion (CCGT heat rate). When gas-fired CCGTs set the marginal
+            price in the European power market, this approximation is reasonable. During periods
+            of high renewable penetration or nuclear availability, actual power prices may be
+            materially lower than this proxy suggests.
+
+            **Revenue denominator:** LME aluminium price (ALI=F, USD/tonne) divided by a fixed
+            EUR/USD assumption of {ALUM_EURUSD_APPROX}. This is a simplifying assumption; actual
+            smelter margins depend on hedging, power purchase agreements (PPAs), and regional tariffs.
+
+            **Stress thresholds (from config):**
+            - NORMAL: power cost below {ALUM_STRESS_ELEVATED:.0f}% of smelter revenue
+            - ELEVATED: {ALUM_STRESS_ELEVATED:.0f}–{ALUM_STRESS_CRITICAL:.0f}% — smelters under margin pressure; curtailment risk rises
+            - CRITICAL: above {ALUM_STRESS_CRITICAL:.0f}% — economics favour curtailment or idling; European capacity at risk
+
+            **2021-22 context:** During the 2022 energy crisis, several European aluminium smelters
+            (TRIMET Germany, Aluminium Dunkerque, SLOVALCO Slovakia) curtailed or suspended
+            operations as electricity costs exceeded revenue for extended periods. The stress
+            indicator would have been in CRITICAL territory for much of Q3/Q4 2022.
+            """)
+
+    st.caption("Sources: ICE/Yahoo Finance (HG=F LME Copper, ALI=F LME Aluminium, TTF=F gas)")
+
+
+# ════════════════════════════════════════════════════════════════════════════
+# TAB 4: 7×7 CORRELATION GRID
+# ════════════════════════════════════════════════════════════════════════════
+with tab_grid:
+    st.markdown("### 7×7 Cross-Commodity Correlation Grid")
+    st.caption(
+        "90-day rolling Pearson correlations of daily log-returns across TTF gas, Brent crude, "
+        "API2 coal, EU carbon (EUA), copper, aluminium, and the Baltic Dry Index. "
+        "All data via Yahoo Finance. Signals update on page load."
+    )
+
+    with st.spinner("Loading cross-commodity prices…"):
+        _w7 = _fetch_7x7_prices(days=180)
+
+    _loaded  = list(_w7.columns) if not _w7.empty else []
+    _missing = [k for k in _TICKERS_7X7 if k not in _loaded]
+    if _missing:
+        st.caption(
+            f"Assets unavailable from Yahoo Finance: {', '.join(_missing)}. "
+            f"Grid shows {len(_loaded)} of 7 assets."
+        )
+
+    if _w7.empty or len(_loaded) < 2:
+        st.warning(
+            "Insufficient cross-commodity data. "
+            "Requires internet access and yfinance (pip install yfinance)."
+        )
+    else:
+        _ll_pairs = _compute_lead_lag(_w7, max_lag=10, window=90)
+
+        # ── KPI row ──────────────────────────────────────────────────────────
+        _strong_pairs    = [r for r in _ll_pairs if abs(r["best_corr"]) >= 0.5]
+        _best            = _ll_pairs[0] if _ll_pairs else None
+        _best_lag_signal = next(
+            (r for r in _ll_pairs if r["best_lag"] != 0 and abs(r["best_corr"]) >= 0.4), None
+        )
+
+        _kc1, _kc2, _kc3 = st.columns(3)
+        with _kc1:
+            if _best:
+                _bc_col = "red" if _best["best_corr"] > 0 else "green"
+                st.markdown(
+                    kpi_card(
+                        "Strongest pair (90d ρ)",
+                        _best["pair"],
+                        delta_span(f"ρ = {_best['best_corr']:+.2f}", _bc_col),
+                    ),
+                    unsafe_allow_html=True,
+                )
+            else:
+                st.markdown(kpi_card("Strongest pair", "n/a", delta_span("–", "blue")),
+                            unsafe_allow_html=True)
+        with _kc2:
+            st.markdown(
+                kpi_card(
+                    "Strong pairs (|ρ| ≥ 0.5)",
+                    str(len(_strong_pairs)),
+                    delta_span(f"of {len(_ll_pairs)} total pairs", "blue"),
+                ),
+                unsafe_allow_html=True,
+            )
+        with _kc3:
+            if _best_lag_signal:
+                _ll_col = "red" if _best_lag_signal["best_corr"] > 0 else "green"
+                st.markdown(
+                    kpi_card(
+                        "Best lead-lag signal",
+                        _best_lag_signal["lag_label"],
+                        delta_span(f"ρ = {_best_lag_signal['best_corr']:+.2f}", _ll_col),
+                    ),
+                    unsafe_allow_html=True,
+                )
+            else:
+                st.markdown(
+                    kpi_card("Best lead-lag signal", "No lagged signal ≥ 0.4", delta_span("–", "blue")),
+                    unsafe_allow_html=True,
+                )
+
+        # ── Correlation heatmap ───────────────────────────────────────────────
+        st.markdown("#### 90-Day Correlation Matrix")
+        _ret90  = np.log(_w7 / _w7.shift(1)).iloc[-90:].dropna(how="all")
+        _cm     = _ret90.corr()
+        _assets = list(_cm.columns)
+        _z_vals = _cm.values.tolist()
+        _z_text = [
+            [f"{v:.2f}" if not np.isnan(v) else "" for v in row]
+            for row in _cm.values
+        ]
+
+        _fig_hm = go.Figure(go.Heatmap(
+            z=_z_vals,
+            x=_assets,
+            y=_assets,
+            text=_z_text,
+            texttemplate="%{text}",
+            colorscale=[
+                [0.00, "#2166ac"],
+                [0.25, "#74add1"],
+                [0.50, "#161b22"],
+                [0.75, "#d6604d"],
+                [1.00, "#b2182b"],
+            ],
+            zmin=-1, zmax=1,
+            showscale=True,
+            colorbar=dict(
+                title="ρ",
+                tickvals=[-1, -0.5, 0, 0.5, 1],
+                ticktext=["-1", "-0.5", "0", "+0.5", "+1"],
+                thickness=12,
+                len=0.8,
+                tickfont=dict(size=10),
+            ),
+            hoverongaps=False,
+            hovertemplate="%{y} / %{x}: %{z:.3f}<extra></extra>",
+        ))
+        _fig_hm.update_layout(
+            template="plotly_dark",
+            paper_bgcolor="#0d1117",
+            plot_bgcolor="#161b22",
+            font=dict(color="#c9d1d9", size=11),
+            margin=dict(l=10, r=10, t=10, b=10),
+            height=420,
+            xaxis=dict(side="bottom", tickfont=dict(size=11)),
+            yaxis=dict(tickfont=dict(size=11), autorange="reversed"),
+        )
+        st.plotly_chart(_fig_hm, use_container_width=True)
+        st.caption(
+            "Computed over the 90 most recent trading days using daily log-returns. "
+            "Diagonal = 1.0 (self-correlation, shown for reference)."
+        )
+
+        # ── Lead-lag table ────────────────────────────────────────────────────
+        st.markdown("#### Lead-Lag Analysis — Top 15 Pairs by |ρ|")
+        st.caption(
+            "For each pair the lag τ ∈ [−10d, +10d] maximising |ρ| is reported. "
+            "Positive τ = left asset leads right asset by τ days."
+        )
+        _top15 = _ll_pairs[:15]
+        if _top15:
+            _ll_css = """
+            <style>
+            .ll-tbl{width:100%;border-collapse:collapse;font-size:0.80rem;color:#c9d1d9;}
+            .ll-tbl th{background:#21262d;color:#8b949e;font-weight:600;
+                       padding:6px 10px;text-align:left;border-bottom:1px solid #30363d;}
+            .ll-tbl td{padding:5px 10px;border-bottom:1px solid #21262d;}
+            .cb-wrap{background:#21262d;border-radius:3px;height:6px;
+                     width:100px;display:inline-block;vertical-align:middle;margin-left:6px;}
+            .cb-fill{height:6px;border-radius:3px;}
+            </style>
+            """
+            _rows = ""
+            for _r in _top15:
+                _bc  = _r["best_corr"]
+                _ct  = _r["contemp"]
+                _lag = _r["best_lag"]
+                _bar_w = int(abs(_bc) * 100)
+                _bar_c = "#d6604d" if _bc > 0 else "#74add1"
+                _bc_c  = "#d6604d" if _bc > 0 else "#74add1"
+                _lag_c = "#58a6ff" if _lag != 0 else "#8b949e"
+                _ct_s  = f"{_ct:+.2f}" if not np.isnan(_ct) else "–"
+                _rows += (
+                    f"<tr>"
+                    f"<td>{_r['pair']}</td>"
+                    f"<td><span style='color:{_bc_c};font-weight:600;'>{_bc:+.3f}</span>"
+                    f"<span class='cb-wrap'><span class='cb-fill' "
+                    f"style='width:{_bar_w}px;background:{_bar_c};'></span></span></td>"
+                    f"<td><span style='color:{_lag_c};'>{_lag:+d}d</span></td>"
+                    f"<td>{_r['lag_label']}</td>"
+                    f"<td>{_ct_s}</td>"
+                    f"</tr>"
+                )
+            st.markdown(
+                _ll_css
+                + "<table class='ll-tbl'><thead><tr>"
+                + "<th>Pair</th>"
+                + "<th>Best ρ (optimal lag)</th>"
+                + "<th>Lag</th>"
+                + "<th>Lead direction</th>"
+                + "<th>Contemp ρ</th>"
+                + f"</tr></thead><tbody>{_rows}</tbody></table>",
+                unsafe_allow_html=True,
+            )
+        else:
+            st.caption("No pairs with sufficient data to rank.")
+
+        # ── Methodology expander ──────────────────────────────────────────────
+        with st.expander("Methodology and asset definitions", expanded=False):
+            st.markdown("""
+            **Asset universe**
+
+            | Label  | Ticker  | Description |
+            |--------|---------|-------------|
+            | TTF    | TTF=F   | ICE TTF Natural Gas front-month (EUR/MWh) |
+            | Brent  | BZ=F    | ICE Brent Crude Oil front-month (USD/bbl) |
+            | Coal   | MTF=F   | ICE Rotterdam API2 Coal front-month (USD/t) |
+            | EUA    | CO2.L   | EU Emission Allowance — ICE EUA Dec (EUR/tCO₂) |
+            | Copper | HG=F    | COMEX High-Grade Copper (USD/lb, LME proxy) |
+            | Alum   | ALI=F   | COMEX Aluminium (USD/t, LME proxy) |
+            | BDI    | BDRY    | Breakwave Dry Bulk Shipping ETF — Baltic Dry proxy |
+
+            **Correlation methodology**
+
+            Correlations are computed on **daily log-returns** (`log(P_t / P_{t-1})`) over a
+            rolling 90-trading-day window. Log-returns remove price-level drift and produce
+            more stationary series than raw prices or price ratios.
+
+            **Lead-lag analysis**
+
+            For each pair (A, B) we test lags τ ∈ [−10, +10] trading days. At lag τ we compute
+            Pearson ρ between `A.shift(τ)` and `B`. The τ maximising |ρ| is the "best lag."
+            Positive τ means A leads B by τ days. A signal is flagged as actionable when
+            |ρ| ≥ 0.4 and τ ≠ 0.
+
+            **Positioning relevance (Statkraft context)**
+
+            Cross-commodity correlations are most useful for:
+            - **Calendar spreading**: gas/carbon/coal correlations drive clean dark/spark spread compression
+            - **Macro hedging**: copper and aluminium lead demand signals for European industrial load
+            - **Baltic Dry as leading indicator**: shipping costs often lead energy demand by 4–8 weeks
+
+            **Limitations:** Lagged correlations are regime-dependent and unstable. A high historical
+            ρ does not imply causation. Always validate against a structural mechanism before trading.
+            """)
+
+    st.caption(
+        "Sources: Yahoo Finance (TTF=F, BZ=F, MTF=F, CO2.L, HG=F, ALI=F, BDRY) | "
+        "90-day rolling window | Updated on page load"
     )
 
 

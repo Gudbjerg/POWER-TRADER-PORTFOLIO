@@ -16,7 +16,7 @@ _PAGE_T0 = _time.perf_counter()
 
 st.set_page_config(
     page_title="Quantitative Analysis",
-    page_icon="Q",
+    page_icon="⚡",
     layout="wide",
     initial_sidebar_state="collapsed",
 )
@@ -25,6 +25,7 @@ from utils.helpers import apply_dark_theme, kpi_card, delta_span, commentary
 from config.settings import (
     SCORE_RISK_PREMIUM_EUR, SCORE_SEASONAL_HI_PCT, SCORE_SEASONAL_LO_PCT,
     COINT_ENTRY_Z, COINT_MIN_OBS, COINT_MIN_MATCH, HYDRO_MAX_LAG,
+    PCA_STORAGE_ALPHA, PCA_STORAGE_DECAY_TAU, PCA_ENTRY_Z, PCA_LOOKBACK_DAYS,
 )
 from data.gas_storage import get_storage_data
 from data.prices import get_ttf_data
@@ -88,6 +89,119 @@ def _run_sc_granger_cached(gc_df: pd.DataFrame) -> tuple:
     _gc    = _gct(gc_df[["return", "net_sentiment"]], maxlag=2, verbose=False)
     _min_p = min(_gc[1][0]["ssr_ftest"][1], _gc[2][0]["ssr_ftest"][1])
     return _min_p, float(gc_df["net_sentiment"].iloc[-7:].mean())
+
+
+# ── Forward Curve PCA helpers (D2) ───────────────────────────────────────────
+@st.cache_data(ttl=3600, show_spinner=False)
+def _build_ttf_pca_panel(eu_storage: pd.DataFrame) -> tuple[pd.DataFrame, str]:
+    """
+    Synthetic TTF M+1–M+18 forward-curve panel.
+    F(t,m) = spot_t × seasonal_m × (1 + α × storage_z_t × exp(−m/τ))
+    Returns (panel_df, status_msg). panel_df: index=date, cols=M+1..M+18.
+    """
+    from data.forward_curve import _fetch_ttf_long
+
+    _spot_df = _fetch_ttf_long()
+    if _spot_df.empty or len(_spot_df) < 200:
+        return pd.DataFrame(), "TTF spot history unavailable"
+    _spot_df = _spot_df.copy()
+    _spot_df["date"]  = pd.to_datetime(_spot_df["date"])
+    _spot_df["month"] = _spot_df["date"].dt.month
+    _spot_df["year"]  = _spot_df["date"].dt.year
+
+    # Seasonal index: monthly mean / annual mean, median across years
+    _ratios: list[dict] = []
+    for _yr, _grp in _spot_df.groupby("year"):
+        if len(_grp) < 200:
+            continue
+        _ann = _grp["price"].mean()
+        if _ann <= 0:
+            continue
+        for _mo, _mg in _grp.groupby("month"):
+            _ratios.append({"month": int(_mo), "ratio": float(_mg["price"].mean() / _ann)})
+    if _ratios:
+        _si = pd.DataFrame(_ratios).groupby("month")["ratio"].median().to_dict()
+    else:
+        _si = {m: 1.0 for m in range(1, 13)}
+
+    # Storage z-score vs same-DOY 5-year mean
+    _stor_z = pd.Series(dtype=float)
+    if (not eu_storage.empty
+            and "gasDayStart" in eu_storage.columns
+            and "full" in eu_storage.columns):
+        _st2 = eu_storage.copy()
+        _st2["date"] = pd.to_datetime(_st2["gasDayStart"]).dt.normalize()
+        _st2["doy"]  = _st2["date"].dt.dayofyear
+        _st2["year"] = _st2["date"].dt.year
+        _cur_yr = pd.Timestamp.now().year
+        _doy_stats = (
+            _st2[_st2["year"] < _cur_yr]
+            .groupby("doy")["full"]
+            .agg(["mean", "std"])
+            .rename(columns={"mean": "mu", "std": "sd"})
+        )
+        _st2 = _st2.merge(_doy_stats, on="doy", how="left")
+        _st2["storage_z"] = ((_st2["full"] - _st2["mu"])
+                             / _st2["sd"].clip(lower=0.5))
+        _stor_z = _st2.set_index("date")["storage_z"].dropna()
+
+    # Merge spot + storage z, forward-fill storage gaps
+    _cutoff = pd.Timestamp.now() - pd.Timedelta(days=PCA_LOOKBACK_DAYS)
+    _merged = (_spot_df[_spot_df["date"] >= _cutoff]
+               .set_index("date")[["price"]]
+               .copy())
+    if not _stor_z.empty:
+        _merged = _merged.join(_stor_z.rename("sz"), how="left")
+        _merged["sz"] = _merged["sz"].ffill().fillna(0.0)
+    else:
+        _merged["sz"] = 0.0
+
+    if len(_merged) < 100:
+        return pd.DataFrame(), f"Insufficient history after cutoff: {len(_merged)} obs"
+
+    # Build 18-tenor panel vectorised
+    _decay = np.array([np.exp(-m / PCA_STORAGE_DECAY_TAU) for m in range(1, 19)])
+    _panel_cols: dict[str, np.ndarray] = {}
+    for _m in range(1, 19):
+        _fwd_months = np.array(
+            [((_dt.month - 1 + _m) % 12) + 1 for _dt in _merged.index]
+        )
+        _seas = np.array([_si.get(int(mo), 1.0) for mo in _fwd_months])
+        _carry = 1.0 + PCA_STORAGE_ALPHA * _merged["sz"].values * _decay[_m - 1]
+        _panel_cols[f"M+{_m}"] = _merged["price"].values * _seas * _carry
+
+    _panel = pd.DataFrame(_panel_cols, index=_merged.index)
+    _panel.index.name = "date"
+    _stor_note = " · storage-carry applied" if not _stor_z.empty else " · no storage data (flat carry)"
+    return _panel, f"{len(_panel)} obs | M+1–M+18{_stor_note}"
+
+
+@st.cache_data(show_spinner=False)
+def _run_pca(panel: pd.DataFrame) -> dict | None:
+    """PCA on de-meaned panel. Returns dict or None on failure."""
+    try:
+        from sklearn.decomposition import PCA as _PCA
+        _X   = panel.values.astype(float)
+        _Xdm = _X - _X.mean(axis=0)
+        _pca = _PCA(n_components=3)
+        _sc  = _pca.fit_transform(_Xdm)
+        _scores = pd.DataFrame(_sc, index=panel.index, columns=["PC1", "PC2", "PC3"])
+        # Expanding z-score (no look-ahead bias)
+        for _pc in ("PC1", "PC2", "PC3"):
+            _mu = _scores[_pc].expanding(min_periods=30).mean()
+            _sd = _scores[_pc].expanding(min_periods=30).std().clip(lower=1e-9)
+            _scores[f"{_pc}_z"] = (_scores[_pc] - _mu) / _sd
+        return {
+            "ev_ratio":   _pca.explained_variance_ratio_.tolist(),
+            "loadings":   pd.DataFrame(
+                _pca.components_.T,
+                index=panel.columns,
+                columns=["PC1", "PC2", "PC3"],
+            ),
+            "scores":     _scores,
+        }
+    except Exception:
+        return None
 
 
 @st.cache_data(ttl=3600, show_spinner=False, persist="disk")
@@ -233,7 +347,7 @@ def _get_de_live_load_gw() -> tuple:
     """
     _key = os.getenv("ENTSOE_API_KEY", "")
     if not _key:
-        return None, "ENTSO-E key required"
+        return None, "key not configured"
     try:
         from entsoe import EntsoePandasClient
         import pytz
@@ -251,7 +365,7 @@ def _get_de_live_load_gw() -> tuple:
         if _ser is not None and not (hasattr(_ser, "empty") and _ser.empty):
             _gw = float(_ser.mean()) / 1000.0
             return _gw, f"ENTSO-E A65 ({_start.date()})"
-        return None, "No load data returned"
+        return None, "no data today"
     except Exception as _exc:
         return None, f"A65 error: {str(_exc)[:60]}"
 
@@ -291,9 +405,6 @@ with st.sidebar:
     else:
         st.caption("Feature matrix: loads on first visit to Nordic Decomp or Wind tab")
     st.divider()
-    st.markdown("#### Debug")
-    st.caption(f"Page rendered in {_time.perf_counter() - _PAGE_T0:.1f}s")
-    st.caption("Slow (>15s) = cold start; fast (<1s) = all caches warm.")
     st.divider()
 
 # ── Header ───────────────────────────────────────────────────────────────────
@@ -543,7 +654,7 @@ with st.expander("Quant Signal Scorecard", expanded=True):
 st.divider()
 
 # ── Model tabs ───────────────────────────────────────────────────────────────
-tab_mc, tab_reg, tab_spike, tab_bt, tab_stack, tab_decomp, tab_wind, tab_granger, tab_storage_reg, tab_hydro_lag, tab_ttf_norm, tab_coint, tab_scanner = st.tabs([
+tab_mc, tab_reg, tab_spike, tab_bt, tab_stack, tab_decomp, tab_wind, tab_granger, tab_storage_reg, tab_hydro_lag, tab_ttf_norm, tab_coint, tab_scanner, tab_pca = st.tabs([
     "Storage Monte Carlo",
     "Gas-to-Power Regression",
     "Price Spike Detector",
@@ -557,6 +668,7 @@ tab_mc, tab_reg, tab_spike, tab_bt, tab_stack, tab_decomp, tab_wind, tab_granger
     "TTF Seasonal Norm",
     "NO2/NL Cointegration",
     "Cointegration Scanner",
+    "Forward Curve PCA",
 ])
 
 
@@ -3617,6 +3729,276 @@ with tab_scanner:
                 "Sources: ENTSO-E A44 (NO2, NL, DE, FR day-ahead) | "
                 "ICE/Yahoo Finance (TTF, NBP)"
             )
+
+
+# ════════════════════════════════════════════════════════════════════════════
+# TAB 14: FORWARD CURVE PCA
+# ════════════════════════════════════════════════════════════════════════════
+with tab_pca:
+    st.markdown("### Forward Curve PCA — TTF M+1–M+18 Structural Decomposition")
+    st.caption(
+        "PCA on a model-derived TTF forward strip. "
+        "PC1 = level shift · PC2 = slope (steepening/flattening) · PC3 = curvature (butterfly). "
+        "Trade signals: expanding z-score of PC2 and PC3 vs ±2σ thresholds."
+    )
+
+    with st.spinner("Building TTF forward-curve panel…"):
+        _pca_panel, _pca_msg = _build_ttf_pca_panel(eu_df)
+
+    _pca_result = _run_pca(_pca_panel) if not _pca_panel.empty else None
+
+    if _pca_result is None:
+        st.warning(f"Forward curve PCA unavailable — {_pca_msg}")
+    else:
+        _ev       = _pca_result["ev_ratio"]
+        _pc1_pct  = round(_ev[0] * 100, 1)
+        _pc2_pct  = round(_ev[1] * 100, 1)
+        _pc3_pct  = round(_ev[2] * 100, 1)
+        _ld       = _pca_result["loadings"]
+        _sc_df    = _pca_result["scores"]
+
+        # Sanity check
+        if _pc1_pct < 70.0 or _pc2_pct > 25.0:
+            st.warning(
+                f"Sanity check: PC1={_pc1_pct:.1f}% (expect ≥80%), "
+                f"PC2={_pc2_pct:.1f}% (expect ≤15%). "
+                "Panel decomposition may not be structurally sound."
+            )
+
+        # ── KPI row ──────────────────────────────────────────────────────────
+        _pk1, _pk2, _pk3, _pk4 = st.columns(4)
+        with _pk1:
+            st.markdown(
+                kpi_card("PC1 explained variance", f"{_pc1_pct:.1f}%",
+                         delta_span("Level shift", "blue")),
+                unsafe_allow_html=True,
+            )
+        with _pk2:
+            st.markdown(
+                kpi_card("PC2 explained variance", f"{_pc2_pct:.1f}%",
+                         delta_span("Slope (carry)", "green" if _pc2_pct <= 15 else "amber")),
+                unsafe_allow_html=True,
+            )
+        with _pk3:
+            st.markdown(
+                kpi_card("PC3 explained variance", f"{_pc3_pct:.1f}%",
+                         delta_span("Curvature (butterfly)", "blue")),
+                unsafe_allow_html=True,
+            )
+        with _pk4:
+            st.markdown(
+                kpi_card("Panel type", "Model-derived",
+                         delta_span("Storage-carry adjusted", "amber")),
+                unsafe_allow_html=True,
+            )
+        st.caption(_pca_msg)
+
+        # ── Explained variance bar chart ──────────────────────────────────────
+        st.markdown("#### Explained Variance by Component")
+        _fig_ev = go.Figure(go.Bar(
+            x=["PC1 (Level)", "PC2 (Slope)", "PC3 (Curvature)"],
+            y=[_pc1_pct, _pc2_pct, _pc3_pct],
+            marker_color=["#58a6ff", "#3fb950", "#d4ac3a"],
+            text=[f"{v:.1f}%" for v in [_pc1_pct, _pc2_pct, _pc3_pct]],
+            textposition="outside",
+        ))
+        _fig_ev.update_layout(
+            template="plotly_dark",
+            paper_bgcolor="#0d1117", plot_bgcolor="#161b22",
+            font=dict(color="#c9d1d9", size=11),
+            margin=dict(l=10, r=10, t=10, b=10), height=220,
+            yaxis=dict(title="Variance explained (%)", range=[0, 115],
+                       gridcolor="rgba(255,255,255,0.06)"),
+            xaxis=dict(gridcolor="rgba(255,255,255,0.06)"),
+            showlegend=False,
+        )
+        st.plotly_chart(_fig_ev, use_container_width=True)
+
+        # ── Factor loadings ───────────────────────────────────────────────────
+        st.markdown("#### Factor Loadings (M+1 to M+18)")
+        st.caption(
+            "PC1 ≈ flat across tenors (parallel shift) · "
+            "PC2 ≈ monotonic (steepening/flattening) · "
+            "PC3 ≈ U-shaped (butterfly)"
+        )
+        _fig_ld = go.Figure()
+        for _pc, _col in [("PC1", "#58a6ff"), ("PC2", "#3fb950"), ("PC3", "#d4ac3a")]:
+            _fig_ld.add_trace(go.Scatter(
+                x=list(_ld.index), y=_ld[_pc].tolist(),
+                name=_pc, line=dict(color=_col, width=2),
+                hovertemplate=f"{_pc}: %{{y:.4f}}<extra></extra>",
+            ))
+        _fig_ld.add_hline(y=0, line=dict(color="rgba(255,255,255,0.2)", width=1))
+        _fig_ld.update_layout(
+            template="plotly_dark",
+            paper_bgcolor="#0d1117", plot_bgcolor="#161b22",
+            font=dict(color="#c9d1d9", size=11),
+            margin=dict(l=10, r=10, t=10, b=50), height=280,
+            yaxis=dict(title="Loading", gridcolor="rgba(255,255,255,0.06)", zeroline=False),
+            xaxis=dict(title="Tenor", gridcolor="rgba(255,255,255,0.06)",
+                       tickangle=45, tickfont=dict(size=9)),
+            legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="left", x=0),
+            hovermode="x unified",
+        )
+        st.plotly_chart(_fig_ld, use_container_width=True)
+
+        # ── Factor scores time series ─────────────────────────────────────────
+        st.markdown("#### Factor Scores — Full Panel History")
+        _fig_sc = go.Figure()
+        for _pc, _col, _lbl in [
+            ("PC1", "#58a6ff", "PC1 (Level)"),
+            ("PC2", "#3fb950", "PC2 (Slope)"),
+            ("PC3", "#d4ac3a", "PC3 (Curvature)"),
+        ]:
+            _fig_sc.add_trace(go.Scatter(
+                x=_sc_df.index, y=_sc_df[_pc],
+                name=_lbl, line=dict(color=_col, width=1.5),
+                hovertemplate=f"{_lbl}: %{{y:.2f}}<extra></extra>",
+            ))
+        _fig_sc.add_hline(y=0, line=dict(color="rgba(255,255,255,0.2)", width=1))
+        _fig_sc.update_layout(
+            template="plotly_dark",
+            paper_bgcolor="#0d1117", plot_bgcolor="#161b22",
+            font=dict(color="#c9d1d9", size=11),
+            margin=dict(l=10, r=10, t=10, b=10), height=300,
+            yaxis=dict(title="Score", gridcolor="rgba(255,255,255,0.06)", zeroline=False),
+            xaxis=dict(title=None, gridcolor="rgba(255,255,255,0.06)"),
+            legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="left", x=0),
+            hovermode="x unified",
+        )
+        st.plotly_chart(_fig_sc, use_container_width=True)
+
+        # ── Trade signals ─────────────────────────────────────────────────────
+        st.markdown("#### Trade Signals — PC2 and PC3 Z-Scores")
+        st.caption(
+            f"Expanding z-score (no look-ahead). "
+            f"PC2 z > +{PCA_ENTRY_Z:.0f}σ: curve unusually steep → short front / long back. "
+            f"PC3 z > +{PCA_ENTRY_Z:.0f}σ: butterfly wide → sell wings (M+1, M+18), buy belly (M+9)."
+        )
+        _fig_sig = go.Figure()
+        for _pcz, _col, _lbl in [
+            ("PC2_z", "#3fb950", "PC2 z-score (Slope)"),
+            ("PC3_z", "#d4ac3a", "PC3 z-score (Curvature)"),
+        ]:
+            if _pcz in _sc_df.columns:
+                _fig_sig.add_trace(go.Scatter(
+                    x=_sc_df.index, y=_sc_df[_pcz],
+                    name=_lbl, line=dict(color=_col, width=1.5),
+                    hovertemplate=f"{_lbl}: %{{y:+.2f}}σ<extra></extra>",
+                ))
+        for _lvl, _ann_c in [
+            (PCA_ENTRY_Z,  "#f85149"),
+            (-PCA_ENTRY_Z, "#3fb950"),
+        ]:
+            _fig_sig.add_hline(
+                y=_lvl,
+                line=dict(color=_ann_c, width=1, dash="dot"),
+                annotation_text=f"{_lvl:+.0f}σ",
+                annotation_font=dict(size=9, color="#8b949e"),
+            )
+        _fig_sig.add_hline(y=0, line=dict(color="rgba(255,255,255,0.2)", width=1))
+        _fig_sig.update_layout(
+            template="plotly_dark",
+            paper_bgcolor="#0d1117", plot_bgcolor="#161b22",
+            font=dict(color="#c9d1d9", size=11),
+            margin=dict(l=10, r=10, t=10, b=10), height=280,
+            yaxis=dict(title="Z-score (σ)", gridcolor="rgba(255,255,255,0.06)", zeroline=False),
+            xaxis=dict(title=None, gridcolor="rgba(255,255,255,0.06)"),
+            legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="left", x=0),
+            hovermode="x unified",
+        )
+        st.plotly_chart(_fig_sig, use_container_width=True)
+
+        # Current signal status boxes
+        _sc_last = _sc_df.iloc[-1]
+        _pca_signals = [
+            (
+                "PC2_z", "PC2 (Slope)",
+                f"Curve unusually steep (+{PCA_ENTRY_Z:.0f}σ) — Calendar spread: short front, long back",
+                f"Curve unusually flat (−{PCA_ENTRY_Z:.0f}σ) — Reverse calendar: long front, short back",
+            ),
+            (
+                "PC3_z", "PC3 (Curvature)",
+                f"Butterfly wide (+{PCA_ENTRY_Z:.0f}σ) — Sell wings (M+1, M+18), buy belly (M+9)",
+                f"Butterfly compressed (−{PCA_ENTRY_Z:.0f}σ) — Buy wings (M+1, M+18), sell belly (M+9)",
+            ),
+        ]
+        for _pcz, _lbl, _bull_msg, _bear_msg in _pca_signals:
+            if _pcz not in _sc_last.index:
+                continue
+            _z = float(_sc_last[_pcz])
+            if _z >= PCA_ENTRY_Z:
+                _msg, _border = _bull_msg, "#f85149"
+            elif _z <= -PCA_ENTRY_Z:
+                _msg, _border = _bear_msg, "#3fb950"
+            else:
+                _msg, _border = "In neutral zone — no trade signal", "#58a6ff"
+            st.markdown(
+                f"<div class='commentary' style='border-left-color:{_border};'>"
+                f"<strong>{_lbl}</strong>&nbsp;&nbsp;"
+                f"<span style='color:{_border};'>z = {_z:+.2f}σ</span><br>"
+                f"<span style='color:#c9d1d9;font-size:0.85rem;'>{_msg}</span>"
+                f"</div>",
+                unsafe_allow_html=True,
+            )
+
+        # ── Methodology expander (mandatory) ──────────────────────────────────
+        with st.expander("Methodology and data notes", expanded=False):
+            st.markdown(
+                "> **Model-derived panel disclosure**  \n"
+                "> This analysis uses a model-derived forward curve panel. The panel is constructed "
+                "from daily TTF spot prices and EU storage z-scores using a storage-carry model; "
+                "it does not use observed futures contract quotes. Factor loadings and trade signals "
+                "are illustrative of structural methodology and should not be used for mark-to-market "
+                "or live trading decisions."
+            )
+            st.markdown(f"""
+**Panel construction**
+
+For each historical date t, the M+m implied forward price is:
+
+```
+F(t, m) = spot_t × seasonal_m × (1 + α × storage_z_t × exp(−m / τ))
+```
+
+| Parameter | Value | Description |
+|-----------|-------|-------------|
+| `spot_t`  | TTF=F close | ICE TTF front-month daily close (Yahoo Finance) |
+| `seasonal_m` | computed | Median monthly/annual ratio from 3yr TTF spot history |
+| `storage_z_t` | computed | EU aggregate storage fill vs 5-yr same-DOY mean (GIE AGSI+) |
+| α | {PCA_STORAGE_ALPHA} | Carry sensitivity: storage deviation → curve shape adjustment |
+| τ | {PCA_STORAGE_DECAY_TAU} months | Decay: storage signal fades on far tenors (exp(−m/τ)) |
+
+The storage carry term introduces a second source of genuine time-variation: elevated storage (positive z) compresses near-month carry (curve flattens); depleted storage (negative z) widens carry (curve steepens). This is consistent with the Schwartz-Smith two-factor commodity model and standard gas storage valuation theory.
+
+**PCA methodology**
+
+The panel is de-meaned column-wise (each tenor centred on its historical mean). PCA is applied via singular value decomposition on the de-meaned matrix.
+
+- **PC1 (Level):** approximately flat loadings across tenors — represents parallel curve shifts driven primarily by spot.
+- **PC2 (Slope):** monotonic loadings — represents steepening/flattening, driven by storage z-score variation propagated through the carry term.
+- **PC3 (Curvature):** U-shaped or ∩-shaped loadings — residual mid-curve distortion relative to wings.
+
+Expected variance decomposition for energy forward curves (Litterman & Scheinkman 1991 applied to interest rates; Cortazar & Schwartz 1994 extended to commodities): PC1 80–95%, PC2 4–15%, PC3 1–5%.
+
+**Trade signal thresholds**
+
+Z-scores use an expanding window from the start of the panel (no look-ahead bias). Entry threshold: ±{PCA_ENTRY_Z:.0f}σ.
+
+- PC2 z > +{PCA_ENTRY_Z:.0f}σ: curve unusually steep → calendar spread: short front, long back
+- PC2 z < −{PCA_ENTRY_Z:.0f}σ: curve unusually flat → reverse calendar spread
+- PC3 z > +{PCA_ENTRY_Z:.0f}σ: butterfly wide → sell wings (M+1, M+18), buy belly (M+9)
+- PC3 z < −{PCA_ENTRY_Z:.0f}σ: butterfly compressed → buy wings, sell belly
+
+**Limitations**
+
+PCA assumes a stationary covariance structure — this breaks during major regime shifts (Russian supply cut-off 2022, extreme cold snaps, Hormuz disruptions). The model-derived panel means factor loadings reflect the two-factor construction (spot + storage carry), not an observed futures term structure. A production-grade implementation would use live ICE TTF strip quotes from an EEX/Trayport feed.
+""")
+
+        st.caption(
+            f"Sources: ICE/Yahoo Finance (TTF=F) | GIE AGSI+ (EU storage) | "
+            f"{PCA_LOOKBACK_DAYS}-day panel | sklearn PCA | Updated on page load"
+        )
 
 
 # ── Footer ────────────────────────────────────────────────────────────────────

@@ -82,6 +82,19 @@ COINT_MIN_MATCH =  60    # minimum overlapping obs (scorecard OLS, storage regre
 # ── Hydro lead/lag analysis ───────────────────────────────────────────────────
 HYDRO_MAX_LAG = 21   # maximum cross-correlation lag in days
 
+# ── Forward Curve PCA (D2) ───────────────────────────────────────────────────
+PCA_STORAGE_ALPHA   = 0.03   # storage carry sensitivity (curve adjustment per σ of storage z)
+PCA_STORAGE_DECAY_TAU = 6.0  # exponential decay constant (months); storage signal fades on far tenors
+PCA_ENTRY_Z         = 2.0    # |z-score| threshold to flag a PC2/PC3 trade signal
+PCA_LOOKBACK_DAYS   = 730    # panel history window (~2 years of trading days)
+
+# ── Aluminium smelter stress indicator (NEW2) ────────────────────────────────
+ALUM_STRESS_ELEVATED     = 40.0   # power cost as % of smelter revenue → ELEVATED
+ALUM_STRESS_CRITICAL     = 55.0   # power cost as % of smelter revenue → CRITICAL
+ALUM_ELEC_INTENSITY_MWH  = 14.5   # MWh electricity consumed per tonne of aluminium
+ALUM_TTF_TO_ELEC_FACTOR  = 2.0    # TTF→electricity proxy (CCGT marginal cost conversion)
+ALUM_EURUSD_APPROX       = 1.10   # fixed EUR/USD for revenue conversion (stated assumption)
+
 # ── LNG countries (GIE ALSI) ────────────────────────────────────────────────
 LNG_COUNTRIES = {
     "BE": "Belgium (Zeebrugge)",

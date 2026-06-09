@@ -99,10 +99,37 @@ Lead link: https://huggingface.co/spaces/TobGud/power-trader-portfolio
 
 Platform at outreach cut: 5 pages · 14 Layer 2 tabs · 4 Layer 3 tabs · Mispricing Dashboard (8 signals) · HF commit `0b9a1f6`
 
-### Remaining deferred work (post first-wave outreach)
+---
+
+## Shipped features
+
+Everything confirmed live on HuggingFace Space and `origin/main`.
+
+| Phase / Item | Layer | Description |
+|---|---|---|
+| Phase 0 | — | Project scaffold: Streamlit multi-page setup, dual-branch deploy (main / hf-deploy), .env secrets, dark theme |
+| Phase A1 | Layer 1 | Live Monitor: EU/DE gas storage, TTF gas price + spike detector, LNG terminal sendout, Nord Pool day-ahead prices, ENTSO-E cross-border flows, solar output, Norwegian hydro reservoir levels |
+| Phase A2 | Layer 2 | First quant tabs: Monte Carlo price simulation, Gas-Power OLS regression (TTF → DE baseload), spike detector, seasonal backtest |
+| Phase A3 | Layer 2 | Additional tabs: Supply Stack model, Nordic hydro decomposition, wind forecast error tracker, Granger causality TTF↔Brent |
+| Phase B | Layer 2 / Layer 3 | Storage-Price OLS, Hydro Lead/Lag (ENTSO-E + AGSI), TTF Seasonal Normalisation, NO2/NL Cointegration; Layer 3: Geopolitical Overlay, EU Gas Supply Mix, Cross-Commodity Spillover (gas→agriculture chain) |
+| Phase C | Layer 1 / Layer 2 | Live Monitor polish, Mispricing Dashboard scorecard foundation (scorecard engine, 8 signals wired to live feeds) |
+| Phase D1 | Layer 2 | Multi-Pair Cointegration Scanner (Tab 13): Engle-Granger on 6 country pairs, spread z-score signals, export/import regime context |
+| Phase D2 | Layer 2 | Forward Curve PCA (Tab 14): synthetic TTF M+1–M+18 panel (storage-carry model), Litterman–Scheinkman level/slope/curvature decomposition, PC2/PC3 trade signals |
+| Phase D3 | Layer 5 | Mispricing Dashboard (full page, 8 signals): TTF risk premium, seasonal percentile, storage gap, gas-power spread, flow capacity, carbon signal, hydro reservoir, live load A65 |
+| Phase F | All pages | Presentation polish: landing page hero copy, ⚡ favicon across all 6 pages, debug sidebar sections removed, README outreach rewrite with HF live link |
+| NEW5 | Layer 3 | 7×7 Cross-Commodity Correlation Grid (Tab 4): 90-day Pearson heatmap, lead-lag table (top 15 pairs, ±10d sweep), KPI cards |
+| Norwegian zonal | Layer 1 | "Norgespris debate" sub-panel: NO1/NO2/NO3/NO4/NO5 vs system price (SYS) day-ahead, zone spread KPIs |
+| NEW1 | Layer 3 | Copper–power grid investment linkage panel: LME copper vs German baseload proxy, rolling 90-day correlation, 6-month copper change as forward indicator |
+| NEW2 | Layer 3 | Aluminium smelter stress indicator: power-cost-as-%-of-smelter-revenue time series, NORMAL / ELEVATED / CRITICAL gauge |
+
+---
+
+## Deferred work (post first-wave outreach)
 
 | Item | Description |
 |------|-------------|
 | Phase C-arch | Render migration, 15-min MTU granularity, DataSourceRegistry abstraction |
 | D2_alt | Rolling cointegration stability heatmap — which pairs consistently cointegrated vs episodic; feeds D3 confidence scores |
+| D4 | Scope TBD |
+| D5 | Scope TBD |
 | Phase E (BESS) | Battery storage arbitrage optimiser — multi-session build, high positioning value for storage-focused roles |

@@ -11,7 +11,7 @@ load_dotenv()
 
 st.set_page_config(
     page_title="Live Monitor",
-    page_icon="E",
+    page_icon="⚡",
     layout="wide",
     initial_sidebar_state="collapsed",
 )
@@ -56,6 +56,64 @@ apply_dark_theme()
 @st.cache_data(ttl=3600, persist="disk", show_spinner=False)
 def _get_spot_history_l1():
     return fetch_spot_prices(days=365)
+
+
+_NO_ZONES_ZONAL = ["NO1", "NO2", "NO3", "NO4", "NO5", "SYS"]
+_NO_ZONE_LABELS = {
+    "NO1": "NO1 (Oslo)",
+    "NO2": "NO2 (Kristiansand)",
+    "NO3": "NO3 (Molde)",
+    "NO4": "NO4 (Tromsø)",
+    "NO5": "NO5 (Bergen)",
+    "SYS": "SYS (System)",
+}
+_NO_ZONE_COLORS = {
+    "NO1": "#58a6ff", "NO2": "#3fb950", "NO3": "#d4ac3a",
+    "NO4": "#e07b39", "NO5": "#8e6bbf", "SYS": "#f85149",
+}
+
+
+@st.cache_data(ttl=3600, show_spinner=False)
+def _fetch_norwegian_zonal(days: int = 90) -> pd.DataFrame:
+    """Day-ahead prices for NO1/NO2/NO3/NO4/NO5 + SYS via Nord Pool API."""
+    import requests as _req
+    from concurrent.futures import ThreadPoolExecutor as _TPE, as_completed as _acf
+    from datetime import datetime as _dt, timedelta as _td
+    _NORDPOOL_URL = "https://dataportal-api.nordpoolgroup.com/api/DayAheadPrices"
+    _HEADERS = {"Referer": "https://www.nordpoolgroup.com/"}
+    today = _dt.utcnow().date()
+    dates = [(today - _td(days=i)).strftime("%Y-%m-%d") for i in range(days + 1)]
+
+    def _fetch_day_no(date_str):
+        try:
+            r = _req.get(
+                _NORDPOOL_URL,
+                params={"currency": "EUR", "market": "DayAhead",
+                        "deliveryArea": ",".join(_NO_ZONES_ZONAL), "date": date_str},
+                headers=_HEADERS, timeout=10,
+            )
+            if r.status_code == 204:
+                return []
+            r.raise_for_status()
+            rows = []
+            for entry in r.json().get("areaAverages", []):
+                if entry.get("price") is not None and entry["areaCode"] in _NO_ZONES_ZONAL:
+                    rows.append({"date": date_str, "zone": entry["areaCode"],
+                                 "price_eur_mwh": entry["price"]})
+            return rows
+        except Exception:
+            return []
+
+    records = []
+    with _TPE(max_workers=8) as ex:
+        for fut in _acf({ex.submit(_fetch_day_no, d): d for d in dates}):
+            records.extend(fut.result())
+
+    if not records:
+        return pd.DataFrame()
+    df = pd.DataFrame(records)
+    df["date"] = pd.to_datetime(df["date"]).dt.date
+    return df.sort_values("date").reset_index(drop=True)
 
 
 # ── Load all data (cached) ─────────────────────────────────────────────────
@@ -577,6 +635,114 @@ with tab_prices:
         **Finland (FI) in context:** Finland is a net power importer, connected to Sweden (SE3) and the Baltic states. The FI versus NO spread often reflects nuclear availability (Olkiluoto) and Swedish hydro levels. Finland and Italy represent contrasting generation mixes exposed differently to gas price shocks.
         """)
 
+    # ── Norwegian zonal vs system price ──────────────────────────────────────
+    st.divider()
+    st.markdown("#### Norgespris debate — zonal vs system pricing")
+    st.caption(
+        "Norwegian day-ahead prices by bidding zone (NO1–NO5) vs the Nordic system price (SYS). "
+        "When zones diverge from SYS, congestion on internal transmission bottlenecks is the driver. "
+        "Source: Nord Pool Data Portal. 90-day history."
+    )
+
+    with st.spinner("Loading Norwegian zonal prices…"):
+        _no_zonal_df = _fetch_norwegian_zonal(days=90)
+
+    if _no_zonal_df.empty:
+        st.caption("Norwegian zonal data unavailable — Nord Pool API did not return results.")
+    else:
+        import plotly.graph_objects as _go_no
+
+        # KPI row: latest price per zone
+        _latest_no_date = _no_zonal_df["date"].max()
+        _latest_no = (
+            _no_zonal_df[_no_zonal_df["date"] == _latest_no_date]
+            .set_index("zone")["price_eur_mwh"]
+        )
+        _sys_price = float(_latest_no["SYS"]) if "SYS" in _latest_no.index else None
+        _kpi_cols = st.columns(len(_NO_ZONES_ZONAL))
+        for _ci, _zone in enumerate(_NO_ZONES_ZONAL):
+            with _kpi_cols[_ci]:
+                if _zone in _latest_no.index:
+                    _zp = float(_latest_no[_zone])
+                    if _zone == "SYS":
+                        _delta = delta_span("system reference", "blue")
+                    elif _sys_price is not None:
+                        _diff = _zp - _sys_price
+                        _color = "red" if abs(_diff) > 10 else ("amber" if abs(_diff) > 3 else "green")
+                        _delta = delta_span(f"{'▲' if _diff >= 0 else '▼'} {abs(_diff):.1f} vs SYS", _color)
+                    else:
+                        _delta = delta_span("—", "blue")
+                    st.markdown(
+                        kpi_card(_NO_ZONE_LABELS[_zone], f"€{_zp:.1f}", _delta),
+                        unsafe_allow_html=True,
+                    )
+                else:
+                    st.markdown(
+                        kpi_card(_NO_ZONE_LABELS[_zone], "n/a", delta_span("no data", "amber")),
+                        unsafe_allow_html=True,
+                    )
+
+        # Line chart: all zones over 90 days
+        _fig_no = _go_no.Figure()
+        for _zone in _NO_ZONES_ZONAL:
+            _sub = (
+                _no_zonal_df[_no_zonal_df["zone"] == _zone]
+                .sort_values("date")
+            )
+            if _sub.empty:
+                continue
+            _dash = "dot" if _zone == "SYS" else "solid"
+            _width = 2.2 if _zone == "SYS" else 1.4
+            _fig_no.add_trace(_go_no.Scatter(
+                x=_sub["date"], y=_sub["price_eur_mwh"],
+                name=_NO_ZONE_LABELS[_zone],
+                line=dict(color=_NO_ZONE_COLORS[_zone], width=_width, dash=_dash),
+                hovertemplate=f"{_NO_ZONE_LABELS[_zone]}: €%{{y:.1f}}/MWh<extra></extra>",
+            ))
+
+        _fig_no.update_layout(
+            template="plotly_dark",
+            paper_bgcolor="#0d1117",
+            plot_bgcolor="#161b22",
+            height=260,
+            margin=dict(l=50, r=20, t=10, b=35),
+            xaxis=dict(gridcolor="rgba(255,255,255,0.06)", tickfont=dict(size=10, color="#8b949e")),
+            yaxis=dict(
+                title="EUR/MWh",
+                gridcolor="rgba(255,255,255,0.06)",
+                tickfont=dict(size=10, color="#8b949e"),
+                zeroline=False,
+            ),
+            legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1,
+                        font=dict(size=10)),
+            hovermode="x unified",
+        )
+        st.plotly_chart(_fig_no, use_container_width=True)
+
+        with st.expander("Norwegian zonal pricing context", expanded=False):
+            st.markdown("""
+            **Why five zones?** Norway is divided into five bidding zones (NO1–NO5) reflecting
+            geographic bottlenecks in the transmission grid. When the grid can carry surplus freely,
+            all zones clear at the same price. Congestion on key lines — particularly the north–south
+            corridor — causes zones to diverge.
+
+            **System price (SYS):** The Nordic system price is a theoretical unconstrained clearing
+            price assuming no transmission limits within the Nordic area. It serves as the settlement
+            reference for financial power contracts (Nord Pool financial market). Physical spot prices
+            (the zonal prices) are what generators and consumers actually receive.
+
+            **Key bottlenecks driving divergence:**
+            - NO1 (Oslo) vs NO2 (Kristiansand/SW Norway): Affected by north–south flow on Sørlandsbanen lines.
+            - NO3 (Central/Mid-Norway) vs NO1/NO5: Snøhvit and inland hydro reservoir imbalances push NO3 low in wet periods.
+            - NO4 (North Norway / Tromsø): Structurally cheap — large hydro surplus, limited southward export capacity.
+            - NO5 (West Norway / Bergen): High hydro density; diverges from NO1 on congestion into central grid.
+
+            **Norgespris debate:** Norway is considering moving to a single national price zone
+            (a "Norwegian system price" for physical delivery) to reduce inter-zonal distortions for
+            consumers and industrial users. Critics argue this removes price signals needed to incentivise
+            transmission investment and demand flexibility. The debate is active in the Storting (Norwegian parliament).
+            """)
+
 
 # ═══════════════════════════════════════════════════════════════════════════
 # TAB 5: POWER FLOWS
@@ -751,10 +917,6 @@ with tab_hydro:
 
 
 # ── Footer ─────────────────────────────────────────────────────────────────
-with st.sidebar:
-    st.markdown("#### Debug")
-    st.caption(f"Page rendered in {_time.perf_counter() - _PAGE_T0:.1f}s")
-    st.caption("Slow (>10s) = cold start; fast (<1s) = all caches warm.")
 
 st.divider()
 st.markdown(
