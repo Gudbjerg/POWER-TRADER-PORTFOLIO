@@ -86,7 +86,10 @@ def fetch_all_flows(days: int = 30) -> pd.DataFrame:
             for date, val in net.items():
                 records.append({"date": date.date(), "pair": label, "net_flow_mwh": float(val)})
 
-        except Exception:
+        except Exception as _exc:
+            import sys
+            print(f"[flows] ENTSO-E pair {zone_a}→{zone_b} failed: {type(_exc).__name__}: {_exc}",
+                  file=sys.stderr)
             continue
 
     if not records:
@@ -97,4 +100,10 @@ def fetch_all_flows(days: int = 30) -> pd.DataFrame:
 
 def get_flow_data() -> dict:
     df = fetch_all_flows()
-    return {"flows": df, "fetched_at": datetime.utcnow()}
+    n_pairs = len(FLOW_PAIRS)
+    n_ok    = df["pair"].nunique() if not df.empty else 0
+    source  = (
+        f"ENTSO-E ({n_ok}/{n_pairs} pairs)"
+        if n_ok > 0 else "unavailable"
+    )
+    return {"flows": df, "source": source, "fetched_at": datetime.utcnow()}

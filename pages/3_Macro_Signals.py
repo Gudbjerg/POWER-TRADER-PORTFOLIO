@@ -125,7 +125,7 @@ with st.spinner(""):
 events_all = load_events()
 
 # ── Header ───────────────────────────────────────────────────────────────────
-st.markdown("## Layer 3: Geopolitical and Macro Signals")
+st.markdown("## Layer 3 · Geopolitical and Macro Signals")
 st.caption(
     "Geopolitical event context, EU gas supply mix, and cross-commodity price transmission. "
     "Data sources: ICE/Yahoo Finance, manually curated event timeline."

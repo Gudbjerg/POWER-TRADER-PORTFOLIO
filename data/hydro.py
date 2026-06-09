@@ -52,7 +52,9 @@ def fetch_hydro_reservoirs(years: int = 6) -> pd.DataFrame:
             start=start,
             end=today,
         )
-    except Exception:
+    except Exception as _exc:
+        import sys
+        print(f"[hydro] ENTSO-E B31 failed: {type(_exc).__name__}: {_exc}", file=sys.stderr)
         return pd.DataFrame()
 
     if raw is None or (hasattr(raw, "empty") and raw.empty):
@@ -105,8 +107,10 @@ def build_hydro_percentiles(df: pd.DataFrame) -> pd.DataFrame:
 def get_hydro_data() -> dict:
     df = fetch_hydro_reservoirs()
     percentiles = build_hydro_percentiles(df)
+    source = "ENTSO-E B31 (Norway aggregate)" if not df.empty else "unavailable"
     return {
         "weekly":      df,
         "percentiles": percentiles,
+        "source":      source,
         "fetched_at":  datetime.utcnow(),
     }

@@ -1,0 +1,17 @@
+.git
+.env
+.streamlit/secrets.toml
+__pycache__
+**/__pycache__
+*.pyc
+*.pyo
+.DS_Store
+.vscode
+.claude
+files/
+models/weights/*.pt
+models/weights/*.joblib
+.sentiment_history.csv
+data/generation_cache.csv
+README.md
+render.yaml

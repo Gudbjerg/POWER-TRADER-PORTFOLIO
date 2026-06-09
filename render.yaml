@@ -1,0 +1,28 @@
+services:
+  - type: web
+    name: power-trader-portfolio
+    runtime: docker
+    plan: starter          # $7/mo — always-on, 512 MB RAM, 0.5 CPU
+    region: frankfurt      # EU residency; closest to ENTSO-E API servers in Brussels
+    healthCheckPath: /_stcore/health
+    autoDeploy: true       # redeploy on every push to main
+
+    envVars:
+      - key: ENTSOE_API_KEY
+        sync: false        # set manually in Render dashboard — never committed
+      - key: AGSI_API_KEY
+        sync: false        # set manually in Render dashboard — never committed
+      - key: DATA_PERSIST_DIR
+        value: /mnt/data
+      - key: STREAMLIT_BROWSER_GATHER_USAGE_STATS
+        value: "false"
+      - key: PYTHONUNBUFFERED
+        value: "1"
+
+    # Persistent disk — survives deploys and restarts.
+    # Stores: .sentiment_history.csv (FinBERT history) and generation_cache.csv (DE coal data).
+    # Replaces the HF ephemeral filesystem (root cause of lost FinBERT history on HF).
+    disk:
+      name: app-data
+      mountPath: /mnt/data
+      sizeGB: 1

@@ -639,9 +639,8 @@ else:
         hovertemplate="%{x} / %{y}: %{z:.2f}<extra></extra>",
         showscale=True,
         colorbar=dict(
-            title="Pearson ρ",
+            title=dict(text="Pearson ρ", font=dict(size=10, color="#8b949e")),
             tickfont=dict(size=9, color="#8b949e"),
-            titlefont=dict(size=10, color="#8b949e"),
             thickness=12,
         ),
     ))

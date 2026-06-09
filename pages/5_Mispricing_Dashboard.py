@@ -363,7 +363,7 @@ def _get_mispricing_signals() -> list[dict]:
 
 # ── Page ─────────────────────────────────────────────────────────────────────
 
-st.markdown("### Mispricing Dashboard")
+st.markdown("## Layer 5 · Mispricing Dashboard")
 st.caption(
     "Composite rich/cheap signal aggregator across gas, power, storage, and spread markets. "
     "Each signal shows its current value and historical percentile within a 2–7 year rolling window. "

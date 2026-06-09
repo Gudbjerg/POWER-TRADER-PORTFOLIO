@@ -199,7 +199,7 @@ lng_stat, lng_headline, lng_detail = lng_status(lng_wow)
 # ── Header ─────────────────────────────────────────────────────────────────
 _hdr_col, _btn_col = st.columns([5, 1])
 with _hdr_col:
-    st.markdown("## Layer 1: Live Market Monitor")
+    st.markdown("## Layer 1 · Live Market Monitor")
     st.caption("Real-time European power and gas data, refreshed hourly. Sources: GIE AGSI+/ALSI, Nord Pool, ENTSO-E, ICE/Yahoo Finance")
 with _btn_col:
     st.markdown("<div style='padding-top:18px;'>", unsafe_allow_html=True)
@@ -755,6 +755,8 @@ with tab_flows:
         )
     else:
         render_flows_chart(flows)
+        _flows_src = flows.get("source", "ENTSO-E")
+        st.caption(f"Cross-border flows · Source: {_flows_src}")
 
         # ── B5: Interconnector utilisation KPIs ───────────────────────────────
         _flows_df = flows.get("flows", pd.DataFrame())
@@ -888,6 +890,8 @@ with tab_hydro:
         )
     else:
         render_hydro_chart(hydro)
+        _hydro_src = hydro.get("source", "ENTSO-E B31")
+        st.caption(f"Hydro reservoirs · Source: {_hydro_src}")
 
         with st.expander("Why Norwegian hydro levels matter for power prices", expanded=True):
             st.markdown("""

@@ -151,7 +151,8 @@ def score_headlines(headlines: list[dict]) -> pd.DataFrame:
     return pd.DataFrame(records) if records else pd.DataFrame()
 
 
-_HISTORY_FILE = os.path.join(os.path.dirname(__file__), "..", ".sentiment_history.csv")
+_PERSIST_DIR   = os.getenv("DATA_PERSIST_DIR", os.path.join(os.path.dirname(__file__), ".."))
+_HISTORY_FILE  = os.path.join(_PERSIST_DIR, ".sentiment_history.csv")
 _HISTORY_DAYS = 60  # keep rolling 60-day window on disk
 
 
