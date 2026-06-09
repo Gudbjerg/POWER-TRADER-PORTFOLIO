@@ -21,9 +21,9 @@ apply_dark_theme()
 st.markdown("# European Gas & Power Market Intelligence Platform")
 st.markdown(
     "<p style='color:#8b949e;font-size:1.05rem;line-height:1.7;max-width:860px;'>"
-    "A four-layer market intelligence platform built to mirror the analytical workflow of a European gas and power trader. "
+    "A five-layer market intelligence platform built to mirror the analytical workflow of a European gas and power trader. "
     "Live fundamental surveillance, quantitative signal generation, cross-commodity macro analysis, "
-    "and machine learning — integrated across five pages and 19 analytical modules."
+    "machine learning, and portfolio risk simulation — integrated across six pages and 20 analytical modules."
     "</p>",
     unsafe_allow_html=True,
 )
@@ -141,6 +141,23 @@ st.markdown("""
 </div>
 """, unsafe_allow_html=True)
 st.page_link("pages/5_Mispricing_Dashboard.py", label="Open Mispricing Dashboard →")
+
+st.markdown("""
+<div style="background:#161b22;border:1px solid rgba(255,255,255,0.08);border-left:3px solid #d4ac3a;border-radius:0 8px 8px 0;padding:20px 22px;margin-top:4px;margin-bottom:12px;">
+  <div style="color:#d4ac3a;font-size:0.72rem;text-transform:uppercase;letter-spacing:1px;font-weight:600;">D4 · Risk Simulator</div>
+  <div style="color:#e6edf3;font-size:1.05rem;font-weight:600;margin:4px 0 10px;">Risk Dashboard</div>
+  <div style="color:#8b949e;font-size:0.88rem;line-height:1.65;">
+    Portfolio VaR and stress-scenario simulator built on the D3 signal suite. Select any combination of
+    the six backtestable signals (TTF seasonal, EU storage bias, NO2/NL spread z-score, NO2 vs TTF OLS
+    residual, Norwegian hydro, TTF vs storage residual) and assign notional sizes to simulate historical
+    daily P&L. Outputs: per-signal equity curves, annualised Sharpe, 1-day 95%/99% VaR and Expected
+    Shortfall (non-parametric bootstrap), four named stress scenarios (cold snap, Norwegian outage,
+    Hormuz extension, EUR/USD shock), and 30-day rolling signal correlation matrix.
+    For analytical purposes only — not financial advice.
+  </div>
+</div>
+""", unsafe_allow_html=True)
+st.page_link("pages/6_Risk_Dashboard.py", label="Open Risk Dashboard →")
 
 st.divider()
 
