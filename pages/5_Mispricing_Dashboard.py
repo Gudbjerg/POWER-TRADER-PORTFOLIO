@@ -1,5 +1,5 @@
 """
-Layer 5 — Mispricing Dashboard
+Layer 5: Mispricing Dashboard
 Composite rich/cheap signal aggregator across gas, power, storage, and spreads.
 Every signal carries a historical percentile and confidence rating derived from
 the same underlying data and models as Layers 1–4.
@@ -226,33 +226,57 @@ def _get_mispricing_signals() -> list[dict]:
         pass
 
     # ── 5. Clean Spark Spread ────────────────────────────────────────────────
+    # Uses historical EUA prices (CO2.L from yfinance) so the backtest percentile
+    # reflects genuine historical spread distribution, not snapshot EUA applied to history.
     try:
         if not feat.empty and "no2" in feat.columns and "ttf" in feat.columns:
-            _eua_px, _ = fetch_eua_price()
-            if _eua_px is not None and _eua_px > 0:
-                _f5  = feat[["date", "no2", "ttf"]].dropna().iloc[-_HIST_WINDOW:]
-                _css = (_f5["no2"].values
+            import yfinance as _yf
+            _eua_hist = pd.DataFrame()
+            try:
+                _raw_eua = _yf.Ticker("CO2.L").history(period="3y")
+                if not _raw_eua.empty and "Close" in _raw_eua.columns:
+                    _eua_hist = _raw_eua[["Close"]].copy()
+                    _eua_hist.index = pd.to_datetime(_eua_hist.index).tz_localize(None).normalize()
+                    _eua_hist.index.name = "date"
+                    _eua_hist = _eua_hist.rename(columns={"Close": "eua"}).reset_index()
+            except Exception:
+                pass
+
+            if _eua_hist.empty:
+                # No historical EUA available: drop signal entirely rather than use snapshot value.
+                pass
+            else:
+                _f5 = (
+                    feat[["date", "no2", "ttf"]].dropna()
+                    .merge(_eua_hist, on="date", how="inner")
+                    .iloc[-_HIST_WINDOW:]
+                )
+                if len(_f5) >= 30:
+                    _css = (
+                        _f5["no2"].values
                         - _f5["ttf"].values * _CCGT_HEAT_RATE
-                        - float(_eua_px) * _CCGT_EMISSION)
-                _cur = float(_css[-1])
-                _p   = _pctile(pd.Series(_css), _cur)
-                _d   = "up" if _p > 75 else ("down" if _p < 25 else "neutral")
-                _dl  = ("Running" if _d == "up" else
-                        ("Below Cost" if _d == "down" else "Marginal"))
-                _conf, _clbl = _confidence(_p)
-                signals.append({
-                    "name":     "Clean Spark Spread",
-                    "category": "Spread",
-                    "current":  f"{_cur:+.1f} EUR/MWh",
-                    "pctile":   _p,
-                    "conf":     _conf,
-                    "clabel":   _clbl,
-                    "direction": _d,
-                    "dlabel":   _dl,
-                    "note":     (f"NO2 − TTF×{_CCGT_HEAT_RATE:.2f} − EUA×{_CCGT_EMISSION:.3f}"
-                                 f"  (CCGT ~49% eff., EUA €{_eua_px:.0f}/t)"),
-                    "source":   "Computed",
-                })
+                        - _f5["eua"].values * _CCGT_EMISSION
+                    )
+                    _cur    = float(_css[-1])
+                    _cur_eua = float(_f5["eua"].iloc[-1])
+                    _p      = _pctile(pd.Series(_css), _cur)
+                    _d      = "up" if _p > 75 else ("down" if _p < 25 else "neutral")
+                    _dl     = ("Running" if _d == "up" else
+                               ("Below Cost" if _d == "down" else "Marginal"))
+                    _conf, _clbl = _confidence(_p)
+                    signals.append({
+                        "name":     "Clean Spark Spread",
+                        "category": "Spread",
+                        "current":  f"{_cur:+.1f} EUR/MWh",
+                        "pctile":   _p,
+                        "conf":     _conf,
+                        "clabel":   _clbl,
+                        "direction": _d,
+                        "dlabel":   _dl,
+                        "note":     (f"NO2 - TTF*{_CCGT_HEAT_RATE:.2f} - EUA*{_CCGT_EMISSION:.3f}"
+                                     f"  (CCGT ~49% eff., EUA hist. avg. ~{_cur_eua:.0f}/t)"),
+                        "source":   "Computed",
+                    })
     except Exception:
         pass
 
@@ -367,11 +391,21 @@ st.markdown("## Layer 5 · Mispricing Dashboard")
 st.caption(
     "Composite rich/cheap signal aggregator across gas, power, storage, and spread markets. "
     "Each signal shows its current value and historical percentile within a 2–7 year rolling window. "
-    "Signals are sorted by extremity — the most off-centre appear first."
+    "Signals are sorted by extremity. The most off-centre appear first."
 )
 
 with st.spinner("Computing signals…"):
     _signals = _get_mispricing_signals()
+
+# Feature coverage line
+_feat_cov = assemble_features(years=3)
+_coverage = _feat_cov.attrs.get("coverage_report") or {}
+_missing_feat = [k for k, v in _coverage.items() if not v]
+if _missing_feat:
+    st.caption(
+        f"Feature groups unavailable: {', '.join(_missing_feat)}. "
+        "Some signals may be omitted. Check ENTSO-E key (hydro/wind) and AGSI key (storage)."
+    )
 
 if not _signals:
     st.warning(

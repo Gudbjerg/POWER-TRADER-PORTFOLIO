@@ -557,8 +557,8 @@ with tab_prices:
             _current_spread = float(_sp["spread"].iloc[-1])
             _sp_color = "red" if _current_spread > SPREAD_CHART_REF_EUR else ("green" if _current_spread < -SPREAD_CHART_REF_EUR else "blue")
             _sp_label = (
-                "strong NL premium — NordLink near capacity" if _current_spread > SPREAD_CHART_REF_EUR
-                else "Nordic premium — atypical, check reservoirs" if _current_spread < -SPREAD_CHART_REF_EUR
+                "strong NL premium, NordLink near capacity" if _current_spread > SPREAD_CHART_REF_EUR
+                else "Nordic premium (atypical, check reservoirs)" if _current_spread < -SPREAD_CHART_REF_EUR
                 else "balanced"
             )
             st.markdown(
@@ -637,7 +637,7 @@ with tab_prices:
 
     # ── Norwegian zonal vs system price ──────────────────────────────────────
     st.divider()
-    st.markdown("#### Norgespris debate — zonal vs system pricing")
+    st.markdown("#### Norgespris debate: zonal vs system pricing")
     st.caption(
         "Norwegian day-ahead prices by bidding zone (NO1–NO5) vs the Nordic system price (SYS). "
         "When zones diverge from SYS, congestion on internal transmission bottlenecks is the driver. "
@@ -648,7 +648,7 @@ with tab_prices:
         _no_zonal_df = _fetch_norwegian_zonal(days=90)
 
     if _no_zonal_df.empty:
-        st.caption("Norwegian zonal data unavailable — Nord Pool API did not return results.")
+        st.caption("Norwegian zonal data unavailable. Nord Pool API did not return results.")
     else:
         import plotly.graph_objects as _go_no
 
@@ -766,7 +766,7 @@ with tab_flows:
             _today_flows["pair"] = _today_flows["pair"].str.replace("→", "->", regex=False)
 
             if not _today_flows.empty:
-                st.markdown("##### Interconnector utilisation — latest day")
+                st.markdown("##### Interconnector utilisation: latest day")
                 _util_cols = st.columns(len(INTERCONNECTOR_CAPACITY_MW))
                 for _ci, (_pair, _cap_mw) in enumerate(INTERCONNECTOR_CAPACITY_MW.items()):
                     _row = _today_flows[_today_flows["pair"] == _pair]

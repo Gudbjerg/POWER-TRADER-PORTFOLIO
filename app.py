@@ -7,7 +7,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 st.set_page_config(
-    page_title="European Gas & Power — Market Intelligence Platform",
+    page_title="European Gas & Power: Market Intelligence Platform",
     page_icon="⚡",
     layout="wide",
     initial_sidebar_state="collapsed",
@@ -23,7 +23,7 @@ st.markdown(
     "<p style='color:#8b949e;font-size:1.05rem;line-height:1.7;max-width:860px;'>"
     "A five-layer market intelligence platform built to mirror the analytical workflow of a European gas and power trader. "
     "Live fundamental surveillance, quantitative signal generation, cross-commodity macro analysis, "
-    "machine learning, portfolio risk simulation, and BESS project economics — integrated across seven pages and 21 analytical modules."
+    "machine learning, portfolio risk simulation, and BESS project economics, integrated across seven pages and 21 analytical modules."
     "</p>",
     unsafe_allow_html=True,
 )
@@ -134,7 +134,7 @@ st.markdown("""
     Eight rich/cheap signals from Layers 1–4 ranked into a single composite view: historical percentile
     context (how extreme is the current reading vs 2–3 years of history), direction badge
     (Bullish/Bearish/Neutral), confidence classification (High/Medium/Low by distance from the 50th
-    percentile), and composite commentary. Signals sorted by extremity — most off-centre first.
+    percentile), and composite commentary. Signals sorted by extremity, most off-centre first.
     Covers TTF seasonal position, EU storage fill, NO2/NL spread z-score, NO2 vs TTF regression
     residual, Clean Spark Spread, Norwegian hydro level, TTF vs storage residual, and marginal fuel regime.
   </div>
@@ -153,7 +153,7 @@ st.markdown("""
     daily P&L. Outputs: per-signal equity curves, annualised Sharpe, 1-day 95%/99% VaR and Expected
     Shortfall (non-parametric bootstrap), four named stress scenarios (cold snap, Norwegian outage,
     Hormuz extension, EUR/USD shock), and 30-day rolling signal correlation matrix.
-    For analytical purposes only — not financial advice.
+    For analytical purposes only. Not financial advice.
   </div>
 </div>
 """, unsafe_allow_html=True)
@@ -171,7 +171,7 @@ st.markdown("""
     (year-1 revenue, simple payback, NPV, IRR), and a sensitivity table across ±20% CAPEX,
     FCR prices, and energy spread. DAM spread estimated from historical NO2 prices; FCR revenues
     use Nordic market averages (FCR-N ≈ €8k/MW/yr, FCR-D ≈ €12k/MW/yr with availability discount).
-    For analytical purposes only — not financial advice.
+    For analytical purposes only. Not financial advice.
   </div>
 </div>
 """, unsafe_allow_html=True)
