@@ -347,7 +347,7 @@ def _get_de_live_load_gw() -> tuple:
     """
     _key = os.getenv("ENTSOE_API_KEY", "")
     if not _key:
-        return None, "ENTSO-E key required"
+        return None, "key not configured"
     try:
         from entsoe import EntsoePandasClient
         import pytz
@@ -365,7 +365,7 @@ def _get_de_live_load_gw() -> tuple:
         if _ser is not None and not (hasattr(_ser, "empty") and _ser.empty):
             _gw = float(_ser.mean()) / 1000.0
             return _gw, f"ENTSO-E A65 ({_start.date()})"
-        return None, "No load data returned"
+        return None, "no data today"
     except Exception as _exc:
         return None, f"A65 error: {str(_exc)[:60]}"
 

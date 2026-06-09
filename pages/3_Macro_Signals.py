@@ -21,6 +21,10 @@ from data.prices import get_ttf_data
 from data.events import load_events, events_in_range, CATEGORY_COLORS
 from data.commodities import get_commodity_data
 from components.prices_chart import render_ttf_chart
+from config.settings import (
+    ALUM_STRESS_ELEVATED, ALUM_STRESS_CRITICAL,
+    ALUM_ELEC_INTENSITY_MWH, ALUM_TTF_TO_ELEC_FACTOR, ALUM_EURUSD_APPROX,
+)
 
 apply_dark_theme()
 
@@ -496,6 +500,269 @@ with tab_spill:
         "Sources: ICE/Yahoo Finance (TTF=F, ZW=F, ZC=F) | "
         "GIE ALSI | IEA Gas Market Report | Eurostat"
     )
+
+    # ── NEW1: Copper–Power Grid Investment Linkage ────────────────────────────
+    st.divider()
+    st.markdown("#### Copper–Power Grid Investment Linkage")
+    st.caption(
+        "LME copper (HG=F) vs European gas price (TTF=F, used as power cost proxy). "
+        "Copper is a leading indicator for power grid capex: grid expansion requires copper wiring, "
+        "transformers, and cabling. Rolling 90-day correlation and 6-month copper change "
+        "signal the strength of the grid-investment transmission channel."
+    )
+
+    with st.spinner("Loading copper and gas prices…"):
+        _cu_wide = _fetch_7x7_prices(days=210)
+
+    if _cu_wide.empty or "Copper" not in _cu_wide.columns or "TTF" not in _cu_wide.columns:
+        st.caption("Copper or TTF data unavailable from Yahoo Finance.")
+    else:
+        _cu = _cu_wide[["TTF", "Copper"]].dropna()
+        if len(_cu) >= 90:
+            # Normalised index (base 100)
+            _cu_norm = _cu / _cu.iloc[0] * 100
+
+            _fig_cu = go.Figure()
+            _fig_cu.add_trace(go.Scatter(
+                x=_cu_norm.index, y=_cu_norm["TTF"],
+                name="TTF gas (EUR/MWh, power proxy)",
+                line=dict(color="#e07b39", width=1.8),
+                hovertemplate="TTF index: %{y:.1f}<extra></extra>",
+            ))
+            _fig_cu.add_trace(go.Scatter(
+                x=_cu_norm.index, y=_cu_norm["Copper"],
+                name="LME Copper (USD/lb, HG=F)",
+                line=dict(color="#58a6ff", width=1.8),
+                hovertemplate="Copper index: %{y:.1f}<extra></extra>",
+            ))
+            _fig_cu.update_layout(
+                template="plotly_dark",
+                paper_bgcolor="#0d1117", plot_bgcolor="#161b22",
+                height=220,
+                margin=dict(l=50, r=20, t=10, b=35),
+                legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1,
+                            font=dict(size=10)),
+                xaxis=dict(gridcolor="rgba(255,255,255,0.06)", tickfont=dict(size=10, color="#8b949e")),
+                yaxis=dict(title="Index (100 = start)", gridcolor="rgba(255,255,255,0.06)",
+                           tickfont=dict(size=10, color="#8b949e"), zeroline=False),
+                hovermode="x unified",
+            )
+            st.plotly_chart(_fig_cu, use_container_width=True)
+
+            # Rolling 90-day correlation chart
+            _cu_lr = np.log(_cu / _cu.shift(1)).dropna()
+            _roll_corr_cu = _cu_lr["TTF"].rolling(90).corr(_cu_lr["Copper"]).dropna()
+
+            _fig_cu_corr = go.Figure()
+            _fig_cu_corr.add_trace(go.Scatter(
+                x=_roll_corr_cu.index, y=_roll_corr_cu,
+                name="90-day rolling Pearson",
+                line=dict(color="#8e6bbf", width=1.8),
+                fill="tozeroy", fillcolor="rgba(142,107,191,0.07)",
+                hovertemplate="ρ(TTF,Copper): %{y:.2f}<extra></extra>",
+            ))
+            _fig_cu_corr.add_hline(y=0, line=dict(color="rgba(255,255,255,0.2)", width=1))
+            _fig_cu_corr.add_hline(y=0.5, line=dict(color="#3fb950", width=1, dash="dot"),
+                                   annotation_text="  0.5", annotation_font=dict(color="#3fb950", size=9))
+            _fig_cu_corr.add_hline(y=-0.5, line=dict(color="#f85149", width=1, dash="dot"),
+                                   annotation_text="  −0.5", annotation_font=dict(color="#f85149", size=9))
+            _fig_cu_corr.update_layout(
+                template="plotly_dark",
+                paper_bgcolor="#0d1117", plot_bgcolor="#161b22",
+                height=160,
+                margin=dict(l=50, r=60, t=5, b=35),
+                xaxis=dict(gridcolor="rgba(255,255,255,0.06)", tickfont=dict(size=10, color="#8b949e")),
+                yaxis=dict(title="Pearson ρ", gridcolor="rgba(255,255,255,0.06)",
+                           tickfont=dict(size=10, color="#8b949e"), range=[-1, 1]),
+                showlegend=False, hovermode="x unified",
+            )
+            st.plotly_chart(_fig_cu_corr, use_container_width=True)
+
+            # KPI row
+            _cu_corr_now = float(_roll_corr_cu.iloc[-1])
+            _cu_corr_color = "green" if abs(_cu_corr_now) >= 0.5 else ("amber" if abs(_cu_corr_now) >= 0.3 else "blue")
+
+            # 6-month copper change
+            _cu_6m_idx = max(0, len(_cu) - 126)
+            _cu_6m_chg = (_cu["Copper"].iloc[-1] / _cu["Copper"].iloc[_cu_6m_idx] - 1) * 100
+            _cu_6m_color = "red" if _cu_6m_chg > 15 else ("green" if _cu_6m_chg > 5 else "amber" if _cu_6m_chg < -5 else "blue")
+            _cu_signal = (
+                "strong grid demand signal" if _cu_6m_chg > 15
+                else "moderate upward pressure" if _cu_6m_chg > 5
+                else "weak / no signal" if abs(_cu_6m_chg) <= 5
+                else "easing"
+            )
+
+            _kc1, _kc2, _kc3 = st.columns(3)
+            with _kc1:
+                st.markdown(
+                    kpi_card("90-day TTF–Copper ρ", f"{_cu_corr_now:+.2f}",
+                             delta_span("rolling Pearson", _cu_corr_color)),
+                    unsafe_allow_html=True,
+                )
+            with _kc2:
+                st.markdown(
+                    kpi_card("6-month copper change", f"{_cu_6m_chg:+.1f}%",
+                             delta_span(_cu_signal, _cu_6m_color)),
+                    unsafe_allow_html=True,
+                )
+            with _kc3:
+                _cu_latest_usd = float(_cu["Copper"].iloc[-1])
+                st.markdown(
+                    kpi_card("LME Copper (latest)", f"${_cu_latest_usd:.3f}/lb",
+                             delta_span("HG=F front-month", "blue")),
+                    unsafe_allow_html=True,
+                )
+        else:
+            st.caption("Insufficient copper history (requires ≥90 days).")
+
+        with st.expander("Grid investment linkage — methodology", expanded=False):
+            st.markdown("""
+            **Why copper leads power grid investment:**
+            Copper is the primary conductor in high-voltage transmission lines, transformers, and
+            EV charging infrastructure. European grid operators (ENTSO-E TYNDPs, national TSO
+            investment programmes) require large volumes of copper for network reinforcement projects.
+            As grid build-out accelerates — driven by renewable integration, offshore wind connections,
+            and cross-border interconnector upgrades — copper demand rises, supporting LME prices.
+
+            **Transmission channel to power prices:**
+            A sustained copper rally (+15%+ over 6 months) has historically preceded grid capex
+            announcements by 3–9 months, as project developers lock in material costs early in
+            the procurement cycle. For power traders, rising copper can be a leading indicator of
+            grid constraint relief (new interconnectors reducing congestion) or increasing renewable
+            penetration (downward pressure on baseload prices).
+
+            **TTF as power proxy:** TTF gas price is used here as a European power cost proxy because
+            gas-fired CCGTs set the marginal price in the European day-ahead market for a large
+            fraction of hours. Rolling Pearson correlation is computed on daily log-returns; a positive
+            correlation indicates both assets move together (risk-on / demand-driven regimes). The
+            correlation frequently flips sign as the dominant driver shifts between energy demand
+            (positive) and inflation/cost shocks (negative: high gas crushes industrial copper demand).
+            """)
+
+    # ── NEW2: Aluminium Smelter Stress Indicator ──────────────────────────────
+    st.divider()
+    st.markdown("#### Aluminium Smelter Stress Indicator")
+    st.caption(
+        "European aluminium smelters are among the most electricity-intensive industrial users. "
+        "This indicator estimates power cost as a percentage of smelter revenue using TTF as a "
+        "European power price proxy and LME aluminium (ALI=F) as the revenue reference."
+    )
+
+    with st.spinner("Loading aluminium and gas prices…"):
+        _al_wide = _fetch_7x7_prices(days=365)
+
+    if _al_wide.empty or "Alum" not in _al_wide.columns or "TTF" not in _al_wide.columns:
+        st.caption("Aluminium or TTF data unavailable from Yahoo Finance.")
+    else:
+        _al = _al_wide[["TTF", "Alum"]].dropna()
+        if len(_al) < 30:
+            st.caption("Insufficient aluminium history (requires ≥30 days).")
+        else:
+            # power_cost_EUR/t = TTF × intensity × elec_factor
+            # revenue_EUR/t    = ALI_USD / EURUSD_approx
+            # stress_pct       = power_cost / revenue × 100
+            _pc = _al["TTF"] * ALUM_ELEC_INTENSITY_MWH * ALUM_TTF_TO_ELEC_FACTOR
+            _rv = _al["Alum"] / ALUM_EURUSD_APPROX
+            _stress = (_pc / _rv * 100).rename("stress_pct")
+
+            _latest_stress = float(_stress.iloc[-1])
+            if _latest_stress >= ALUM_STRESS_CRITICAL:
+                _stress_label, _stress_color = "CRITICAL", "red"
+            elif _latest_stress >= ALUM_STRESS_ELEVATED:
+                _stress_label, _stress_color = "ELEVATED", "amber"
+            else:
+                _stress_label, _stress_color = "NORMAL", "green"
+
+            # Stress time series chart
+            _fig_al = go.Figure()
+            _fig_al.add_trace(go.Scatter(
+                x=_stress.index, y=_stress.values,
+                name="Power cost % of revenue",
+                line=dict(color="#d4ac3a", width=1.8),
+                fill="tozeroy", fillcolor="rgba(212,172,58,0.07)",
+                hovertemplate="Stress: %{y:.1f}%<extra></extra>",
+            ))
+            _fig_al.add_hline(
+                y=ALUM_STRESS_ELEVATED,
+                line=dict(color="#d4ac3a", width=1, dash="dot"),
+                annotation_text=f"  {ALUM_STRESS_ELEVATED:.0f}% ELEVATED",
+                annotation_font=dict(color="#d4ac3a", size=9),
+                annotation_position="right",
+            )
+            _fig_al.add_hline(
+                y=ALUM_STRESS_CRITICAL,
+                line=dict(color="#f85149", width=1, dash="dot"),
+                annotation_text=f"  {ALUM_STRESS_CRITICAL:.0f}% CRITICAL",
+                annotation_font=dict(color="#f85149", size=9),
+                annotation_position="right",
+            )
+            _fig_al.update_layout(
+                template="plotly_dark",
+                paper_bgcolor="#0d1117", plot_bgcolor="#161b22",
+                height=230,
+                margin=dict(l=50, r=100, t=10, b=35),
+                xaxis=dict(gridcolor="rgba(255,255,255,0.06)", tickfont=dict(size=10, color="#8b949e")),
+                yaxis=dict(title="Power cost %", gridcolor="rgba(255,255,255,0.06)",
+                           tickfont=dict(size=10, color="#8b949e"), zeroline=False),
+                showlegend=False, hovermode="x unified",
+            )
+            st.plotly_chart(_fig_al, use_container_width=True)
+
+            # KPI row
+            _al1, _al2, _al3 = st.columns(3)
+            with _al1:
+                st.markdown(
+                    kpi_card("Smelter stress", f"{_latest_stress:.1f}%",
+                             delta_span(_stress_label, _stress_color)),
+                    unsafe_allow_html=True,
+                )
+            with _al2:
+                _al_latest_usd = float(_al["Alum"].iloc[-1])
+                st.markdown(
+                    kpi_card("LME Aluminium", f"${_al_latest_usd:,.0f}/t",
+                             delta_span("ALI=F front-month", "blue")),
+                    unsafe_allow_html=True,
+                )
+            with _al3:
+                _ttf_for_al = float(_al["TTF"].iloc[-1])
+                _power_cost_t = float(_pc.iloc[-1])
+                st.markdown(
+                    kpi_card("Implied power cost", f"€{_power_cost_t:,.0f}/t",
+                             delta_span(f"TTF {_ttf_for_al:.1f} × {ALUM_ELEC_INTENSITY_MWH}×{ALUM_TTF_TO_ELEC_FACTOR}", "blue")),
+                    unsafe_allow_html=True,
+                )
+
+        with st.expander("Smelter stress — methodology", expanded=False):
+            st.markdown(f"""
+            **Electricity intensity:** European primary aluminium smelters consume approximately
+            {ALUM_ELEC_INTENSITY_MWH} MWh of electricity per tonne of aluminium produced via the
+            Hall-Héroult electrolytic process. This is the dominant variable cost, accounting for
+            roughly 35–45% of total production cost at European facilities.
+
+            **Power cost proxy:** TTF day-ahead gas price (EUR/MWh) is used as a proxy for European
+            electricity costs, multiplied by a factor of {ALUM_TTF_TO_ELEC_FACTOR} to approximate
+            the gas-to-power conversion (CCGT heat rate). When gas-fired CCGTs set the marginal
+            price in the European power market, this approximation is reasonable. During periods
+            of high renewable penetration or nuclear availability, actual power prices may be
+            materially lower than this proxy suggests.
+
+            **Revenue denominator:** LME aluminium price (ALI=F, USD/tonne) divided by a fixed
+            EUR/USD assumption of {ALUM_EURUSD_APPROX}. This is a simplifying assumption; actual
+            smelter margins depend on hedging, power purchase agreements (PPAs), and regional tariffs.
+
+            **Stress thresholds (from config):**
+            - NORMAL: power cost below {ALUM_STRESS_ELEVATED:.0f}% of smelter revenue
+            - ELEVATED: {ALUM_STRESS_ELEVATED:.0f}–{ALUM_STRESS_CRITICAL:.0f}% — smelters under margin pressure; curtailment risk rises
+            - CRITICAL: above {ALUM_STRESS_CRITICAL:.0f}% — economics favour curtailment or idling; European capacity at risk
+
+            **2021-22 context:** During the 2022 energy crisis, several European aluminium smelters
+            (TRIMET Germany, Aluminium Dunkerque, SLOVALCO Slovakia) curtailed or suspended
+            operations as electricity costs exceeded revenue for extended periods. The stress
+            indicator would have been in CRITICAL territory for much of Q3/Q4 2022.
+            """)
+
+    st.caption("Sources: ICE/Yahoo Finance (HG=F LME Copper, ALI=F LME Aluminium, TTF=F gas)")
 
 
 # ════════════════════════════════════════════════════════════════════════════
