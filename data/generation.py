@@ -26,7 +26,8 @@ except ImportError:
 
 DE_EIC     = "10Y1001A1001A83F"
 START_YEAR = 2019
-_CACHE_CSV  = os.path.join(os.path.dirname(__file__), "generation_cache.csv")
+_PERSIST_DIR = os.getenv("DATA_PERSIST_DIR", os.path.dirname(os.path.abspath(__file__)))
+_CACHE_CSV   = os.path.join(_PERSIST_DIR, "generation_cache.csv")
 _CHUNK_TIMEOUT = 30   # seconds per annual ENTSO-E chunk before giving up
 
 HARD_COAL_NAMES = {"Fossil Hard coal", "Hard coal"}

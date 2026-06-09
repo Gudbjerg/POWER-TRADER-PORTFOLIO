@@ -209,7 +209,7 @@ with st.expander("About this platform", expanded=False):
             "<strong style='color:#c9d1d9;'>Data &amp; Infrastructure</strong><br>"
             "Python 3.11+ &nbsp;·&nbsp; Streamlit &nbsp;·&nbsp; Plotly<br>"
             "Pandas &nbsp;·&nbsp; NumPy &nbsp;·&nbsp; yfinance &nbsp;·&nbsp; entsoe-py<br>"
-            "Deployed on HuggingFace Spaces"
+            "Deployed on Render (EU Frankfurt) · HuggingFace Spaces (backup)"
             "</div>",
             unsafe_allow_html=True,
         )

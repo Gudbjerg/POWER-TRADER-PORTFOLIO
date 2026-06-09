@@ -22,7 +22,7 @@ from data.prices import get_ttf_data
 
 apply_dark_theme()
 
-st.markdown("## Layer 4: Machine Learning and Advanced Models")
+st.markdown("## Layer 4 · Machine Learning")
 st.caption(
     "Machine learning applied to European power and gas market forecasting and regime classification."
 )

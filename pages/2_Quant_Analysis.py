@@ -408,7 +408,7 @@ with st.sidebar:
     st.divider()
 
 # ── Header ───────────────────────────────────────────────────────────────────
-st.markdown("## Layer 2: Quantitative Analysis")
+st.markdown("## Layer 2 · Quantitative Analysis")
 st.caption("Quantitative models for European power and gas market analysis.")
 st.divider()
 
