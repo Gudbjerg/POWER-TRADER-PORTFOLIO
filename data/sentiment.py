@@ -173,11 +173,12 @@ def _save_history(scored: pd.DataFrame) -> None:
     """Merge new scored headlines into the persistent history file."""
     try:
         path    = os.path.normpath(_HISTORY_FILE)
+        if os.getenv("DATA_PERSIST_DIR"):
+            import sys
+            print(f"[sentiment] writing history to {path}", file=sys.stderr)
         hist    = _load_history()
         combined = pd.concat([hist, scored], ignore_index=True)
-        # Deduplicate by title (same article may appear across fetches)
         combined = combined.drop_duplicates(subset=["title"]).sort_values("date")
-        # Keep only last _HISTORY_DAYS days
         cutoff  = pd.Timestamp.now() - pd.Timedelta(days=_HISTORY_DAYS)
         combined = combined[combined["date"] >= cutoff]
         combined.to_csv(path, index=False)

@@ -100,25 +100,25 @@ _SIG_BY_ID = {s["id"]: s for s in _SIGNALS}
 # Price impacts (EUR/MWh) for the named underlying in each scenario.
 _STRESS = {
     "Cold snap": {
-        "label":       "Cold snap — NO2 +€30/MWh, TTF +€10/MWh",
+        "label":       "Cold snap: NO2 +30, TTF +10 EUR/MWh",
         "ttf":          +10.0,
         "no2":          +30.0,
         "no_nl_spread": +30.0,
     },
     "Norwegian outage": {
-        "label":       "Norwegian outage — NO2 +€25/MWh, TTF +€5/MWh",
+        "label":       "Norwegian outage: NO2 +25, TTF +5 EUR/MWh",
         "ttf":          +5.0,
         "no2":          +25.0,
         "no_nl_spread": +25.0,
     },
     "Hormuz extension": {
-        "label":       "Hormuz extension — TTF +€15/MWh, NO2 +€10/MWh",
+        "label":       "Hormuz extension: TTF +15, NO2 +10 EUR/MWh",
         "ttf":          +15.0,
         "no2":          +10.0,
         "no_nl_spread": +5.0,
     },
     "EUR/USD −10%": {
-        "label":       "EUR/USD −10% — TTF −€8/MWh, NO2 −€5/MWh",
+        "label":       "EUR/USD -10%: TTF -8, NO2 -5 EUR/MWh",
         "ttf":          -8.0,
         "no2":          -5.0,
         "no_nl_spread": -3.0,
@@ -288,7 +288,7 @@ st.caption(
 st.markdown(
     """<div style="background:#1f1108;border-left:3px solid #d4ac3a;padding:10px 14px;
     border-radius:4px;color:#d4ac3a;font-size:0.84rem;margin-bottom:14px;">
-    ⚠️ <strong>For analytical purposes only.</strong> Position P&amp;L is simulated from historical
+    <strong>For analytical purposes only.</strong> Position P&amp;L is simulated from historical
     signal performance. Signals are derived from statistical models applied to public market data.
     Not financial advice. Simulated past performance is not indicative of future results.
     </div>""",
@@ -307,6 +307,14 @@ if _feat.empty or len(_feat) < 60:
     )
     st.stop()
 
+_d4_coverage = _feat.attrs.get("coverage_report") or {}
+_d4_missing = [k for k, v in _d4_coverage.items() if not v]
+if _d4_missing:
+    st.caption(
+        f"Feature groups unavailable: {', '.join(_d4_missing)}. "
+        "Some signals may be omitted. Check ENTSO-E key (hydro/wind) and AGSI key (storage)."
+    )
+
 _feat = _feat.copy().reset_index(drop=True)
 
 with st.spinner("Computing signal directions…"):
@@ -321,6 +329,13 @@ st.caption(
     f"Feature matrix: {len(_feat):,} trading days  ({_feat_date_min} → {_feat_date_max})  ·  "
     f"{len(_available_sigs)} of {len(_SIGNALS)} signals computable"
 )
+if _unavailable:
+    st.warning(
+        f"**{len(_unavailable)} signal(s) unavailable** due to missing feature data: "
+        + ", ".join(_unavailable)
+        + ". Check ENTSO-E API key (hydro/wind) and AGSI key (storage).",
+        icon="⚠",
+    )
 
 # ── Sidebar: portfolio builder ────────────────────────────────────────────────
 st.sidebar.markdown("### Portfolio Builder")
@@ -405,7 +420,7 @@ st.divider()
 # ════════════════════════════════════════════════════════════════════════════════
 # SECTION 1 — EQUITY CURVES
 # ════════════════════════════════════════════════════════════════════════════════
-st.markdown("#### Equity Curves — Simulated Cumulative P&L")
+st.markdown("#### Equity Curves: Simulated Cumulative P&L")
 
 if _n_active == 0:
     st.info("Set signal notionals in the sidebar to activate the portfolio simulator.", icon="ℹ️")
@@ -471,7 +486,7 @@ st.divider()
 # ════════════════════════════════════════════════════════════════════════════════
 # SECTION 2 — VaR / ES
 # ════════════════════════════════════════════════════════════════════════════════
-st.markdown("#### Value at Risk / Expected Shortfall — Combined Portfolio")
+st.markdown("#### Value at Risk / Expected Shortfall: Combined Portfolio")
 
 if _n_active == 0 or len(_combined) < 30:
     st.caption("Activate at least one signal with notional > 0 (and ≥ 30 days of P&L history) to compute risk metrics.")
@@ -534,7 +549,7 @@ else:
         f"{len(_arr):,} daily observations · "
         f"Mean: €{float(_arr.mean()):+,.0f} · Std: €{float(_arr.std()):,.0f} · "
         f"Skew: {_skew:.2f} · Excess kurtosis: {_kurt:.2f}"
-        + (" — fat tails present; parametric VaR would understate risk" if _kurt > 1.0 else "")
+        + (". Fat tails present; parametric VaR would understate risk." if _kurt > 1.0 else "")
     )
 
 st.divider()
@@ -542,7 +557,7 @@ st.divider()
 # ════════════════════════════════════════════════════════════════════════════════
 # SECTION 3 — STRESS SCENARIOS
 # ════════════════════════════════════════════════════════════════════════════════
-st.markdown("#### Stress Scenarios — Single-Day Impact Estimates")
+st.markdown("#### Stress Scenarios: Single-Day Impact Estimates")
 st.caption(
     "Stressed P&L = current signal direction × scenario price move × notional. "
     "Price moves are calibrated from historical analogues. Current direction = last day in lagged series."
@@ -603,7 +618,7 @@ st.divider()
 st.markdown("#### Signal Return Correlation Matrix (most recent 30 days)")
 st.caption(
     "Pairwise Pearson correlation of unit-notional daily P&L contributions for all available signals. "
-    "High correlation (|ρ| ≥ 0.6) reduces diversification benefit — two correlated signals "
+    "High correlation (|ρ| >= 0.6) reduces diversification benefit: two correlated signals "
     "increase nominal notional without proportionally increasing portfolio variance."
 )
 
@@ -679,7 +694,7 @@ with st.expander("Methodology", expanded=False):
     based on a rolling {_ROLL_WINDOW}-day ({_ROLL_WINDOW//21}-month) empirical percentile of the
     underlying indicator. Below {_PCTILE_LO:.0f}th percentile → long; above {_PCTILE_HI:.0f}th → short.
     The NO2/NL Spread uses an expanding-window OLS z-score (|z| > {_ENTRY_Z}) instead of percentile.
-    All directions are **lagged 1 trading day** — yesterday's signal drives today's position (no look-ahead bias).
+    All directions are **lagged 1 trading day**: yesterday's signal drives today's position (no look-ahead bias).
 
     **Notional:** EUR gain per €1/MWh move in the signal's underlying price.
     P&L[t] = direction[t−1] × ΔPrice[t] × notional. Absolute EUR/MWh differences are used, not log-returns.
@@ -689,16 +704,16 @@ with st.expander("Methodology", expanded=False):
     1-day {_VaR_CONF*100:.0f}% VaR = −(5th percentile of empirical daily P&L distribution).
     Expected Shortfall (ES / CVaR) = mean of all observations below the VaR cutoff.
     Bootstrap 95% CI uses {_N_BOOT:,} resamples. Fat-tailed distributions (excess kurtosis > 0)
-    cause parametric (Gaussian) VaR to understate tail risk — this is why we use non-parametric estimation.
+    cause parametric (Gaussian) VaR to understate tail risk. Non-parametric estimation is used for this reason.
 
     **Stress scenarios:** Static one-day price impacts applied to current signal directions.
     Not path-dependent. Magnitude calibrated from historical intraday/daily moves during analogous events.
 
     **Correlation matrix:** 30-day rolling Pearson on unit-notional (notional=1) daily P&L contributions.
-    Reflects recent co-movement — correlations are not constant.
+    Reflects recent co-movement; correlations are not constant.
 
     **Coverage gap:** Clean Spark Spread (D3 sig 5) and Marginal Fuel (D3 sig 8) are not backtested
-    here — they require historical EUA price series and live ENTSO-E load data respectively.
+    here. They require historical EUA price series and live ENTSO-E load data respectively.
     """)
 
 # ── Footer ─────────────────────────────────────────────────────────────────────

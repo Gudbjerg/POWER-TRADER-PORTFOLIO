@@ -93,6 +93,9 @@ def _load_cache() -> pd.DataFrame:
 
 def _save_cache(df: pd.DataFrame) -> None:
     try:
+        if os.getenv("DATA_PERSIST_DIR"):
+            import sys
+            print(f"[generation] writing cache to {_CACHE_CSV}", file=sys.stderr)
         df.to_csv(_CACHE_CSV, index=False)
     except Exception:
         pass

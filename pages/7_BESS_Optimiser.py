@@ -210,11 +210,10 @@ def _npv_only(
         capacity_mwh, power_mw, eff_pct, deg_pct,
         capex_per_kwh * capex_mult, disc_pct, lifetime, markets, adj_spread,
     )
-    # FCR adjustment: scale FCR revenues post-model
+    # FCR revenues are capacity-based (not degraded), so the FCR sensitivity delta
+    # is a constant annual increment discounted over the full lifetime.
     if fcr_mult != 1.0:
         fcr_adj = (s["fcr_n_y1"] + s["fcr_d_y1"]) * (fcr_mult - 1.0)
-        ann_adj  = sum(row["disc_cf"] * 0 for row in s["rows"])  # placeholder
-        # Recompute NPV with adjusted FCR
         disc = disc_pct / 100.0
         fcr_npv_adj = sum(
             fcr_adj / (1.0 + disc) ** yr
@@ -237,7 +236,7 @@ st.caption(
 st.markdown(
     """<div style="background:#1f1108;border-left:3px solid #d4ac3a;padding:10px 14px;
     border-radius:4px;color:#d4ac3a;font-size:0.84rem;margin-bottom:14px;">
-    ⚠️ <strong>Revenue estimates are simplified deterministic projections</strong> based on historical
+    <strong>Revenue estimates are simplified deterministic projections</strong> based on historical
     average market prices and are not guaranteed. Actual returns depend on contracted FCR volumes,
     intraday market conditions, battery degradation, and grid connection costs.
     FCR prices are market averages, not contracted rates. Not financial advice.
@@ -253,7 +252,7 @@ _spread = _dam_spread_from_features(_feat)
 if _spread["fallback"]:
     st.caption(
         "DAM spread estimated from Nordic historical averages (€22/MWh achievable, top-20% filter). "
-        "Feature matrix unavailable — visit Layer 2 first to populate. FCR revenues are unaffected."
+        "Feature matrix unavailable. Visit Layer 2 first to populate. FCR revenues are unaffected."
     )
 else:
     st.caption(
@@ -370,7 +369,7 @@ st.divider()
 # ═══════════════════════════════════════════════════════════════════════════════
 # CHART 1: REVENUE BREAKDOWN STACKED BAR
 # ═══════════════════════════════════════════════════════════════════════════════
-st.markdown("#### Revenue Breakdown — Annual by Market (EUR)")
+st.markdown("#### Revenue Breakdown: Annual by Market (EUR)")
 
 _yrs    = [r["year"]     for r in _m["rows"]]
 _dam_v  = [r["dam"]      for r in _m["rows"]]
@@ -481,7 +480,7 @@ _fig_wf.update_layout(
     showlegend=False,
 )
 st.plotly_chart(_fig_wf, use_container_width=True)
-st.caption("Depreciation shown for reference — non-cash, does not affect cash flow or NPV calculation.")
+st.caption("Depreciation shown for reference. Non-cash item; does not affect cash flow or NPV calculation.")
 
 st.divider()
 
@@ -583,11 +582,11 @@ with st.expander("Model methodology and assumptions", expanded=False):
     Revenue per viable day = achievable spread × min(power × {BESS_DAM_DISPATCH_HOURS:.0f}h, capacity) × efficiency.
     Intraday proxy = 50% of DAM (intraday spreads smaller but more frequent; see Löhndorf & Wozabal 2024).
 
-    **FCR-N (Frequency Containment Reserve — Normal):**
+    **FCR-N (Frequency Containment Reserve, Normal):**
     Always-on symmetric response at ±0.1 Hz. Revenue = power rating × €{BESS_FCR_N_EUR_PER_MW_YEAR:,.0f}/MW/year
     (approximate Nordic/NordREG market average). This is a capacity payment, not degraded by battery age.
 
-    **FCR-D (Frequency Containment Reserve — Disturbed):**
+    **FCR-D (Frequency Containment Reserve, Disturbed):**
     Asymmetric, activated on frequency deviation > 0.5 Hz. Revenue = power × €{BESS_FCR_D_EUR_PER_MW_YEAR:,.0f}/MW/year
     × (1 − {BESS_FCR_D_AVAIL_DISC:.0%} availability discount). The discount reflects the constraint that
     the battery must maintain ≈50% SoC to participate symmetrically in upward and downward regulation.
@@ -627,7 +626,7 @@ st.markdown(
     Built by Tobias Gudbjerg &nbsp;|&nbsp;
     DAM data: ENTSO-E A44 / Nord Pool (NO2) &nbsp;|&nbsp;
     FCR prices: Nordic/NordREG market averages (FCR-N ≈ €{BESS_FCR_N_EUR_PER_MW_YEAR:,.0f}/MW/yr,
-    FCR-D ≈ €{BESS_FCR_D_EUR_PER_MW_YEAR:,.0f}/MW/yr) — approximate, varies by auction.<br>
+    FCR-D ≈ €{BESS_FCR_D_EUR_PER_MW_YEAR:,.0f}/MW/yr), approximate, varies by auction.<br>
     For analytical and educational purposes only. Not financial advice.
     Consult project-specific grid connection studies, PPA terms, and contracted FCR volumes
     for investment-grade projections.

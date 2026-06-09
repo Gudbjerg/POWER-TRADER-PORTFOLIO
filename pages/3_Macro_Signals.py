@@ -616,7 +616,7 @@ with tab_spill:
         else:
             st.caption("Insufficient copper history (requires ≥90 days).")
 
-        with st.expander("Grid investment linkage — methodology", expanded=False):
+        with st.expander("Grid investment linkage: methodology", expanded=False):
             st.markdown("""
             **Why copper leads power grid investment:**
             Copper is the primary conductor in high-voltage transmission lines, transformers, and
@@ -733,7 +733,7 @@ with tab_spill:
                     unsafe_allow_html=True,
                 )
 
-        with st.expander("Smelter stress — methodology", expanded=False):
+        with st.expander("Smelter stress: methodology", expanded=False):
             st.markdown(f"""
             **Electricity intensity:** European primary aluminium smelters consume approximately
             {ALUM_ELEC_INTENSITY_MWH} MWh of electricity per tonne of aluminium produced via the
@@ -753,8 +753,8 @@ with tab_spill:
 
             **Stress thresholds (from config):**
             - NORMAL: power cost below {ALUM_STRESS_ELEVATED:.0f}% of smelter revenue
-            - ELEVATED: {ALUM_STRESS_ELEVATED:.0f}–{ALUM_STRESS_CRITICAL:.0f}% — smelters under margin pressure; curtailment risk rises
-            - CRITICAL: above {ALUM_STRESS_CRITICAL:.0f}% — economics favour curtailment or idling; European capacity at risk
+            - ELEVATED: {ALUM_STRESS_ELEVATED:.0f}–{ALUM_STRESS_CRITICAL:.0f}%: smelters under margin pressure; curtailment risk rises
+            - CRITICAL: above {ALUM_STRESS_CRITICAL:.0f}%: economics favour curtailment or idling; European capacity at risk
 
             **2021-22 context:** During the 2022 energy crisis, several European aluminium smelters
             (TRIMET Germany, Aluminium Dunkerque, SLOVALCO Slovakia) curtailed or suspended
@@ -897,7 +897,7 @@ with tab_grid:
         )
 
         # ── Lead-lag table ────────────────────────────────────────────────────
-        st.markdown("#### Lead-Lag Analysis — Top 15 Pairs by |ρ|")
+        st.markdown("#### Lead-Lag Analysis: Top 15 Pairs by |rho|")
         st.caption(
             "For each pair the lag τ ∈ [−10d, +10d] maximising |ρ| is reported. "
             "Positive τ = left asset leads right asset by τ days."

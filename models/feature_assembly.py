@@ -359,6 +359,7 @@ def assemble_features(years: int = 3, use_cache: bool = True) -> pd.DataFrame:
     # Persist to disk
     _save_cache(base)
 
+    base.attrs["coverage_report"] = get_available_feature_sets(base)
     return base
 
 
