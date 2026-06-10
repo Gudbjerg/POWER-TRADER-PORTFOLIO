@@ -26,7 +26,7 @@ DE_EIC     = "10Y1001A1001A83F"
 START_YEAR = 2019
 _PERSIST_DIR = os.getenv("DATA_PERSIST_DIR", os.path.dirname(os.path.abspath(__file__)))
 _CACHE_CSV   = os.path.join(_PERSIST_DIR, "generation_cache.csv")
-_CHUNK_TIMEOUT = 30   # seconds per annual ENTSO-E chunk before giving up
+_CHUNK_TIMEOUT = 90   # seconds per quarterly ENTSO-E chunk before giving up
 
 HARD_COAL_NAMES = {"Fossil Hard coal", "Hard coal"}
 LIGNITE_NAMES   = {"Fossil Brown coal/Lignite", "Brown coal/Lignite", "Lignite"}
@@ -104,7 +104,7 @@ def _build_hourly_from_entsoe(client, fetch_from: pd.Timestamp, fetch_to: pd.Tim
     rows: list[pd.DataFrame] = []
     chunk_start = fetch_from
     while chunk_start < fetch_to:
-        chunk_end = min(chunk_start + pd.Timedelta(days=365), fetch_to)
+        chunk_end = min(chunk_start + pd.Timedelta(days=92), fetch_to)
         raw = _fetch_chunk_with_timeout(client, chunk_start, chunk_end)
         if raw is not None and not raw.empty:
             hard_coal, lignite = _extract_coal_columns(raw)

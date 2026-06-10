@@ -18,7 +18,7 @@ pinned: false
 ![Pages](https://img.shields.io/badge/7%20pages-21%20analytical%20modules-lightgrey)
 ![Sources](https://img.shields.io/badge/9%20data%20sources-live%20feeds-green)
 
-The platform integrates live fundamental data from ENTSO-E Transparency, GIE AGSI+/ALSI, Nord Pool, and ICE/Yahoo Finance into a unified analytical environment covering storage balances, forward curve dynamics, cross-commodity price transmission, machine learning regime detection, portfolio risk simulation, and battery storage project economics. All models are implemented from scratch in Python; no third-party signal providers or data vendors are used beyond the public API layer. The architecture escalates from raw market observation in Layer 1 to actionable composite signals in Layer 5, following the analytical hierarchy a physical desk would apply before executing.
+The platform integrates live fundamental data from ENTSO-E Transparency, GIE AGSI+/ALSI, Nord Pool, and ICE/Yahoo Finance into a unified analytical environment covering storage balances, forward curve dynamics, cross-commodity price transmission, machine learning regime detection, portfolio risk simulation, and battery storage project economics. All models are implemented from scratch in Python; no third-party signal providers or data vendors are used beyond the public API layer. The architecture escalates from raw market observation in Layer 1 to actionable composite signals in Layer 5, following the analytical hierarchy a physical desk would apply before taking a position.
 
 ---
 
@@ -47,59 +47,61 @@ The HuggingFace Space builds from the `hf-deploy` branch. Cold-start on an idle 
 
 A Docker-based Render deployment (EU Frankfurt, persistent disk for FinBERT sentiment history) is configured via [Dockerfile](Dockerfile) and [render.yaml](render.yaml).
 
+To add screenshots, save PNG files to `files/screenshots/` and they will appear in the expandable blocks below.
+
 <details>
 <summary>Landing page</summary>
 
-![Landing page](files/screenshots/landing_page.png)
+<!-- add files/screenshots/landing_page.png -->
 
 </details>
 
 <details>
 <summary>Layer 1: Live Market Monitor</summary>
 
-![Layer 1 overview](files/screenshots/layer1_overview.png)
+<!-- add files/screenshots/layer1_overview.png -->
 
 </details>
 
 <details>
 <summary>Layer 2: Cointegration Scanner</summary>
 
-![Cointegration scanner](files/screenshots/layer2_cointegration_scanner.png)
+<!-- add files/screenshots/layer2_cointegration_scanner.png -->
 
 </details>
 
 <details>
 <summary>Layer 2: Forward Curve PCA</summary>
 
-![Forward curve PCA](files/screenshots/layer2_pca.png)
+<!-- add files/screenshots/layer2_pca.png -->
 
 </details>
 
 <details>
 <summary>Layer 3: 7x7 Correlation Grid</summary>
 
-![7x7 cross-commodity grid](files/screenshots/layer3_correlation_grid.png)
+<!-- add files/screenshots/layer3_correlation_grid.png -->
 
 </details>
 
 <details>
 <summary>Layer 5: Mispricing Dashboard</summary>
 
-![Mispricing dashboard](files/screenshots/layer5_mispricing.png)
+<!-- add files/screenshots/layer5_mispricing.png -->
 
 </details>
 
 <details>
 <summary>Page 6: Risk Dashboard</summary>
 
-![Risk dashboard](files/screenshots/d4_risk_dashboard.png)
+<!-- add files/screenshots/d4_risk_dashboard.png -->
 
 </details>
 
 <details>
 <summary>Page 7: BESS Optimiser</summary>
 
-![BESS NPV and cash flow](files/screenshots/bess_npv.png)
+<!-- add files/screenshots/bess_npv.png -->
 
 </details>
 
@@ -147,21 +149,16 @@ A Docker-based Render deployment (EU Frankfurt, persistent disk for FinBERT sent
           ┌─────────────────────────────────▼──────────────────────────────────┐
           │  Layer 5: Mispricing Dashboard  (8-signal composite scorecard)     │
           │  TTF seasonal · EU storage · NO2/NL spread · Gas-power residual   │
-          │  Clean spark spread · Norwegian hydro · TTF vs storage · Fuel      │
-          └───────────────────────────────┬─┬───────────────────────────────── ┘
-                                          │ │
-          ┌───────────────────────────────▼ │ ─────────────────────────────────┐
-          │  Page 6: Risk Dashboard          │                                  │
-          │  Signal portfolio VaR/ES         │                                  │
-          │  4 stress scenarios             │                                  │
-          │  Rolling correlation matrix      │                                  │
-          └──────────────────────────────── │ ─────────────────────────────────┘
-                                            │
-          ┌─────────────────────────────────▼──────────────────────────────────┐
-          │  Page 7: BESS Optimiser                                            │
-          │  DAM arbitrage + FCR-N/D + intraday revenue stacking              │
-          │  NPV / IRR / payback · Sensitivity table                           │
-          └────────────────────────────────────────────────────────────────────┘
+          │  Clean spark spread · Norwegian hydro · TTF vs storage · Fuel sw. │
+          └─────────────────────────────────┬──────────────────────────────────┘
+                              ┌─────────────┴─────────────────────────┐
+                              │                                       │
+          ┌───────────────────▼────────────────────────────┐  ┌─────────────────▼───────────────┐
+          │  Page 6: Risk Dashboard                        │  │  Page 7: BESS Optimiser         │
+          │  VaR/ES bootstrap (1,000 paths)                │  │  DAM + FCR-N/D revenue          │
+          │  4 named stress scenarios                      │  │  NPV / IRR / payback            │
+          │  Rolling correlation matrix                    │  │  ±20% sensitivity table         │
+          └────────────────────────────────────────────────┘  └─────────────────────────────────┘
 ```
 
 The layered model reflects how a physical desk processes information: raw observation (Layer 1) feeds quantitative model estimation (Layer 2), which contextualises within the macro and geopolitical regime (Layer 3), cross-validates against statistical learning signals (Layer 4), and synthesises into a ranked composite view (Layer 5). Pages 6 and 7 apply that signal infrastructure to portfolio risk and project evaluation respectively.
