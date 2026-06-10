@@ -47,61 +47,59 @@ The HuggingFace Space builds from the `hf-deploy` branch. Cold-start on an idle 
 
 A Docker-based Render deployment (EU Frankfurt, persistent disk for FinBERT sentiment history) is configured via [Dockerfile](Dockerfile) and [render.yaml](render.yaml).
 
-To add screenshots, save PNG files to `files/screenshots/` and they will appear in the expandable blocks below.
-
 <details>
 <summary>Landing page</summary>
 
-<!-- add files/screenshots/landing_page.png -->
+![Landing page](files/screenshots/landing_page.png)
 
 </details>
 
 <details>
 <summary>Layer 1: Live Market Monitor</summary>
 
-<!-- add files/screenshots/layer1_overview.png -->
+![Layer 1 overview](files/screenshots/layer1_overview.png)
 
 </details>
 
 <details>
-<summary>Layer 2: Cointegration Scanner</summary>
+<summary>Layer 2: Quantitative Analysis</summary>
 
-<!-- add files/screenshots/layer2_cointegration_scanner.png -->
+![Layer 2 quantitative analysis](files/screenshots/layer2_cointegration_scanner.png)
 
 </details>
 
 <details>
 <summary>Layer 2: Forward Curve PCA</summary>
 
-<!-- add files/screenshots/layer2_pca.png -->
+![Forward curve PCA](files/screenshots/layer2_pca.png)
 
 </details>
 
 <details>
-<summary>Layer 3: 7x7 Correlation Grid</summary>
+<summary>Layer 3: Geopolitical and Macro Signals</summary>
 
-<!-- add files/screenshots/layer3_correlation_grid.png -->
+![Layer 3 macro signals](files/screenshots/layer3_correlation_grid.png)
 
 </details>
 
 <details>
 <summary>Layer 5: Mispricing Dashboard</summary>
 
-<!-- add files/screenshots/layer5_mispricing.png -->
+![Mispricing dashboard](files/screenshots/layer5_mispricing.png)
 
 </details>
 
 <details>
 <summary>Page 6: Risk Dashboard</summary>
 
-<!-- add files/screenshots/d4_risk_dashboard.png -->
+![Risk dashboard](files/screenshots/d4_risk_dashboard.png)
 
 </details>
 
 <details>
 <summary>Page 7: BESS Optimiser</summary>
 
-<!-- add files/screenshots/bess_npv.png -->
+![BESS NPV and cash flow](files/screenshots/bess_npv.png)
 
 </details>
 
