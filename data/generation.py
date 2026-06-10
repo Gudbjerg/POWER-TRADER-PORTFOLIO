@@ -11,8 +11,6 @@ Only fetches quarters not already in the cache on subsequent calls.
 from __future__ import annotations
 
 import os
-import json
-import time
 import threading
 import pandas as pd
 import streamlit as st

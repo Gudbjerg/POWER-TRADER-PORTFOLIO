@@ -7,7 +7,7 @@ Returns weekly filling levels for Norway aggregated, with historical percentile 
 import os
 import pandas as pd
 import streamlit as st
-from datetime import datetime, timedelta
+from datetime import datetime
 
 try:
     from entsoe import EntsoePandasClient

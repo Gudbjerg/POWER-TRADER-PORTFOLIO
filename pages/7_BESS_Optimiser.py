@@ -597,7 +597,7 @@ with st.expander("Model methodology and assumptions", expanded=False):
     degradation curve (e.g., NMC: 0.002% per equivalent full cycle); linear approximation is used here.
 
     **Financial model:**
-    NPV = −CAPEX + Σ(t=1..N) \[CF_t / (1 + r)^t\], where CF_t = Revenue_t − OPEX.
+    NPV = −CAPEX + Σ(t=1..N) [CF_t / (1 + r)^t], where CF_t = Revenue_t − OPEX.
     OPEX is {BESS_OPEX_PCT_CAPEX*100:.0f}% of CAPEX per year (fixed). Depreciation (straight-line)
     is shown in the waterfall but does not enter the cash flow or NPV calculation.
     IRR is solved by bisection. Simple payback = CAPEX / (Year-1 Revenue − OPEX), undiscounted.
