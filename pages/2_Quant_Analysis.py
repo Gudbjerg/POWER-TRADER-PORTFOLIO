@@ -81,7 +81,7 @@ def _run_sc_ols_cached(sc_m_df: pd.DataFrame) -> float:
     _X   = _sm_ols.add_constant(sc_m_df["storage_pct"])
     _fit = _sm_ols.OLS(sc_m_df["price"], _X).fit()
     _row = sc_m_df.iloc[-1]
-    return float(_row["price"] - (_fit.params[0] + _fit.params[1] * float(_row["storage_pct"])))
+    return float(_row["price"] - (_fit.params.iloc[0] + _fit.params.iloc[1] * float(_row["storage_pct"])))
 
 @st.cache_data(show_spinner=False)
 def _run_sc_granger_cached(gc_df: pd.DataFrame) -> tuple:
@@ -284,12 +284,12 @@ def _run_coint_scanner(price_df: pd.DataFrame) -> list[dict]:
                 _pval, _dep, _indep, _dn, _in_ = _pba, _yb, _ya, _b, _a
             _X_sc    = _sm_sc.add_constant(_indep)
             _ols_sc  = _sm_sc.OLS(_dep, _X_sc).fit()
-            _beta_sc = float(_ols_sc.params[1])
+            _beta_sc = float(_ols_sc.params.iloc[1])
             _resid_sc = np.asarray(_ols_sc.resid, dtype=float).copy()
             _rl  = _resid_sc[:-1]
             _rd  = np.diff(_resid_sc)
             _ou  = _sm_sc.OLS(_rd, _sm_sc.add_constant(_rl)).fit()
-            _lam = float(_ou.params[1])
+            _lam = float(_ou.params.iloc[1])
             _hl  = (-np.log(2) / _lam) if _lam < 0 else float("inf")
             _rs  = pd.Series(_resid_sc, dtype=float)
             _em  = _rs.expanding(min_periods=30).mean()
@@ -357,13 +357,17 @@ def _get_de_live_load_gw() -> tuple:
         _start = pd.Timestamp(_now.date(), tz="Europe/Berlin")
         _end   = _start + pd.Timedelta(days=1)
         _client_a65 = EntsoePandasClient(api_key=_key)
-        _ser = _client_a65.query_load("10Y1001A1001A83F", start=_start, end=_end)
+        try:
+            _ser = _client_a65.query_load("10Y1001A1001A83F", start=_start, end=_end)
+        except Exception:
+            _ser = None
         if _ser is None or (hasattr(_ser, "empty") and _ser.empty):
             _start -= pd.Timedelta(days=1)
             _end   -= pd.Timedelta(days=1)
             _ser    = _client_a65.query_load("10Y1001A1001A83F", start=_start, end=_end)
         if _ser is not None and not (hasattr(_ser, "empty") and _ser.empty):
-            _gw = float(_ser.mean()) / 1000.0
+            _vals = _ser.iloc[:, 0] if isinstance(_ser, pd.DataFrame) else _ser
+            _gw = float(_vals.mean()) / 1000.0
             return _gw, f"ENTSO-E A65 ({_start.date()})"
         return None, "no data today"
     except Exception as _exc:
@@ -3170,7 +3174,7 @@ with tab_coint:
                 _ci_resid_d   = np.diff(_ci_resid)
                 _ci_ou_X = _sm_ci.add_constant(_ci_resid_lag)
                 _ci_ou   = _sm_ci.OLS(_ci_resid_d, _ci_ou_X).fit()
-                _ci_lambda = float(_ci_ou.params[1])
+                _ci_lambda = float(_ci_ou.params.iloc[1])
                 _ci_halflife = (-np.log(2) / _ci_lambda) if _ci_lambda < 0 else float("inf")
 
                 # ── Spread z-score (expanding window — no look-ahead bias) ───
