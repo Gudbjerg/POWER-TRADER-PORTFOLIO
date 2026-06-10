@@ -98,7 +98,18 @@ def _fetch_energy_charts(days: int) -> pd.DataFrame:
         r.raise_for_status()
         data = r.json()
         ts = pd.to_datetime(data["unix_seconds"], unit="s", utc=True).tz_convert("Europe/Berlin")
-        solar_series = pd.Series(data["power"], index=ts, name="solar_mw")
+        # API v2+: data is in production_types[{name, data}]; v1 used top-level "power"
+        if "production_types" in data:
+            solar_data = next(
+                (pt["data"] for pt in data["production_types"]
+                 if pt.get("name", "").lower() == "solar"),
+                None,
+            )
+            if solar_data is None:
+                raise ValueError("Solar not found in production_types")
+        else:
+            solar_data = data["power"]
+        solar_series = pd.Series(solar_data, index=ts, name="solar_mw")
     except Exception:
         pass
 
