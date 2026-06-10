@@ -5,7 +5,7 @@ Uses entsoe-py library. Requires ENTSOE_API_KEY in .env.
 import os
 import pandas as pd
 import streamlit as st
-from datetime import datetime, timedelta
+from datetime import datetime
 
 try:
     from entsoe import EntsoePandasClient

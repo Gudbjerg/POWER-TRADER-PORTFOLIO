@@ -24,7 +24,6 @@ st.set_page_config(
 
 from utils.helpers import apply_dark_theme, kpi_card, delta_span
 from config.settings import (
-    SCORE_SEASONAL_HI_PCT, SCORE_SEASONAL_LO_PCT,
     COINT_ENTRY_Z, COINT_MIN_OBS,
 )
 from data.gas_storage import get_storage_data
