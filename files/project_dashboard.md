@@ -128,7 +128,7 @@ Everything confirmed live on HuggingFace Space and `origin/main`.
 
 | Item | Description |
 |------|-------------|
-| Phase C-arch | Render migration, 15-min MTU granularity, DataSourceRegistry abstraction |
+| Phase C-arch | **Render migration: deferred indefinitely** — artifacts in repo (`Dockerfile`, `render.yaml`) for future self-host or paid migration. Current production: HF Spaces. 15-min MTU granularity and DataSourceRegistry abstraction also deferred. |
 | D2_alt | Rolling cointegration stability heatmap — which pairs consistently cointegrated vs episodic; feeds D3 confidence scores |
 | D4 | Scope TBD |
 | D5 | Scope TBD |

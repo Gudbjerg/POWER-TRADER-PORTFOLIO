@@ -45,7 +45,7 @@ The following are representative outputs from the platform as computed on curren
 
 The HuggingFace Space builds from the `hf-deploy` branch. Cold-start on an idle Space takes approximately 90 seconds while the container builds and live data fetches complete. All panels degrade gracefully without API keys: the TTF price, Nord Pool spot prices, forward curve, and commodity correlations load without credentials. Gas storage, ENTSO-E flows, hydro, solar, and generation data require free API keys from GIE and ENTSO-E (registration links in the app sidebar).
 
-A Docker-based Render deployment (EU Frankfurt, persistent disk for FinBERT sentiment history) is configured via [Dockerfile](Dockerfile) and [render.yaml](render.yaml).
+A [Dockerfile](Dockerfile) and [render.yaml](render.yaml) are included for self-hosted or Render deployment.
 
 <details>
 <summary>Landing page</summary>
@@ -288,7 +288,7 @@ A full P0/P1/P2/P3 pre-deployment audit was conducted and documented in [files/A
 
 ## Running Locally
 
-The platform requires Python 3.11+. API keys for GIE AGSI+ (agsi.gie.eu) and ENTSO-E Transparency (transparency.entsoe.eu) are free to register and unlock the full feature set. Without keys, approximately 12 of the 21 modules load using public data only.
+The platform requires Python 3.11+. API keys for GIE AGSI+ (agsi.gie.eu) and ENTSO-E Transparency (transparency.entsoe.eu) are free to register and unlock the full feature set. Without keys, approximately 12 of the 31 modules load using public data only.
 
 ```bash
 git clone https://github.com/Gudbjerg/POWER-TRADER-PORTFOLIO.git
@@ -302,7 +302,7 @@ export AGSI_API_KEY=<your_key>
 streamlit run app.py
 ```
 
-The included [Dockerfile](Dockerfile) builds a production image with CPU-only PyTorch and mounts a persistent disk at `/mnt/data` for the FinBERT sentiment history file. Deployment to Render (EU Frankfurt) is configured in [render.yaml](render.yaml).
+A [Dockerfile](Dockerfile) and [render.yaml](render.yaml) are included for self-hosted or Render deployment. The image builds with CPU-only PyTorch and expects a persistent disk mounted at `/mnt/data` for the FinBERT sentiment history file.
 
 ---
 
