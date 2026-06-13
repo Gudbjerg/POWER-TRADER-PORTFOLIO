@@ -1841,8 +1841,8 @@ with tab_decomp:
                 Feature availability: {"hydro ✅" if _avail_l2.get("hydro") else "hydro ❌"} |
                 {"wind ✅" if _avail_l2.get("wind") else "wind ❌ (ENTSO-E key required)"}.
 
-                **Forward link — Phase D cointegration scanner:** The same rolling regression
-                mechanism, extended with Engle-Granger cointegration tests, will underpin the
+                **Forward link — Multi-Pair Cointegration Scanner:** The same rolling regression
+                mechanism, extended with Engle-Granger cointegration tests, underpins the
                 NO2–NL pair-trading signal (expected spread mean-reversion speed and entry
                 z-score thresholds).
 

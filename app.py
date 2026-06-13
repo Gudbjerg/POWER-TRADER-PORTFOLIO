@@ -23,7 +23,7 @@ st.markdown(
     "<p style='color:#8b949e;font-size:1.05rem;line-height:1.7;max-width:860px;'>"
     "A five-layer market intelligence platform built to mirror the analytical workflow of a European gas and power trader. "
     "Live fundamental surveillance, quantitative signal generation, cross-commodity macro analysis, "
-    "machine learning, portfolio risk simulation, and BESS project economics, integrated across seven pages and 21 analytical modules."
+    "machine learning, portfolio risk simulation, and BESS project economics, integrated across seven pages and 31 analytical modules."
     "</p>",
     unsafe_allow_html=True,
 )
