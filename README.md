@@ -222,7 +222,7 @@ The layered model reflects how a physical desk processes information: raw observ
 | ProsusAI FinBERT | HuggingFace Transformers | On-demand | Energy headline classification: positive/negative/neutral |
 | RSS News Feeds | BBC Business, Guardian Energy, LNG World News, Energy Monitor | 6-hourly cache | Raw headline text for FinBERT pipeline |
 
-**Notes on data availability.** Gas storage (GIE), ENTSO-E flows, hydro, wind, solar, and generation all require free API keys. The platform degrades gracefully without them: all Nord Pool spot and yfinance data loads without credentials, covering approximately 12 of the 21 modules. API2 Rotterdam coal futures (formerly MTF=F on Yahoo Finance) are not currently available via the free Yahoo Finance tier; the 7x7 correlation grid displays a "Coal unavailable" caption when the ticker returns no data.
+**Notes on data availability.** Gas storage (GIE), ENTSO-E flows, hydro, wind, solar, and generation all require free API keys. The platform degrades gracefully without them: all Nord Pool spot and yfinance data loads without credentials, covering approximately 12 of the 31 modules. API2 Rotterdam coal futures (formerly MTF=F on Yahoo Finance) are not currently available via the free Yahoo Finance tier; the 7x7 correlation grid displays a "Coal unavailable" caption when the ticker returns no data.
 
 ---
 
