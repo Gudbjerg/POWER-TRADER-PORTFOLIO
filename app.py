@@ -161,7 +161,7 @@ st.page_link("pages/6_Risk_Dashboard.py", label="Open Risk Dashboard →")
 
 st.markdown("""
 <div style="background:#161b22;border:1px solid rgba(255,255,255,0.08);border-left:3px solid #3fb950;border-radius:0 8px 8px 0;padding:20px 22px;margin-top:4px;margin-bottom:12px;">
-  <div style="color:#3fb950;font-size:0.72rem;text-transform:uppercase;letter-spacing:1px;font-weight:600;">Phase E · Project Toolkit</div>
+  <div style="color:#3fb950;font-size:0.72rem;text-transform:uppercase;letter-spacing:1px;font-weight:600;">Project Toolkit</div>
   <div style="color:#e6edf3;font-size:1.05rem;font-weight:600;margin:4px 0 10px;">BESS Optimiser</div>
   <div style="color:#8b949e;font-size:0.88rem;line-height:1.65;">
     Battery Energy Storage System project economics calculator for Nordic power markets.
