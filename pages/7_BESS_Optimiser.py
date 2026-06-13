@@ -227,7 +227,7 @@ def _npv_only(
 # PAGE
 # ═══════════════════════════════════════════════════════════════════════════════
 
-st.markdown("## Phase E · BESS Optimiser")
+st.markdown("## BESS Optimiser")
 st.caption(
     "Battery Energy Storage System multi-market revenue stack for Nordic power markets. "
     "Configure asset parameters and select markets to compute financial projections."

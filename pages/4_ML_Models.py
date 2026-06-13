@@ -164,7 +164,7 @@ with st.expander("Live Model 1: Train and Predict", expanded=lstm_is_trained()):
         st.caption(
             f"Training features ({len(_lstm_feat_cols)}): {', '.join(_lstm_feat_cols)}. "
             f"Data: {_n_rows} days. "
-            + ("Wind generation not yet included; it will be added automatically once B16 data is available."
+            + ("Wind generation excluded (ENTSO-E B16 data not available for this zone)."
                if not _avail.get("wind") else "Wind generation included.")
         )
 
