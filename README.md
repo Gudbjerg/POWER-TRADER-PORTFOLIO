@@ -175,7 +175,7 @@ The layered model reflects how a physical desk processes information: raw observ
 | Gas Storage Monitor | Layer 1 | GIE AGSI+ EU/DE fill vs 5-year seasonal band (min/mean/max/P10/P90) | [data/gas_storage.py](data/gas_storage.py) |
 | LNG Terminal Sendout | Layer 1 | GIE ALSI daily sendout aggregation across Zeebrugge, Gate, South Hook, Dunkirk; WoW change alert at -15% | [data/lng_terminals.py](data/lng_terminals.py) |
 | TTF Spot + Forward Strip | Layer 1 | ICE TTF front-month via Yahoo Finance; MA30/MA90; synthetic M+1-M+18 strip from historical seasonal index | [data/prices.py](data/prices.py), [data/forward_curve.py](data/forward_curve.py) |
-| Nordic Day-Ahead Prices | Layer 1 | Nord Pool public API; NO1/NO2/SE3/NL/FI; 365-day history; NL-NO2 spread; Norwegian zonal (NO1-NO5 vs SYS) | [data/spot_prices.py](data/spot_prices.py) |
+| Nordic Day-Ahead Prices | Layer 1 | Nord Pool public API; NO1/NO2/SE3/NL/FI; 365-day request (the public endpoint returns roughly the latest two months); NL-NO2 spread; Norwegian zonal (NO1-NO5 vs SYS) | [data/spot_prices.py](data/spot_prices.py) |
 | FI minus IT-North Spread | Layer 1 | Daily FI minus IT-North day-ahead spread per CET delivery day (15-minute and hourly prices averaged, coverage-checked, DST-aware); KPIs: latest, 30-day average, z-score vs trailing 1-year; two-panel 1-year chart; IT-North from energy-charts.info (SMARD, CC BY 4.0) with ENTSO-E A44 fallback; FI from Nord Pool, extended with ENTSO-E A44 | [data/italy_prices.py](data/italy_prices.py), [models/fi_it_spread.py](models/fi_it_spread.py) |
 | Norwegian Hydro Reservoirs | Layer 1 | ENTSO-E B31 weekly aggregate for Norway (EIC: 10YNO-0--------C); P10/P50/P90 percentile bands | [data/hydro.py](data/hydro.py) |
 | Nordic Cross-Border Flows | Layer 1 | ENTSO-E B09/B10 physical flows: NordLink (1,400 MW), NorNed (700 MW), NSN (1,400 MW), Skagerrak (1,700 MW); daily utilisation % | [data/power_flows.py](data/power_flows.py) |
@@ -322,6 +322,16 @@ streamlit run app.py
 ```
 
 A [Dockerfile](Dockerfile) and [render.yaml](render.yaml) are included for self-hosted or Render deployment. The image builds with CPU-only PyTorch and expects a persistent disk mounted at `/mnt/data` for the FinBERT sentiment history file.
+
+### Tests
+
+```bash
+pip install pytest
+pytest -m "not network"   # unit tests for the pure model and data helpers (offline, deterministic)
+pytest                    # adds Streamlit AppTest smoke tests for pages 1 to 4 (live data, several minutes)
+```
+
+The smoke tests assert that each changed page runs end to end without raising; missing ENTSO-E or GIE keys are treated as an expected, gracefully degraded state.
 
 ---
 
