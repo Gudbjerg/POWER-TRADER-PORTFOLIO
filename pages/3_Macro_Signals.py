@@ -132,11 +132,12 @@ st.caption(
 )
 st.divider()
 
-tab_geo, tab_mix, tab_spill, tab_grid = st.tabs([
+tab_geo, tab_mix, tab_spill, tab_grid, tab_jkm = st.tabs([
     "Geopolitical Overlay",
     "EU Gas Supply Mix",
     "Cross-Commodity Spillover",
     "7×7 Correlation Grid",
+    "TTF vs JKM",
 ])
 
 
@@ -993,6 +994,222 @@ with tab_grid:
         "Sources: Yahoo Finance (TTF=F, BZ=F, MTF=F, CO2.L, HG=F, ALI=F, BDRY) | "
         "90-day rolling window | Updated on page load"
     )
+
+
+# ════════════════════════════════════════════════════════════════════════════
+# TAB 5: TTF VS JKM (roadmap 3B)
+# Self-contained block: data (data/lng_prices.py), pure statistics
+# (models/lng_arbitrage.py), KPI row, three-panel chart, commentary, expanders.
+# ════════════════════════════════════════════════════════════════════════════
+with tab_jkm:
+    from plotly.subplots import make_subplots as _jkm_subplots
+    from data.lng_prices import load_ttf_jkm as _jkm_load
+    from models.lng_arbitrage import (
+        spread_summary as _jkm_summary, ordinal as _jkm_ordinal, MWH_PER_MMBTU as _JKM_MWH,
+    )
+    from config.settings import (
+        LNG_AVG_WINDOW_DAYS as _JKM_AVG_D,
+        LNG_PCTL_WINDOW_DAYS as _JKM_PCT_D,
+        LNG_PCTL_MIN_OBS as _JKM_PCT_MIN,
+        LNG_FX_MAX_AGE_DAYS as _JKM_FX_AGE,
+    )
+
+    st.markdown("### TTF vs JKM: Inter-Basin LNG Price Spread")
+    st.caption(
+        "European (TTF) and North Asian (JKM) gas benchmarks on a common EUR/MWh basis. "
+        "Spread = TTF minus JKM: positive means a Europe premium for flexible LNG cargoes, "
+        "negative an Asia premium. Front-month futures via Yahoo Finance; JKM converted from USD/MMBtu."
+    )
+
+    with st.spinner("Loading TTF, JKM and EUR/USD…"):
+        _jkm_data = _jkm_load()
+    _jkm_df = _jkm_data.get("frame", pd.DataFrame())
+
+    if _jkm_df.empty:
+        st.warning(
+            "TTF vs JKM spread unavailable"
+            + (f" ({_jkm_data['error']})" if _jkm_data.get("error") else "")
+            + ". Requires Yahoo Finance tickers TTF=F, JKM=F and EURUSD=X."
+        )
+    else:
+        _js = _jkm_summary(_jkm_df)
+        _js_pct_ok = bool(np.isfinite(_js["percentile"]))
+        _js_date = _js["latest_date"].strftime("%d %b %Y")
+
+        _jk1, _jk2, _jk3, _jk4 = st.columns(4)
+        with _jk1:
+            st.markdown(
+                kpi_card("TTF front month", f"€{_js['ttf']:.2f}/MWh",
+                         delta_span(f"settlement {_js_date}", "blue")),
+                unsafe_allow_html=True,
+            )
+        with _jk2:
+            st.markdown(
+                kpi_card("JKM front month", f"€{_js['jkm_eur_mwh']:.2f}/MWh",
+                         delta_span(f"${_js['jkm_usd_mmbtu']:.3f}/MMBtu at EURUSD {_js['eurusd']:.4f}", "blue")),
+                unsafe_allow_html=True,
+            )
+        with _jk3:
+            st.markdown(
+                kpi_card("TTF minus JKM", f"€{_js['spread']:+.2f}/MWh",
+                         delta_span(f"{_js['regime']} · {_JKM_AVG_D}-day avg €{_js['avg']:+.2f}",
+                                    "green" if _js["spread"] > 0 else "red")),
+                unsafe_allow_html=True,
+            )
+        with _jk4:
+            if _js_pct_ok:
+                _jkm_pct_i = int(round(_js["percentile"]))
+                _jkm_pct_col = "amber" if (_jkm_pct_i >= 90 or _jkm_pct_i <= 10) else "blue"
+                st.markdown(
+                    kpi_card("1-year percentile", _jkm_ordinal(_jkm_pct_i),
+                             delta_span(f"TTF above JKM on {_js['share_positive']:.0%} of "
+                                        f"{_js['n_window']} settlements", _jkm_pct_col)),
+                    unsafe_allow_html=True,
+                )
+            else:
+                st.markdown(
+                    kpi_card("1-year percentile", "n/a",
+                             delta_span(f"needs ≥{_JKM_PCT_MIN} settlements in window", "amber")),
+                    unsafe_allow_html=True,
+                )
+
+        # Three panels: levels, spread, rolling percentile
+        _jfig = _jkm_subplots(
+            rows=3, cols=1, shared_xaxes=True, vertical_spacing=0.05,
+            row_heights=[0.44, 0.30, 0.26],
+        )
+        _jfig.add_trace(go.Scatter(
+            x=_jkm_df["date"], y=_jkm_df["ttf"], name="TTF (EUR/MWh)",
+            line=dict(color="#e07b39", width=1.6),
+            hovertemplate="TTF: €%{y:.2f}/MWh<extra></extra>",
+        ), row=1, col=1)
+        _jfig.add_trace(go.Scatter(
+            x=_jkm_df["date"], y=_jkm_df["jkm_eur_mwh"], name="JKM (EUR/MWh, converted)",
+            line=dict(color="#58a6ff", width=1.6),
+            customdata=_jkm_df[["jkm_usd_mmbtu"]].to_numpy(),
+            hovertemplate="JKM: €%{y:.2f}/MWh ($%{customdata[0]:.3f}/MMBtu)<extra></extra>",
+        ), row=1, col=1)
+        _jfig.add_trace(go.Bar(
+            x=_jkm_df["date"], y=_jkm_df["spread"], name="TTF minus JKM", showlegend=False,
+            marker_color=["#3fb950" if v > 0 else "#f85149" for v in _jkm_df["spread"]],
+            hovertemplate="TTF minus JKM: €%{y:+.2f}/MWh<extra></extra>",
+        ), row=2, col=1)
+        _jfig.add_trace(go.Scatter(
+            x=_jkm_df["date"], y=_jkm_df["percentile"], name="Rolling 1-year percentile",
+            line=dict(color="#d29922", width=1.5),
+            hovertemplate="Percentile: %{y:.0f}<extra></extra>",
+        ), row=3, col=1)
+        _jfig.add_hline(y=0, line=dict(color="rgba(255,255,255,0.25)", width=1), row=2, col=1)
+        for _jl in (10, 90):
+            _jfig.add_hline(y=_jl, line=dict(color="rgba(255,255,255,0.2)", width=1, dash="dot"), row=3, col=1)
+        _jfig.update_layout(
+            template="plotly_dark",
+            paper_bgcolor="#0d1117", plot_bgcolor="#161b22",
+            font=dict(color="#c9d1d9", size=12),
+            height=560,
+            margin=dict(l=60, r=20, t=30, b=40),
+            legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1, font=dict(size=10)),
+            hovermode="x unified",
+            bargap=0,
+        )
+        _jfig.update_xaxes(gridcolor="rgba(255,255,255,0.06)")
+        _jfig.update_yaxes(gridcolor="rgba(255,255,255,0.06)", zeroline=False)
+        _jfig.update_yaxes(title_text="EUR/MWh", row=1, col=1)
+        _jfig.update_yaxes(title_text="Spread", row=2, col=1)
+        _jfig.update_yaxes(title_text="Pctl", range=[0, 100], row=3, col=1)
+        st.plotly_chart(_jfig, use_container_width=True)
+        st.caption(
+            f"{len(_jkm_df):,} common settlement dates from {_jkm_df['date'].iloc[0]:%d %b %Y} to "
+            f"{_jkm_df['date'].iloc[-1]:%d %b %Y}. Bars: green when TTF is above JKM, red when below. "
+            f"Percentile: rank of each spread within its trailing {_JKM_PCT_D}-day window "
+            f"(dotted lines at the 10th and 90th percentiles)."
+        )
+
+        # Commentary: every number is computed from the aligned series
+        _jkm_text = (
+            f"On {_js_date}, TTF settled at €{_js['ttf']:.2f}/MWh against JKM at "
+            f"€{_js['jkm_eur_mwh']:.2f}/MWh (${_js['jkm_usd_mmbtu']:.3f}/MMBtu), a spread of "
+            f"€{_js['spread']:+.2f}/MWh ({_js['regime']}). Over the trailing {_JKM_AVG_D} days "
+            f"({_js['n_avg']} settlements) the spread averaged €{_js['avg']:+.2f}/MWh. "
+        )
+        if _js_pct_ok:
+            _jkm_text += (
+                f"The latest reading ranks at the {_jkm_ordinal(int(round(_js['percentile'])))} percentile "
+                f"of the trailing one-year distribution, in which TTF priced above JKM on "
+                f"{_js['share_positive']:.0%} of settlements (range €{_js['window_min']:+.1f} to "
+                f"€{_js['window_max']:+.1f}/MWh). "
+            )
+        if _js["spread"] > 0:
+            _jkm_text += (
+                "With TTF above JKM, Europe is outbidding Asia for flexible cargoes on a headline basis, "
+                "which supports deliveries into European terminals and LNG send-out; the incentive is "
+                "effective only to the extent the premium exceeds the shipping cost differential between "
+                "the two destinations."
+            )
+        elif _js["spread"] < 0:
+            _jkm_text += (
+                "With JKM above TTF, the Asian premium tends to pull flexible cargoes away from Europe, "
+                "a headwind for European LNG send-out and storage injection unless the gap is smaller "
+                "than the shipping cost differential between the two destinations."
+            )
+        st.markdown(commentary(_jkm_text, "warn" if _js["spread"] < 0 else "ok"), unsafe_allow_html=True)
+
+        with st.expander("Interpretation: cargo competition between basins", expanded=True):
+            st.markdown("""
+            **Positive spread (TTF above JKM):** European buyers outbid North Asian buyers for
+            flexible, destination-free cargoes (for example US free-on-board volumes). Cargoes
+            are drawn towards North-West European regasification terminals, which supports LNG
+            send-out and storage injection.
+
+            **Negative spread (JKM above TTF):** the Asian premium pulls flexible cargoes away from
+            Europe. European send-out typically softens and storage injection leans more heavily on
+            pipeline supply, chiefly from Norway.
+
+            **Shipping cost differential:** a cargo is only diverted when the price gap exceeds the
+            difference in delivered cost between the two destinations, driven by voyage length,
+            charter rates, canal transit and boil-off. For US Gulf Coast cargoes the voyage to North
+            Asia is considerably longer than to North-West Europe, so a small headline spread in
+            either direction may not move cargoes. This dashboard shows the headline spread only and
+            does not estimate the shipping differential.
+
+            **Use with Layer 1:** compare the spread with NW European terminal send-out (Layer 1,
+            LNG Terminals tab). A sustained Asia premium alongside falling send-out is consistent
+            with cargo diversion; a Europe premium with falling send-out points to supply-side
+            constraints instead.
+            """)
+
+        with st.expander("Methodology and data caveats", expanded=False):
+            st.markdown(f"""
+            **Series:** TTF front month (Yahoo Finance `TTF=F`, EUR/MWh, through the platform's
+            existing TTF loader); JKM front month (`JKM=F`, Platts JKM LNG futures, USD/MMBtu);
+            EUR/USD (`EURUSD=X`, USD per EUR). Daily closes, about three years of history.
+
+            **Unit conversion:** JKM[EUR/MWh] = JKM[USD/MMBtu] / EURUSD / {_JKM_MWH}
+            (1 MMBtu = {_JKM_MWH} MWh). The FX close is matched as of each settlement date
+            (latest close on or before the date, at most {_JKM_FX_AGE} calendar days old).
+
+            **Alignment:** the spread is computed only on dates where both TTF and JKM settle.
+            Missing JKM days are not interpolated.
+
+            **Rolling percentile:** for each date, the share of spreads in the trailing
+            {_JKM_PCT_D} calendar days (including that date) that lie below it, with ties counted
+            at half weight. Reported once the window holds at least {_JKM_PCT_MIN} settlements; only
+            past data enter each window, so the series carries no look-ahead.
+
+            **Caveats:**
+            - `JKM=F` on Yahoo Finance is a continuous front-month futures settlement series and
+              can have gaps; values are unofficial and may be revised.
+            - The roll dates of the two continuous front-month series need not coincide, so around
+              expiries TTF and JKM can reference different delivery months.
+            - The spread is a headline price signal, not a netback: shipping, regasification and
+              contract terms are not modelled.
+            """)
+
+    st.caption(
+        "Sources: Yahoo Finance (TTF=F ICE Endex TTF; JKM=F Platts JKM LNG futures; EURUSD=X)"
+        + (f" | Updated {_jkm_data['fetched_at']:%Y-%m-%d %H:%M} UTC" if _jkm_data.get("fetched_at") else "")
+    )
+# ── end TAB 5: TTF vs JKM ─────────────────────────────────────────────────────
 
 
 # ── Footer ────────────────────────────────────────────────────────────────────

@@ -122,6 +122,7 @@ Everything confirmed live on HuggingFace Space and `origin/main`, except rows la
 | NEW1 | Layer 3 | Copper–power grid investment linkage panel: LME copper vs German baseload proxy, rolling 90-day correlation, 6-month copper change as forward indicator |
 | NEW2 | Layer 3 | Aluminium smelter stress indicator: power-cost-as-%-of-smelter-revenue time series, NORMAL / ELEVATED / CRITICAL gauge |
 | Q4 · 3A | Layer 1 | FI minus IT-North day-ahead spread (Prices tab): KPIs for latest spread, 30-day average and z-score vs 1-year; two-panel 1-year chart; computed commentary; methodology expander. IT-North from energy-charts.info (SMARD, CC BY 4.0) with ENTSO-E A44 fallback; FI from Nord Pool, extended with ENTSO-E A44 when a key is set (`data/italy_prices.py`, `models/fi_it_spread.py`) |
+| Q4 · 3B | Layer 3 / Layer 1 | TTF vs JKM tab (Layer 3): JKM=F converted from USD/MMBtu to EUR/MWh with EURUSD=X, spread TTF minus JKM, rolling 1-year percentile, KPI row, three-panel chart, interpretation and data caveats; compact TTF minus JKM KPI card on the Layer 1 LNG Terminals tab (`models/lng_arbitrage.py`, `data/lng_prices.py`) |
 
 ---
 

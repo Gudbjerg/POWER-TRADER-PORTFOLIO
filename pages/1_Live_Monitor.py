@@ -471,6 +471,52 @@ with tab_gas:
 with tab_lng:
     render_lng_chart(lng)
 
+    # ── 3B: TTF vs JKM spread card (roadmap 3B) ──────────────────────────────
+    # Keyless inter-basin price signal next to the send-out chart; the full
+    # history and methodology live in Layer 3, "TTF vs JKM" tab.
+    from data.lng_prices import load_ttf_jkm as _jkm_load
+    from models.lng_arbitrage import spread_summary as _jkm_summary, ordinal as _jkm_ordinal
+    import math as _jkm_math
+
+    _jkm_l1 = _jkm_load()
+    _jkm_l1_df = _jkm_l1.get("frame", pd.DataFrame())
+    _jkm_c1, _jkm_c2 = st.columns([1, 3])
+    if _jkm_l1_df.empty:
+        with _jkm_c1:
+            st.markdown(
+                kpi_card("TTF minus JKM", "n/a", delta_span("JKM=F / EURUSD=X unavailable", "amber")),
+                unsafe_allow_html=True,
+            )
+    else:
+        _jkm_l1_s = _jkm_summary(_jkm_l1_df)
+        _jkm_l1_pct = (
+            f" · {_jkm_ordinal(round(_jkm_l1_s['percentile']))} percentile (1y)"
+            if _jkm_math.isfinite(_jkm_l1_s["percentile"]) else ""
+        )
+        with _jkm_c1:
+            st.markdown(
+                kpi_card(
+                    "TTF minus JKM",
+                    f"€{_jkm_l1_s['spread']:+.2f}/MWh",
+                    delta_span(f"{_jkm_l1_s['regime']}{_jkm_l1_pct}",
+                               "green" if _jkm_l1_s["spread"] > 0 else "red"),
+                ),
+                unsafe_allow_html=True,
+            )
+        with _jkm_c2:
+            _jkm_l1_dir = (
+                "TTF above JKM favours deliveries into North-West European terminals, supporting LNG send-out."
+                if _jkm_l1_s["spread"] > 0 else
+                "JKM above TTF tends to pull flexible cargoes towards Asia, a headwind for NW European LNG send-out."
+            )
+            st.caption(
+                f"Inter-basin price signal for flexible LNG cargoes (settlement {_jkm_l1_s['latest_date']:%d %b %Y}; "
+                f"TTF €{_jkm_l1_s['ttf']:.2f}/MWh, JKM €{_jkm_l1_s['jkm_eur_mwh']:.2f}/MWh converted from "
+                f"${_jkm_l1_s['jkm_usd_mmbtu']:.3f}/MMBtu). {_jkm_l1_dir} Diversion pays only when the gap "
+                "exceeds the shipping cost differential. History and methodology: Layer 3, TTF vs JKM tab."
+            )
+    # ── end 3B: TTF vs JKM spread card ───────────────────────────────────────
+
     with st.expander("Understanding LNG sendout", expanded=True):
         st.markdown("""
         **Definition:** LNG (liquefied natural gas) arrives by tanker at import terminals, where it is regasified and injected into the pipeline grid. The sendout rate (TWh/day) measures how much gas is delivered to the European grid from each terminal.

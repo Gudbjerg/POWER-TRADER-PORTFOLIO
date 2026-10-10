@@ -13,6 +13,7 @@ ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), os.pardir))
 
 CHANGED_PAGES = [
     "pages/1_Live_Monitor.py",
+    "pages/3_Macro_Signals.py",
 ]
 
 

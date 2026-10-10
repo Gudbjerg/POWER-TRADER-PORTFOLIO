@@ -15,7 +15,7 @@ pinned: false
 
 [![Live Demo](https://img.shields.io/badge/Live%20Demo-HuggingFace%20Spaces-orange)](https://huggingface.co/spaces/TobGud/power-trader-portfolio)
 [![Python](https://img.shields.io/badge/Python-3.11%2B-blue)](https://www.python.org/)
-![Pages](https://img.shields.io/badge/7%20pages-32%20analytical%20modules-lightgrey)
+![Pages](https://img.shields.io/badge/7%20pages-33%20analytical%20modules-lightgrey)
 ![Sources](https://img.shields.io/badge/9%20data%20sources-live%20feeds-green)
 
 The platform integrates live fundamental data from ENTSO-E Transparency, GIE AGSI+/ALSI, Nord Pool, and ICE/Yahoo Finance into a unified analytical environment covering storage balances, forward curve dynamics, cross-commodity price transmission, machine learning regime detection, portfolio risk simulation, and battery storage project economics. All models are implemented from scratch in Python; no third-party signal providers or data vendors are used beyond the public API layer. The architecture escalates from raw market observation in Layer 1 to actionable composite signals in Layer 5, following the analytical hierarchy a physical desk would apply before taking a position.
@@ -121,6 +121,7 @@ A [Dockerfile](Dockerfile) and [render.yaml](render.yaml) are included for self-
           │  Nord Pool day-ahead · Norwegian hydro · Cross-border flows        │
           │  German solar duck curve · Coal dispatch (fuel switching)           │
           │  FI minus IT-North day-ahead spread (Nordic vs gas-marginal Italy) │
+          │  TTF minus JKM card on the LNG send-out tab                        │
           └─────────────────────────────────┬──────────────────────────────────┘
                                             │
           ┌─────────────────────────────────▼──────────────────────────────────┐
@@ -133,9 +134,10 @@ A [Dockerfile](Dockerfile) and [render.yaml](render.yaml) are included for self-
           └─────────────────────────────────┬──────────────────────────────────┘
                                             │
           ┌─────────────────────────────────▼──────────────────────────────────┐
-          │  Layer 3: Geopolitical and Macro Signals  (4 panels)               │
+          │  Layer 3: Geopolitical and Macro Signals  (5 panels)               │
           │  TTF + 19-event geopolitical timeline · EU supply mix 2020-2026   │
           │  Gas-fertiliser-food spillover chain · 7x7 cross-commodity grid   │
+          │  TTF vs JKM inter-basin LNG spread (EUR/MWh, 1-year percentile)    │
           └─────────────────────────────────┬──────────────────────────────────┘
                                             │
           ┌─────────────────────────────────▼──────────────────────────────────┐
@@ -195,6 +197,7 @@ The layered model reflects how a physical desk processes information: raw observ
 | EU Gas Supply Mix | Layer 3 | Annual supply-source breakdown 2020-2026: Russia pipeline, Norwegian pipeline, LNG (US/Qatari/other), Algerian, domestic; structural shift visualisation | [pages/3_Macro_Signals.py](pages/3_Macro_Signals.py) |
 | Cross-Commodity Spillover | Layer 3 | TTF to European fertiliser (Haber-Bosch gas intensity: 1,100 m³/tonne urea equivalent) to global wheat/corn; copper-power industrial linkage; aluminium smelter stress indicator | [pages/3_Macro_Signals.py](pages/3_Macro_Signals.py) |
 | 7x7 Correlation Grid | Layer 3 | 90-day rolling Pearson on daily log-returns across TTF, Brent, API2 coal, EUA, copper, aluminium, BDI; lead-lag sweep at τ ∈ [-10, +10] days; top 15 pairs by |ρ| | [pages/3_Macro_Signals.py](pages/3_Macro_Signals.py) |
+| TTF vs JKM LNG Spread | Layer 3 (card in Layer 1) | JKM front month (USD/MMBtu) converted to EUR/MWh as JKM / EURUSD / 0.293071 (EURUSD matched as of each settlement, at most 3 days old); TTF minus JKM on common settlement dates (no interpolation); rolling 1-year percentile (mid-rank, no look-ahead); KPI row, three-panel chart, computed commentary on cargo competition between basins | [models/lng_arbitrage.py](models/lng_arbitrage.py), [data/lng_prices.py](data/lng_prices.py) |
 | LSTM Price Forecaster | Layer 4 | 2-layer PyTorch LSTM (64 → 32 units, dropout 0.2); feature matrix: NO2/NL/TTF/spread/volatility/hydro/calendar; expanding-window train split; honest baseline check (MAE vs persistence) | [models/lstm_model.py](models/lstm_model.py) |
 | HMM Regime Classifier | Layer 4 | 4-state Gaussian HMM (hmmlearn); states: hydro-driven, gas-driven, renewables-driven, geopolitical stress; Viterbi decoding; 30-day regime history | [models/hmm_model.py](models/hmm_model.py) |
 | FinBERT Sentiment | Layer 4 | ProsusAI/finbert (HuggingFace); energy-filtered RSS headlines from BBC Business, Guardian Energy, LNG World News, Energy Monitor; daily net sentiment (positive - negative); 60-day rolling history on persistent disk | [data/sentiment.py](data/sentiment.py) |
@@ -219,13 +222,14 @@ The layered model reflects how a physical desk processes information: raw observ
 | ENTSO-E B31 | Transparency Platform (entsoe-py) | Weekly | Norwegian hydro reservoir levels (EIC: 10YNO-0--------C) |
 | Nord Pool Data Portal | REST API (nordpoolgroup.com) | Daily | Day-ahead prices: NO1/NO2/SE3/NL/FI + Norwegian zonal NO1-NO5/SYS; the public endpoint serves roughly the latest two months of delivery days |
 | ICE/Yahoo Finance | yfinance (TTF=F, BZ=F, CO2.L, NBP=F) | Daily | TTF spot, Brent crude, EU carbon (EUA), NBP gas |
+| Yahoo Finance | yfinance (JKM=F, EURUSD=X) | Daily | Platts JKM LNG front month (USD/MMBtu) and EUR/USD for the TTF vs JKM spread |
 | Yahoo Finance | yfinance (HG=F, ALI=F, BDRY) | Daily | LME copper proxy, LME aluminium proxy, Baltic Dry (BDRY ETF) |
 | Fraunhofer ISE | energy-charts.info REST API | Hourly | German solar generation and DE-LU price fallback (no key required) |
 | Bundesnetzagentur SMARD (via energy-charts.info) | energy-charts.info price API (bzn=IT-North) | 15-minute (hourly before 1 Oct 2025) | IT-North day-ahead prices for the FI minus IT-North spread; CC BY 4.0, attribution: Bundesnetzagentur \| SMARD.de (no key required) |
 | ProsusAI FinBERT | HuggingFace Transformers | On-demand | Energy headline classification: positive/negative/neutral |
 | RSS News Feeds | BBC Business, Guardian Energy, LNG World News, Energy Monitor | 6-hourly cache | Raw headline text for FinBERT pipeline |
 
-**Notes on data availability.** Gas storage (GIE), ENTSO-E flows, hydro, wind, solar, and generation all require free API keys. The platform degrades gracefully without them: all Nord Pool spot, energy-charts.info (IT-North) and yfinance data loads without credentials, covering approximately 13 of the 32 modules. The public Nord Pool endpoint only serves roughly the latest two months of delivery days (older dates return HTTP 401), so keyless histories built on it (the FI leg of the FI minus IT-North spread, and the feature matrix fallback used by Layers 2 and 4) are limited to that window until `ENTSOE_API_KEY` is set. API2 Rotterdam coal futures (formerly MTF=F on Yahoo Finance) are not currently available via the free Yahoo Finance tier; the 7x7 correlation grid displays a "Coal unavailable" caption when the ticker returns no data.
+**Notes on data availability.** Gas storage (GIE), ENTSO-E flows, hydro, wind, solar, and generation all require free API keys. The platform degrades gracefully without them: all Nord Pool spot, energy-charts.info (IT-North) and yfinance data loads without credentials, covering approximately 14 of the 33 modules. The public Nord Pool endpoint only serves roughly the latest two months of delivery days (older dates return HTTP 401), so keyless histories built on it (the FI leg of the FI minus IT-North spread, and the feature matrix fallback used by Layers 2 and 4) are limited to that window until `ENTSOE_API_KEY` is set. API2 Rotterdam coal futures (formerly MTF=F on Yahoo Finance) are not currently available via the free Yahoo Finance tier; the 7x7 correlation grid displays a "Coal unavailable" caption when the ticker returns no data.
 
 ---
 
@@ -291,7 +295,7 @@ A full P0/P1/P2/P3 pre-deployment audit was conducted and documented in [files/A
 
 ## Running Locally
 
-The platform requires Python 3.11+. API keys for GIE AGSI+ (agsi.gie.eu) and ENTSO-E Transparency (transparency.entsoe.eu) are free to register and unlock the full feature set. Without keys, approximately 13 of the 32 modules load using public data only.
+The platform requires Python 3.11+. API keys for GIE AGSI+ (agsi.gie.eu) and ENTSO-E Transparency (transparency.entsoe.eu) are free to register and unlock the full feature set. Without keys, approximately 14 of the 33 modules load using public data only.
 
 ```bash
 git clone https://github.com/Gudbjerg/POWER-TRADER-PORTFOLIO.git

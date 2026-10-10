@@ -121,3 +121,11 @@ FI_IT_Z_MIN_OBS              = 60     # minimum daily observations before a z-sc
 FI_IT_MIN_DAY_COVERAGE       = 0.90   # minimum share of a delivery day's intervals for a valid daily mean
 ENERGY_CHARTS_MAX_CHUNK_DAYS = 90     # maximum delivery days per energy-charts.info request
 # ── end FI minus IT-North spread ─────────────────────────────────────────────
+
+# ── TTF vs JKM inter-basin LNG spread (roadmap 3B) ───────────────────────────
+LNG_HISTORY_DAYS      = 1125   # calendar days of TTF, JKM and EURUSD history (about 3 years)
+LNG_AVG_WINDOW_DAYS   = 30     # trailing calendar-day window for the average-spread KPI
+LNG_PCTL_WINDOW_DAYS  = 365    # trailing calendar-day window for the rolling percentile
+LNG_PCTL_MIN_OBS      = 120    # minimum settlements in the window before a percentile is reported
+LNG_FX_MAX_AGE_DAYS   = 3      # maximum age (calendar days) of the EURUSD close used for conversion
+# ── end TTF vs JKM ───────────────────────────────────────────────────────────
