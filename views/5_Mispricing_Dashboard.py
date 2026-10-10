@@ -23,7 +23,7 @@ st.set_page_config(
     initial_sidebar_state="collapsed",
 )
 
-from utils.helpers import apply_dark_theme, kpi_card, delta_span
+from utils.helpers import ordinal, apply_dark_theme, kpi_card, delta_span
 from utils.theme import ACCENTS, page_header, page_footer
 from config.settings import (
     COINT_ENTRY_Z, COINT_MIN_OBS,
@@ -240,6 +240,9 @@ def _get_mispricing_signals() -> list[dict]:
                     _eua_hist.index = pd.to_datetime(_eua_hist.index).tz_localize(None).normalize()
                     _eua_hist.index.name = "date"
                     _eua_hist = _eua_hist.rename(columns={"Close": "eua"}).reset_index()
+                    # Yahoo can publish the latest bar without a close (NaN); a NaN EUA
+                    # would turn the current spread, its percentile and the signal into NaN.
+                    _eua_hist = _eua_hist.dropna(subset=["eua"])
             except Exception:
                 pass
 
@@ -252,6 +255,7 @@ def _get_mispricing_signals() -> list[dict]:
                     .merge(_eua_hist, on="date", how="inner")
                     .iloc[-_HIST_WINDOW:]
                 )
+                _f5 = _f5.dropna(subset=["no2", "ttf", "eua"])
                 if len(_f5) >= 30:
                     _css = (
                         _f5["no2"].values
@@ -275,7 +279,7 @@ def _get_mispricing_signals() -> list[dict]:
                         "direction": _d,
                         "dlabel":   _dl,
                         "note":     (f"NO2 - TTF*{_CCGT_HEAT_RATE:.2f} - EUA*{_CCGT_EMISSION:.3f}"
-                                     f"  (CCGT ~49% eff., EUA hist. avg. ~{_cur_eua:.0f}/t)"),
+                                     f"  (CCGT ~49% eff., latest EUA €{_cur_eua:.0f}/t)"),
                         "source":   "Computed",
                     })
     except Exception:
@@ -496,7 +500,7 @@ for _s in _signals:
             f"<div style='flex:0 0 110px;height:6px;background:#21262d;border-radius:3px;overflow:hidden'>"
             f"<div style='width:{_dp:.1f}%;height:100%;background:{_bar_clr};border-radius:3px'></div>"
             f"</div>"
-            f"<span style='color:#8b949e;font-size:0.80rem;white-space:nowrap'>{_dp:.0f}th</span>"
+            f"<span style='color:#8b949e;font-size:0.80rem;white-space:nowrap'>{ordinal(_dp)}</span>"
             f"</div>"
         )
 
@@ -575,15 +579,15 @@ with st.expander("Methodology", expanded=False):
     **Percentile calculation:** For each signal, the current value is ranked within its
     historical distribution (rolling 2–7 year window, same day-of-year ±10d for seasonal
     signals). Percentile = fraction of historical observations below the current value × 100.
-    Requires ≥10 historical observations; shown as "—" if insufficient data.
+    Requires ≥10 historical observations; shown as "n/a" if insufficient data.
 
     **Confidence levels:**
-    - *High* — signal percentile is below 15th or above 85th (strong departure from historical norm)
-    - *Medium* — percentile below 30th or above 70th
-    - *Low* — percentile within 30th–70th range (signal near historical median)
+    - *High*: signal percentile is below 15th or above 85th (strong departure from historical norm)
+    - *Medium*: percentile below 30th or above 70th
+    - *Low*: percentile within 30th–70th range (signal near historical median)
 
     **Direction convention:**
-    - *Elevated / Bullish* — signal is historically high. For storage and hydro (low-is-bullish),
+    - *Elevated / Bullish*: signal is historically high. For storage and hydro (low-is-bullish),
       low values yield "Bullish"; for all others, high values yield "Elevated".
     - Spread z-scores: direction = trade signal side (long/short) when |z| > {COINT_ENTRY_Z}σ.
     - Marginal Fuel: gas/oil-marginal → "up"; renewable-marginal → "down".

@@ -16,7 +16,7 @@ st.set_page_config(
     initial_sidebar_state="collapsed",
 )
 
-from utils.helpers import apply_dark_theme, commentary, kpi_card, delta_span, has_torch
+from utils.helpers import ordinal, apply_dark_theme, commentary, kpi_card, delta_span, has_torch
 from utils.theme import ACCENTS, CHART, PLOTLY_TEMPLATE, page_header, page_footer
 from data.sentiment import get_sentiment_data
 from data.prices import get_ttf_data
@@ -272,7 +272,7 @@ with st.expander("Live Model 1: Train and Predict", expanded=lstm_is_trained()):
                 f"MAE above naive baseline reflects high price volatility in the test window "
                 f"(Q1 2025 to Q1 2026 included the post-crisis normalisation period). "
                 f"The model captures directional trends; large spikes are systematically "
-                f"underestimated — a known limitation of MAE-trained sequence models."
+                f"underestimated: a known limitation of MAE-trained sequence models."
             )
 
         # Train button
@@ -438,7 +438,7 @@ with st.expander("Live Model 2: Train and Classify", expanded=hmm_is_trained()):
                     st.caption(
                         f"Rolling {_RV_WIN}-trading-day realised volatility of NO2 day-ahead prices (standard "
                         "deviation of daily price changes, EUR/MWh, right axis) over the decoded regime timeline. "
-                        f"Diamonds mark regime transitions; the dotted line is the {_RV_PCTL:.0f}th-percentile "
+                        f"Diamonds mark regime transitions; the dotted line is the {ordinal(_RV_PCTL)}-percentile "
                         "spike threshold."
                     )
                     _rv_has_no2 = (
@@ -525,7 +525,7 @@ with st.expander("Live Model 2: Train and Classify", expanded=hmm_is_trained()):
                             with _rvk1:
                                 st.markdown(kpi_card(
                                     f"{_RV_WIN}-day realised vol (latest)", f"€{_rv_now:.2f}/MWh",
-                                    delta_span(f"{_rv_now_pct:.0f}th percentile of sample · spike above €{_rv_thr:.2f}",
+                                    delta_span(f"{ordinal(_rv_now_pct)} percentile of sample · spike above €{_rv_thr:.2f}",
                                                "red" if _rv_now > _rv_thr else "blue"),
                                 ), unsafe_allow_html=True)
                             _rv_n_tr = _rv_stats["n_transitions"]
@@ -598,7 +598,7 @@ with st.expander("Live Model 2: Train and Classify", expanded=hmm_is_trained()):
                                 _rv_text += (
                                     f"Of {_rv_n_tr} regime transitions, {_rv_stats['n_near']} "
                                     f"({_rv_stats['observed_share']:.0%}) fell within ±{_RV_PROX} trading days of a "
-                                    f"volatility spike (realised volatility above its {_RV_PCTL:.0f}th percentile, "
+                                    f"volatility spike (realised volatility above its {ordinal(_RV_PCTL)} percentile, "
                                     f"€{_rv_thr:.2f}/MWh), against a chance baseline of {_rv_stats['baseline_share']:.0%}. "
                                 )
                                 if np.isfinite(_rv_p) and _rv_p < 0.05:
@@ -637,7 +637,7 @@ with st.expander("Live Model 2: Train and Classify", expanded=hmm_is_trained()):
                                 `models/regime_volatility.py` (method "log").
 
                                 **Spikes and transitions:** a spike is a day with realised volatility above its
-                                in-sample {_RV_PCTL:.0f}th percentile (€{_rv_thr:.2f}/MWh; {_rv_stats['n_spike_days']} days).
+                                in-sample {ordinal(_RV_PCTL)} percentile (€{_rv_thr:.2f}/MWh; {_rv_stats['n_spike_days']} days).
                                 A transition is a day whose Viterbi-decoded regime differs from the previous day's.
                                 Only days with a defined volatility are scored.
 

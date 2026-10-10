@@ -82,3 +82,20 @@ def kpi_card(label: str, value: str, delta_html: str = "", accent: str | None = 
 
 def delta_span(text: str, color: str = "blue") -> str:
     return f'<span class="delta-{color}">{text}</span>'
+
+
+def ordinal(value) -> str:
+    """English ordinal for a whole number: 1st, 2nd, 3rd, 4th, 11th, 12th, 13th, 21st, 72nd.
+
+    Non-numeric or non-finite input returns "n/a" rather than raising.
+    """
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return "n/a"
+    if number != number or number in (float("inf"), float("-inf")):
+        return "n/a"
+    n = int(round(number))
+    tail = abs(n) % 100
+    suffix = "th" if 10 <= tail <= 20 else {1: "st", 2: "nd", 3: "rd"}.get(abs(n) % 10, "th")
+    return f"{n}{suffix}"

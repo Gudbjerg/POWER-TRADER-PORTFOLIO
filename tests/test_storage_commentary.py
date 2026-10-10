@@ -77,3 +77,14 @@ def test_lng_commentary_follows_the_season():
     assert "injection" in detail_summer and "withdrawals" in detail_winter
     _, _, warn_winter = lng_status(-10.0, today=date(2027, 2, 1))
     assert "injection season" not in warn_winter
+
+
+@pytest.mark.parametrize(
+    ("value", "text"),
+    [(0, "0th"), (1, "1st"), (2, "2nd"), (3, "3rd"), (4, "4th"), (11, "11th"), (12, "12th"),
+     (13, "13th"), (21, "21st"), (72.4, "72nd"), (99.6, "100th"), (float("nan"), "n/a"), (None, "n/a")],
+)
+def test_ordinal(value, text):
+    from utils.helpers import ordinal
+
+    assert ordinal(value) == text

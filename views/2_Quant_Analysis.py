@@ -22,7 +22,7 @@ st.set_page_config(
     initial_sidebar_state="collapsed",
 )
 
-from utils.helpers import apply_dark_theme, kpi_card, delta_span, commentary
+from utils.helpers import ordinal, apply_dark_theme, kpi_card, delta_span, commentary
 from utils.theme import ACCENTS, CHART, PLOTLY_TEMPLATE, page_header, page_footer
 from config.settings import (
     SCORE_RISK_PREMIUM_EUR, SCORE_SEASONAL_HI_PCT, SCORE_SEASONAL_LO_PCT,
@@ -519,7 +519,7 @@ try:
             _sc_note = (f"Historically elevated for this time of year" if _sc_pct_rank > SCORE_SEASONAL_HI_PCT
                         else (f"Historically cheap for this time of year" if _sc_pct_rank < SCORE_SEASONAL_LO_PCT
                               else "Within typical seasonal range"))
-            _sc_signals.append({"name": "TTF Seasonal Rank", "value": f"{_sc_pct_rank:.0f}th pct",
+            _sc_signals.append({"name": "TTF Seasonal Rank", "value": f"{ordinal(_sc_pct_rank)} pct",
                                  "direction": _sc_dir, "note": _sc_note})
         else:
             _sc_signals.append({"name": "TTF Seasonal Rank", "value": "n/a",
@@ -581,8 +581,8 @@ try:
             _sc_hydro_mean = float(_sc_hydro_ser.iloc[-90:].mean())
             _sc_hydro_dev  = _sc_hydro_cur - _sc_hydro_mean
             _sc_dir = "down" if _sc_hydro_dev > 5 else ("up" if _sc_hydro_dev < -5 else "neutral")
-            _sc_note = (f"Above 90d mean ({_sc_hydro_mean:.0f}%) — supply comfortable" if _sc_hydro_dev > 5
-                        else (f"Below 90d mean ({_sc_hydro_mean:.0f}%) — hydro tightening" if _sc_hydro_dev < -5
+            _sc_note = (f"Above 90d mean ({_sc_hydro_mean:.0f}%): supply comfortable" if _sc_hydro_dev > 5
+                        else (f"Below 90d mean ({_sc_hydro_mean:.0f}%): hydro tightening" if _sc_hydro_dev < -5
                               else f"Near 90d mean ({_sc_hydro_mean:.0f}%)"))
             _sc_signals.append({"name": "Hydro Level", "value": f"{_sc_hydro_cur:.0f}%",
                                  "direction": _sc_dir, "note": _sc_note})
@@ -618,7 +618,7 @@ try:
                             else f"Significant (p={_sc_min_p:.3f}) + positive news flow → downside pressure")
             else:
                 _sc_dir = "neutral"
-                _sc_note = f"Not significant (p={_sc_min_p:.3f}) — no news-driven price signal"
+                _sc_note = f"Not significant (p={_sc_min_p:.3f}): no news-driven price signal"
             _sc_signals.append({"name": "Sentiment → TTF", "value": f"p={_sc_min_p:.3f}",
                                  "direction": _sc_dir, "note": _sc_note})
         else:
@@ -1504,7 +1504,7 @@ with tab_stack:
         _load_badge = (
             f"Live demand: {_live_load_gw:.1f} GW ({_load_src})"
             if _live_load_gw is not None
-            else f"Live demand unavailable — {_load_src}. Using 60 GW default."
+            else f"Live demand unavailable: {_load_src}. Using 60 GW default."
         )
         st.markdown(
             commentary(
@@ -1573,7 +1573,7 @@ with tab_stack:
             color = "red" if premium > 10 else ("green" if premium < -10 else "blue")
             st.markdown(
                 kpi_card("NL vs implied", f"€{nl_latest:.1f}/MWh",
-                         delta_span(f"{premium:+.1f} EUR/MWh — {label}", color)),
+                         delta_span(f"{premium:+.1f} EUR/MWh: {label}", color)),
                 unsafe_allow_html=True,
             )
         else:
@@ -1644,7 +1644,7 @@ with tab_stack:
         **Dynamic inputs:**
         - Gas CCGT SRMC = TTF ÷ 0.55 + EUA × 0.37 (live TTF: **€{ttf_latest:.1f}/MWh**, EUA: **€{eua_price:.0f}/t**)
         - Hard coal SRMC = 11 EUR/MWh_th ÷ 0.40 + EUA × 0.85 ≈ **€{coal_srmc:.1f}/MWh** at current EUA
-        - Demand default: **{_default_demand:.0f} GW** — {"ENTSO-E A65 today's average (" + _load_src + ")" if _live_load_gw is not None else "static 60 GW fallback (" + _load_src + ")"}
+        - Demand default: **{_default_demand:.0f} GW**, from {"ENTSO-E A65 today's average (" + _load_src + ")" if _live_load_gw is not None else "static 60 GW fallback (" + _load_src + ")"}
 
         **Static inputs (Bundesnetzagentur 2024):**
         - Wind: 66 GW installed | Solar: 73 GW | Hydro: 4.5 GW | Biomass: 8.5 GW
@@ -1656,7 +1656,7 @@ with tab_stack:
         **Key simplifications:**
         - This model shows installed capacity, not available capacity. Typical thermal availability
           is 85-90%; renewables depend on weather conditions.
-        - Wind and solar produce at weather-dependent output levels — their effective capacity at any
+        - Wind and solar produce at weather-dependent output levels; their effective capacity at any
           given hour is not 66/73 GW. The stack shows the structural position, not real-time dispatch.
         - No cross-border imports or exports. Germany regularly imports from France and Scandinavia,
           which can suppress the clearing price below the domestic marginal fuel SRMC.
@@ -1798,7 +1798,7 @@ with tab_decomp:
                         f"corresponds to a {driver_beta:.2f} EUR/MWh move in NO2. "
                         f"At current levels, it is exerting {abs(driver_contrib):.1f} EUR/MWh of "
                         f"{direction} price pressure. "
-                        f"Rolling R² = {latest_r2:.2f} — the {model_label} explains "
+                        f"Rolling R² = {latest_r2:.2f}: the {model_label} explains "
                         f"{latest_r2*100:.0f}% of NO2 variance over the trailing window.",
                         "ok",
                     ),
@@ -1845,7 +1845,7 @@ with tab_decomp:
                 Feature availability: {"hydro ✅" if _avail_l2.get("hydro") else "hydro ❌"} |
                 {"wind ✅" if _avail_l2.get("wind") else "wind ❌ (ENTSO-E key required)"}.
 
-                **Forward link — Multi-Pair Cointegration Scanner:** The same rolling regression
+                **Forward link to the Multi-Pair Cointegration Scanner:** The same rolling regression
                 mechanism, extended with Engle-Granger cointegration tests, underpins the
                 NO2–NL pair-trading signal (expected spread mean-reversion speed and entry
                 z-score thresholds).
@@ -1981,7 +1981,7 @@ with tab_wind:
             corr_df = compute_price_correlation(error_df, features_df, zone=primary_zone, window=30)
 
             if not corr_df.empty:
-                st.markdown(f"#### Forecast Error vs Price Volatility — {WIND_ZONE_LABELS.get(primary_zone, primary_zone)}")
+                st.markdown(f"#### Forecast Error vs Price Volatility: {WIND_ZONE_LABELS.get(primary_zone, primary_zone)}")
                 st.caption(
                     "Tests whether large wind forecast misses coincide with large next-day price moves. "
                     "Rolling 30-day Pearson correlation annotated. Significant positive correlation "
@@ -1994,7 +1994,7 @@ with tab_wind:
                 if not np.isnan(latest_rho):
                     if abs(latest_rho) > 0.3:
                         interpretation = (
-                            f"Rolling 30-day correlation ρ = {latest_rho:.2f} — statistically meaningful. "
+                            f"Rolling 30-day correlation ρ = {latest_rho:.2f}: statistically meaningful. "
                             "Large wind forecast misses are co-moving with elevated power price volatility in "
                             "the current period. This is consistent with the theory that wind forecast errors "
                             "create imbalances that require expensive real-time correction."
@@ -2002,7 +2002,7 @@ with tab_wind:
                         status = "warn" if latest_rho > 0.3 else "ok"
                     else:
                         interpretation = (
-                            f"Rolling 30-day correlation ρ = {latest_rho:.2f} — weak relationship. "
+                            f"Rolling 30-day correlation ρ = {latest_rho:.2f}: weak relationship. "
                             "Wind forecast errors are not strongly co-moving with price volatility in the "
                             "current period. Other drivers (storage levels, gas price, continental flows) "
                             "are likely dominating price formation."
@@ -2103,7 +2103,7 @@ with tab_granger:
                 _days_needed = _MIN_DAYS - _n_merged
                 st.info(
                     f"Granger test requires {_MIN_DAYS} aligned trading days with both sentiment "
-                    f"and TTF return data. Currently have **{_n_merged}** — "
+                    f"and TTF return data. Currently have **{_n_merged}**; "
                     f"**{_days_needed} more** needed before the test can run. "
                     "Sentiment history accumulates automatically.",
                     icon="ℹ️",
@@ -2313,9 +2313,9 @@ with tab_granger:
                         - Null hypothesis H₀: sentiment at lag k does not Granger-cause TTF return
 
                         **Significance levels:**
-                        - p < 0.05: reject H₀ — sentiment is a statistically significant predictor
-                        - p < 0.10: borderline — directionally suggestive, not robust
-                        - p ≥ 0.10: fail to reject H₀ — no predictive evidence in current sample
+                        - p < 0.05: reject H₀; sentiment is a statistically significant predictor
+                        - p < 0.10: borderline; directionally suggestive, not robust
+                        - p ≥ 0.10: fail to reject H₀; no predictive evidence in current sample
 
                         **Sentiment source:** ProsusAI/FinBERT applied to filtered energy RSS headlines
                         (BBC Business, Guardian Energy, LNG World News, Energy Monitor).
@@ -2555,7 +2555,7 @@ with tab_storage_reg:
                     _prose = (
                         f"At {_latest_storage:.1f}% EU storage fill, the OLS model implies a fair-value "
                         f"TTF of €{_latest_fitted:.1f}/MWh ({_eq_str}). "
-                        f"Actual TTF (€{_latest_ttf:.1f}/MWh) is €{_latest_resid:.1f}/MWh above this — "
+                        f"Actual TTF (€{_latest_ttf:.1f}/MWh) is €{_latest_resid:.1f}/MWh above this: "
                         "a supply-fear premium. The market is pricing in risk (geopolitical, supply disruption, "
                         "demand shock) that the storage fill level alone does not justify."
                     )
@@ -2564,7 +2564,7 @@ with tab_storage_reg:
                     _prose = (
                         f"At {_latest_storage:.1f}% EU storage fill, the OLS model implies a fair-value "
                         f"TTF of €{_latest_fitted:.1f}/MWh ({_eq_str}). "
-                        f"Actual TTF (€{_latest_ttf:.1f}/MWh) is €{abs(_latest_resid):.1f}/MWh below this — "
+                        f"Actual TTF (€{_latest_ttf:.1f}/MWh) is €{abs(_latest_resid):.1f}/MWh below this: "
                         "TTF is trading at a discount to storage-implied fundamental value. "
                         "Possible explanations: strong LNG imports, subdued industrial demand, or a risk-off "
                         "market environment compressing the forward risk premium."
@@ -2574,7 +2574,7 @@ with tab_storage_reg:
                     _prose = (
                         f"At {_latest_storage:.1f}% EU storage fill, the OLS model implies a fair-value "
                         f"TTF of €{_latest_fitted:.1f}/MWh ({_eq_str}). "
-                        f"Actual TTF (€{_latest_ttf:.1f}/MWh) is {_latest_resid:+.1f} EUR/MWh — "
+                        f"Actual TTF (€{_latest_ttf:.1f}/MWh) is {_latest_resid:+.1f} EUR/MWh from it, "
                         "near the storage-implied fundamental level. "
                         "The market is pricing storage fundamentals without a significant risk premium or discount."
                     )
@@ -2601,7 +2601,7 @@ with tab_storage_reg:
 
                     **Supply-risk premium (residual):** The OLS residual captures the component of TTF that
                     is not explained by storage fill alone. Persistent positive residuals indicate that the
-                    market is pricing in supply risk beyond what the current fill level justifies — a fear
+                    market is pricing in supply risk beyond what the current fill level justifies: a fear
                     premium driven by geopolitical events, pipeline disruptions, or LNG market tightness.
 
                     **Limitations:**
@@ -2853,7 +2853,7 @@ with tab_hydro_lag:
                 % of expanding 98th percentile to create a stationary fill-rate signal.
 
                 **Limitations:**
-                - Weekly ENTSO-E hydro data is forward-filled to daily — this reduces the effective
+                - Weekly ENTSO-E hydro data is forward-filled to daily; this reduces the effective
                   degrees of freedom and may understate lags shorter than 7 days.
                 - Correlation does not imply causality: hydro and prices may both respond to common
                   factors (temperature, precipitation forecasts).
@@ -2970,11 +2970,11 @@ with tab_ttf_norm:
                         _rank_label = (
                             "above 90th pct" if _pct_rank > 90 else
                             "below 10th pct" if _pct_rank < 10 else
-                            f"{_pct_rank:.0f}th percentile"
+                            f"{ordinal(_pct_rank)} percentile"
                         )
                         _rank_color = "red" if _pct_rank > 90 else ("green" if _pct_rank < 10 else "blue")
                         st.markdown(
-                            kpi_card("Seasonal rank", f"{_pct_rank:.0f}th pct",
+                            kpi_card("Seasonal rank", f"{ordinal(_pct_rank)} pct",
                                      delta_span(_rank_label, _rank_color)),
                             unsafe_allow_html=True,
                         )
@@ -3067,8 +3067,8 @@ with tab_ttf_norm:
             if _pct_rank is not None:
                 if _pct_rank > 90:
                     _norm_prose = (
-                        f"TTF at €{_latest_ttf_norm:.1f}/MWh is at the {_pct_rank:.0f}th percentile of "
-                        f"the historical seasonal distribution for this time of year — "
+                        f"TTF at €{_latest_ttf_norm:.1f}/MWh is at the {ordinal(_pct_rank)} percentile of "
+                        f"the historical seasonal distribution for this time of year: "
                         f"€{_latest_ttf_norm - _p50:.1f}/MWh above the seasonal median. "
                         "This is historically elevated. Such levels typically reflect supply risk "
                         "(geopolitical disruption, LNG tightness) or cold-weather demand pressure "
@@ -3077,8 +3077,8 @@ with tab_ttf_norm:
                     _norm_status = "warn"
                 elif _pct_rank < 10:
                     _norm_prose = (
-                        f"TTF at €{_latest_ttf_norm:.1f}/MWh is at the {_pct_rank:.0f}th percentile of "
-                        f"the historical seasonal distribution — "
+                        f"TTF at €{_latest_ttf_norm:.1f}/MWh is at the {ordinal(_pct_rank)} percentile of "
+                        f"the historical seasonal distribution: "
                         f"€{abs(_latest_ttf_norm - _p50):.1f}/MWh below the seasonal median. "
                         "Historically cheap. Possible explanations: strong LNG imports, full storage, "
                         "mild demand, or a post-shock normalization from prior elevated prices."
@@ -3086,8 +3086,8 @@ with tab_ttf_norm:
                     _norm_status = "ok"
                 else:
                     _norm_prose = (
-                        f"TTF at €{_latest_ttf_norm:.1f}/MWh sits at the {_pct_rank:.0f}th percentile "
-                        f"of the historical seasonal range — {abs(_latest_ttf_norm - _p50):.1f} EUR/MWh "
+                        f"TTF at €{_latest_ttf_norm:.1f}/MWh sits at the {ordinal(_pct_rank)} percentile "
+                        f"of the historical seasonal range: {abs(_latest_ttf_norm - _p50):.1f} EUR/MWh "
                         f"{'above' if _latest_ttf_norm > _p50 else 'below'} the seasonal median. "
                         "Within normal seasonal bounds for this time of year."
                     )
@@ -3342,7 +3342,7 @@ with tab_coint:
                         _ci_prose = (
                             f"NO2 and NL are statistically cointegrated (E-G p={_ci_pval:.3f}). "
                             f"The spread is mean-reverting with an OU half-life of {_ci_hl_prose}. "
-                            f"Current z-score = {_ci_z_now:+.2f}σ — beyond the ±1σ entry threshold. "
+                            f"Current z-score = {_ci_z_now:+.2f}σ: beyond the ±1σ entry threshold. "
                             f"Signal: {_side}. "
                             f"Historical ±1σ reversion rate: {_bt_hit_rate:.0f}% within {int(_MAX_HOLD)} days "
                             f"(avg {_bt_avg_str} to revert, {_bt_total} signals in sample)."
@@ -3352,7 +3352,7 @@ with tab_coint:
                         _ci_prose = (
                             f"NO2 and NL are statistically cointegrated (E-G p={_ci_pval:.3f}). "
                             f"OU half-life: {_ci_hl_prose}. "
-                            f"Current z-score = {_ci_z_now:+.2f}σ — within the neutral zone (|z| < 1σ). "
+                            f"Current z-score = {_ci_z_now:+.2f}σ: within the neutral zone (|z| < 1σ). "
                             "No active spread trade signal."
                         )
                         _ci_status = "ok"
@@ -3375,13 +3375,13 @@ with tab_coint:
                     **Engle-Granger cointegration test (Engle & Granger 1987):**
                     Two non-stationary series X and Y are cointegrated if there exists a linear combination
                     `ε = Y − α − β·X` that is stationary (I(0)). This means deviations from the long-run
-                    equilibrium are transient — the spread mean-reverts.
+                    equilibrium are transient: the spread mean-reverts.
 
-                    **Step 1 — OLS regression:** `NO2 = α + β·NL + ε`
+                    **Step 1. OLS regression:** `NO2 = α + β·NL + ε`
                     - Estimated β (hedge ratio) = {_ci_beta_hedge:.3f}
                     - This means 1 MWh NO2 is hedged by {_ci_beta_hedge:.3f} MWh NL exposure.
 
-                    **Step 2 — Residual stationarity (ADF test on ε):**
+                    **Step 2. Residual stationarity (ADF test on ε):**
                     - Test statistic = {_ci_score:.3f}
                     - p-value = {_ci_pval:.4f}
                     - Critical values: 1% = {_ci_crit[0]:.3f}, 5% = {_ci_crit[1]:.3f}, 10% = {_ci_crit[2]:.3f}
@@ -3402,7 +3402,7 @@ with tab_coint:
                     Hit rate = {_bt_hit_rate:.0f}% ({_bt_hits}/{_bt_total} signals).
 
                     **Important limitations:**
-                    - Cointegration is a full-sample result — regime breaks (e.g. the 2021/22 energy crisis)
+                    - Cointegration is a full-sample result: regime breaks (e.g. the 2021/22 energy crisis)
                       can cause temporary breakdown of the relationship.
                     - Hedge ratio β is estimated unconditionally; rolling β from the Nordic Decomp tab
                       provides a more responsive estimate.
@@ -3448,7 +3448,7 @@ with tab_scanner:
         )
     else:
         _scan_universe = " · ".join(c.upper() for c in _scan_cols)
-        st.caption(f"Universe loaded: **{_scan_universe}** — {len(_scan_px):,} daily obs (longest common window)")
+        st.caption(f"Universe loaded: **{_scan_universe}**, {len(_scan_px):,} daily obs (longest common window)")
         _expected_extra = {"de", "fr", "nbp"}
         _missing_extra  = _expected_extra - set(_scan_cols)
         if _missing_extra:
@@ -3466,7 +3466,7 @@ with tab_scanner:
             _scan_res = []
 
         if _scan_err_msg:
-            st.error(f"Scanner failed — {_scan_err_msg}", icon="🚨")
+            st.error(f"Scanner failed: {_scan_err_msg}", icon="🚨")
         elif not _scan_res:
             st.info(
                 "No pairs tested: no pair had sufficient overlapping data "
@@ -3891,7 +3891,7 @@ with tab_scanner:
                             _dpr = (
                                 f"{_cp['pair']} is statistically cointegrated (E-G p={_cp['pval']:.3f}). "
                                 f"Spread mean-reverts with OU half-life {_cp_hl_s}. "
-                                f"Current z-score = {_cp['z_now']:+.2f}σ — beyond the "
+                                f"Current z-score = {_cp['z_now']:+.2f}σ: beyond the "
                                 f"±{COINT_ENTRY_Z}σ entry threshold. "
                                 f"Signal: {_dside}. "
                                 f"Historical ±{COINT_ENTRY_Z}σ reversion rate: {_dhr_s} within "
@@ -3902,7 +3902,7 @@ with tab_scanner:
                             _dpr = (
                                 f"{_cp['pair']} is cointegrated (E-G p={_cp['pval']:.3f}), "
                                 f"OU half-life {_cp_hl_s}. "
-                                f"Current z-score = {_cp['z_now']:+.2f}σ — within the neutral band. "
+                                f"Current z-score = {_cp['z_now']:+.2f}σ: within the neutral band. "
                                 "No active spread entry signal."
                             )
                             st.markdown(commentary(_dpr + _stab_note, "ok"), unsafe_allow_html=True)
@@ -3914,7 +3914,7 @@ with tab_scanner:
                 (ICE/yfinance), DE and FR day-ahead prices (ENTSO-E A44, when available),
                 NBP (ICE/yfinance, when available). All power prices in EUR/MWh; gas prices
                 converted where possible. NBP from yfinance may include FX/unit differences
-                relative to EUR/MWh — treat gas-to-gas pairs with additional caution.
+                relative to EUR/MWh: treat gas-to-gas pairs with additional caution.
 
                 **Pair selection:** All unique combinations of available series with
                 ≥{COINT_MIN_OBS} overlapping daily observations are tested.
@@ -3924,14 +3924,14 @@ with tab_scanner:
                 the direction with the lower p-value is retained. OLS regression
                 `Y = α + β·X + ε` defines the spread residual series.
 
-                **Z-score:** `z_t = (ε_t − μ_ε(t)) / σ_ε(t)` — expanding-window moments
+                **Z-score:** `z_t = (ε_t − μ_ε(t)) / σ_ε(t)` with expanding-window moments
                 (min 30 obs, no look-ahead bias). Entry threshold: |z| > {COINT_ENTRY_Z}σ.
                 Exit: sign flip or |z| < 0.5σ.
 
                 **Status logic:**
-                - *Actionable* — E-G p < 0.05 AND |z_now| > {COINT_ENTRY_Z}σ
-                - *Wait* — E-G p < 0.05 but |z_now| ≤ {COINT_ENTRY_Z}σ (spread in neutral zone)
-                - *Not cointegrated* — E-G p ≥ 0.05
+                - *Actionable*: E-G p < 0.05 AND |z_now| > {COINT_ENTRY_Z}σ
+                - *Wait*: E-G p < 0.05 but |z_now| ≤ {COINT_ENTRY_Z}σ (spread in neutral zone)
+                - *Not cointegrated*: E-G p ≥ 0.05
 
                 **OU half-life:** Estimated via `Δε_t = λ·ε_{{t−1}} + const`; half-life = −ln(2)/λ.
                 Capped maximum hold at {min(60, max(5, 21))}–60 days for backtest integrity.
@@ -3968,7 +3968,7 @@ with tab_pca:
     _pca_result = _run_pca(_pca_panel) if not _pca_panel.empty else None
 
     if _pca_result is None:
-        st.warning(f"Forward curve PCA unavailable — {_pca_msg}")
+        st.warning(f"Forward curve PCA unavailable: {_pca_msg}")
     else:
         _ev       = _pca_result["ev_ratio"]
         _pc1_pct  = round(_ev[0] * 100, 1)
@@ -4134,13 +4134,13 @@ with tab_pca:
         _pca_signals = [
             (
                 "PC2_z", "PC2 (Slope)",
-                f"Curve unusually steep (+{PCA_ENTRY_Z:.0f}σ) — Calendar spread: short front, long back",
-                f"Curve unusually flat (−{PCA_ENTRY_Z:.0f}σ) — Reverse calendar: long front, short back",
+                f"Curve unusually steep (+{PCA_ENTRY_Z:.0f}σ). Calendar spread: short front, long back",
+                f"Curve unusually flat (−{PCA_ENTRY_Z:.0f}σ). Reverse calendar: long front, short back",
             ),
             (
                 "PC3_z", "PC3 (Curvature)",
-                f"Butterfly wide (+{PCA_ENTRY_Z:.0f}σ) — Sell wings (M+1, M+18), buy belly (M+9)",
-                f"Butterfly compressed (−{PCA_ENTRY_Z:.0f}σ) — Buy wings (M+1, M+18), sell belly (M+9)",
+                f"Butterfly wide (+{PCA_ENTRY_Z:.0f}σ). Sell wings (M+1, M+18), buy belly (M+9)",
+                f"Butterfly compressed (−{PCA_ENTRY_Z:.0f}σ). Buy wings (M+1, M+18), sell belly (M+9)",
             ),
         ]
         for _pcz, _lbl, _bull_msg, _bear_msg in _pca_signals:
@@ -4195,9 +4195,9 @@ The storage carry term introduces a second source of genuine time-variation: ele
 
 The panel is de-meaned column-wise (each tenor centred on its historical mean). PCA is applied via singular value decomposition on the de-meaned matrix.
 
-- **PC1 (Level):** approximately flat loadings across tenors — represents parallel curve shifts driven primarily by spot.
-- **PC2 (Slope):** monotonic loadings — represents steepening/flattening, driven by storage z-score variation propagated through the carry term.
-- **PC3 (Curvature):** U-shaped or ∩-shaped loadings — residual mid-curve distortion relative to wings.
+- **PC1 (Level):** approximately flat loadings across tenors, representing parallel curve shifts driven primarily by spot.
+- **PC2 (Slope):** monotonic loadings, representing steepening/flattening, driven by storage z-score variation propagated through the carry term.
+- **PC3 (Curvature):** U-shaped or ∩-shaped loadings, capturing residual mid-curve distortion relative to wings.
 
 Expected variance decomposition for energy forward curves (Litterman & Scheinkman 1991 applied to interest rates; Cortazar & Schwartz 1994 extended to commodities): PC1 80–95%, PC2 4–15%, PC3 1–5%.
 
@@ -4212,7 +4212,7 @@ Z-scores use an expanding window from the start of the panel (no look-ahead bias
 
 **Limitations**
 
-PCA assumes a stationary covariance structure — this breaks during major regime shifts (Russian supply cut-off 2022, extreme cold snaps, Hormuz disruptions). The model-derived panel means factor loadings reflect the two-factor construction (spot + storage carry), not an observed futures term structure. A production-grade implementation would use live ICE TTF strip quotes from an EEX/Trayport feed.
+PCA assumes a stationary covariance structure; this breaks during major regime shifts (Russian supply cut-off 2022, extreme cold snaps, Hormuz disruptions). The model-derived panel means factor loadings reflect the two-factor construction (spot + storage carry), not an observed futures term structure. A production-grade implementation would use live ICE TTF strip quotes from an EEX/Trayport feed.
 """)
 
         st.caption(
