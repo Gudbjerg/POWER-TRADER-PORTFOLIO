@@ -20,7 +20,7 @@ st.set_page_config(
 )
 
 from utils.helpers import apply_dark_theme, kpi_card, delta_span
-from utils.theme import CHART, PLOTLY_TEMPLATE
+from utils.theme import ACCENTS, CHART, PLOTLY_TEMPLATE, callout, page_header, page_footer, render
 from models.feature_assembly import assemble_features
 from config.settings import (
     BESS_FCR_N_EUR_PER_MW_YEAR,
@@ -228,22 +228,20 @@ def _npv_only(
 # PAGE
 # ═══════════════════════════════════════════════════════════════════════════════
 
-st.markdown("## BESS Optimiser")
-st.caption(
+page_header(
+    "Project Toolkit", "BESS Optimiser",
     "Battery Energy Storage System multi-market revenue stack for Nordic power markets. "
-    "Configure asset parameters and select markets to compute financial projections."
+    "Configure asset parameters and select markets to compute financial projections.",
+    accent=ACCENTS["bess"],
 )
 
-st.markdown(
-    """<div style="background:#1f1108;border-left:3px solid #d4ac3a;padding:10px 14px;
-    border-radius:4px;color:#d4ac3a;font-size:0.84rem;margin-bottom:14px;">
-    <strong>Revenue estimates are simplified deterministic projections</strong> based on historical
-    average market prices and are not guaranteed. Actual returns depend on contracted FCR volumes,
-    intraday market conditions, battery degradation, and grid connection costs.
-    FCR prices are market averages, not contracted rates. Not financial advice.
-    </div>""",
-    unsafe_allow_html=True,
-)
+render(callout(
+    "<strong>Revenue estimates are simplified deterministic projections</strong> based on historical "
+    "average market prices and are not guaranteed. Actual returns depend on contracted FCR volumes, "
+    "intraday market conditions, battery degradation, and grid connection costs. "
+    "FCR prices are market averages, not contracted rates. Not financial advice.",
+    "warn",
+))
 
 # ── Feature matrix (for DAM spread) ──────────────────────────────────────────
 with st.spinner("Loading market data for DAM spread estimation…"):
@@ -621,16 +619,12 @@ with st.expander("Model methodology and assumptions", expanded=False):
 # ═══════════════════════════════════════════════════════════════════════════════
 # FOOTER
 # ═══════════════════════════════════════════════════════════════════════════════
-st.divider()
-st.markdown(
-    f"""<div style="color:#484f58;font-size:0.72rem;line-height:1.8;">
-    Built by Tobias Gudbjerg &nbsp;|&nbsp;
-    DAM data: ENTSO-E A44 / Nord Pool (NO2) &nbsp;|&nbsp;
-    FCR prices: Nordic/NordREG market averages (FCR-N ≈ €{BESS_FCR_N_EUR_PER_MW_YEAR:,.0f}/MW/yr,
-    FCR-D ≈ €{BESS_FCR_D_EUR_PER_MW_YEAR:,.0f}/MW/yr), approximate, varies by auction.<br>
-    For analytical and educational purposes only. Not financial advice.
-    Consult project-specific grid connection studies, PPA terms, and contracted FCR volumes
-    for investment-grade projections.
-    </div>""",
-    unsafe_allow_html=True,
+page_footer(
+    [
+        ("DAM data", "ENTSO-E A44 / Nord Pool (NO2)"),
+        ("FCR prices", f"Nordic/NordREG market averages (FCR-N ≈ €{BESS_FCR_N_EUR_PER_MW_YEAR:,.0f}/MW/yr, "
+                       f"FCR-D ≈ €{BESS_FCR_D_EUR_PER_MW_YEAR:,.0f}/MW/yr), approximate, varies by auction"),
+    ],
+    note="For analytical and educational purposes only. Consult project-specific grid connection studies, "
+         "PPA terms, and contracted FCR volumes for investment-grade projections.",
 )

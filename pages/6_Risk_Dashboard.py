@@ -20,7 +20,7 @@ st.set_page_config(
 )
 
 from utils.helpers import apply_dark_theme, kpi_card, delta_span
-from utils.theme import CHART, PLOTLY_TEMPLATE
+from utils.theme import ACCENTS, CHART, PLOTLY_TEMPLATE, callout, page_header, page_footer, render
 from models.feature_assembly import assemble_features
 
 apply_dark_theme()
@@ -280,21 +280,19 @@ def _bootstrap_var_ci(series: pd.Series, conf: float = _VaR_CONF) -> tuple[float
 # PAGE
 # ═══════════════════════════════════════════════════════════════════════════════
 
-st.markdown("## D4 · Risk Dashboard")
-st.caption(
+page_header(
+    "D4", "Risk Dashboard",
     "Portfolio simulator built on the D3 signal suite. "
-    "Select signals and assign notional sizes to compute historical P&L, VaR/ES, and stress exposure."
+    "Select signals and assign notional sizes to compute historical P&L, VaR/ES, and stress exposure.",
+    accent=ACCENTS["risk"],
 )
 
-st.markdown(
-    """<div style="background:#1f1108;border-left:3px solid #d4ac3a;padding:10px 14px;
-    border-radius:4px;color:#d4ac3a;font-size:0.84rem;margin-bottom:14px;">
-    <strong>For analytical purposes only.</strong> Position P&amp;L is simulated from historical
-    signal performance. Signals are derived from statistical models applied to public market data.
-    Not financial advice. Simulated past performance is not indicative of future results.
-    </div>""",
-    unsafe_allow_html=True,
-)
+render(callout(
+    "<strong>For analytical purposes only.</strong> Position P&amp;L is simulated from historical "
+    "signal performance. Signals are derived from statistical models applied to public market data. "
+    "Not financial advice. Simulated past performance is not indicative of future results.",
+    ACCENTS["risk"],
+))
 
 # ── Feature matrix ────────────────────────────────────────────────────────────
 with st.spinner("Assembling feature matrix…"):
@@ -718,12 +716,7 @@ with st.expander("Methodology", expanded=False):
     """)
 
 # ── Footer ─────────────────────────────────────────────────────────────────────
-st.divider()
-st.markdown(
-    """<div style="color:#484f58;font-size:0.72rem;line-height:1.8;">
-    Built by Tobias Gudbjerg &nbsp;|&nbsp;
-    Feature data: ENTSO-E A44 (NO2, NL), ICE/Yahoo Finance (TTF), GIE AGSI+ (EU storage), ENTSO-E B31 (hydro)<br>
-    For analytical purposes only. Simulated results do not represent live trading. Not financial advice.
-    </div>""",
-    unsafe_allow_html=True,
+page_footer(
+    [("Feature data", "ENTSO-E A44 (NO2, NL), ICE/Yahoo Finance (TTF), GIE AGSI+ (EU storage), ENTSO-E B31 (hydro)")],
+    note="For analytical purposes only. Simulated results do not represent live trading.",
 )

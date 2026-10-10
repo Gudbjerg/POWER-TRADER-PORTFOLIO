@@ -17,15 +17,16 @@ st.set_page_config(
 )
 
 from utils.helpers import apply_dark_theme, commentary, kpi_card, delta_span, has_torch
-from utils.theme import CHART, PLOTLY_TEMPLATE
+from utils.theme import ACCENTS, CHART, PLOTLY_TEMPLATE, page_header, page_footer
 from data.sentiment import get_sentiment_data
 from data.prices import get_ttf_data
 
 apply_dark_theme()
 
-st.markdown("## Layer 4 · Machine Learning")
-st.caption(
-    "Machine learning applied to European power and gas market forecasting and regime classification."
+page_header(
+    "Layer 4", "Machine Learning",
+    "Machine learning applied to European power and gas market forecasting and regime classification.",
+    accent=ACCENTS["l4"],
 )
 
 _TORCH_AVAILABLE = has_torch()
@@ -682,12 +683,6 @@ with st.expander("Feature pipeline and ENTSO-E data status", expanded=True):
     to include wind and hydro when those sources return.
     """)
 
-st.divider()
-st.markdown(
-    """<div style="color:#484f58;font-size:0.72rem;line-height:1.8;">
-    Built by Tobias Gudbjerg &nbsp;|&nbsp;
-    Frameworks: PyTorch &nbsp;·&nbsp; hmmlearn &nbsp;·&nbsp; Hugging Face Transformers (FinBERT)<br>
-    For informational purposes only. Not financial advice.
-    </div>""",
-    unsafe_allow_html=True,
-)
+page_footer([
+    ("Frameworks", "PyTorch · hmmlearn · Hugging Face Transformers (FinBERT)"),
+])

@@ -39,7 +39,7 @@ from utils.helpers   import (
     has_entsoe_key, has_agsi_key, apply_dark_theme,
     pill, commentary, kpi_card, delta_span,
 )
-from utils.theme     import CHART, PLOTLY_TEMPLATE
+from utils.theme     import ACCENTS, CHART, PLOTLY_TEMPLATE, page_header, page_footer
 from utils.scenarios import (
     storage_status, ttf_status, spread_status, lng_status, market_summary,
 )
@@ -198,16 +198,19 @@ lng_stat, lng_headline, lng_detail = lng_status(lng_wow)
 
 
 # ── Header ─────────────────────────────────────────────────────────────────
-_hdr_col, _btn_col = st.columns([5, 1])
+_hdr_col, _btn_col = st.columns([5, 1], vertical_alignment="center")
 with _hdr_col:
-    st.markdown("## Layer 1 · Live Market Monitor")
-    st.caption("Real-time European power and gas data, refreshed hourly. Sources: GIE AGSI+/ALSI, Nord Pool, ENTSO-E, ICE/Yahoo Finance")
+    page_header(
+        "Layer 1", "Live Market Monitor",
+        "Real-time European power and gas data, refreshed hourly.",
+        sources=["GIE AGSI+/ALSI", "Nord Pool", "ENTSO-E", "ICE/Yahoo Finance"],
+        accent=ACCENTS["l1"],
+    )
 with _btn_col:
-    st.markdown("<div style='padding-top:18px;'>", unsafe_allow_html=True)
-    if st.button("Refresh data"):
-        st.cache_data.clear()
-        st.rerun()
-    st.markdown("</div>", unsafe_allow_html=True)
+    with st.container(horizontal=True, horizontal_alignment="right"):
+        if st.button("Refresh data", icon=":material/refresh:"):
+            st.cache_data.clear()
+            st.rerun()
 
 missing = []
 if not has_agsi_key():   missing.append("AGSI_API_KEY (agsi.gie.eu)")
@@ -922,16 +925,9 @@ with tab_hydro:
 
 
 # ── Footer ─────────────────────────────────────────────────────────────────
-
-st.divider()
-st.markdown(
-    """<div style="color:#484f58;font-size:0.72rem;line-height:1.8;">
-    Built by Tobias Gudbjerg &nbsp;|&nbsp;
-    Gas storage and LNG data: <a href="https://agsi.gie.eu" style="color:#484f58;">Gas Infrastructure Europe (GIE) AGSI+/ALSI</a> &nbsp;|&nbsp;
-    Power data: <a href="https://transparency.entsoe.eu" style="color:#484f58;">ENTSO-E Transparency Platform</a> &nbsp;|&nbsp;
-    Spot prices: <a href="https://www.nordpoolgroup.com" style="color:#484f58;">Nord Pool</a> &nbsp;|&nbsp;
-    TTF: <a href="https://finance.yahoo.com" style="color:#484f58;">Yahoo Finance / ICE</a><br>
-    For informational purposes only. Not financial advice.
-    </div>""",
-    unsafe_allow_html=True,
-)
+page_footer([
+    ("Gas storage and LNG data", "Gas Infrastructure Europe (GIE) AGSI+/ALSI", "https://agsi.gie.eu"),
+    ("Power data", "ENTSO-E Transparency Platform", "https://transparency.entsoe.eu"),
+    ("Spot prices", "Nord Pool", "https://www.nordpoolgroup.com"),
+    ("TTF", "Yahoo Finance / ICE", "https://finance.yahoo.com"),
+])

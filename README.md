@@ -4,7 +4,7 @@ emoji: ⚡
 colorFrom: blue
 colorTo: green
 sdk: streamlit
-sdk_version: "1.38.0"
+sdk_version: "1.56.0"
 app_file: app.py
 pinned: false
 ---
@@ -43,7 +43,7 @@ The following are representative outputs from the platform as computed on curren
 
 **Primary deployment:** [huggingface.co/spaces/TobGud/power-trader-portfolio](https://huggingface.co/spaces/TobGud/power-trader-portfolio)
 
-The HuggingFace Space builds from the `hf-deploy` branch. Cold-start on an idle Space takes approximately 90 seconds while the container builds and live data fetches complete. All panels degrade gracefully without API keys: the TTF price, Nord Pool spot prices, forward curve, and commodity correlations load without credentials. Gas storage, ENTSO-E flows, hydro, solar, and generation data require free API keys from GIE and ENTSO-E (registration links in the app sidebar).
+The HuggingFace Space builds from the `hf-deploy` branch. Cold-start on an idle Space takes approximately 90 seconds while the container builds and live data fetches complete. All panels degrade gracefully without API keys: the TTF price, Nord Pool spot prices, forward curve, and commodity correlations load without credentials. Gas storage, ENTSO-E flows, hydro, solar, and generation data require free API keys from GIE and ENTSO-E (the overview page shows which sources are active, and each affected panel names the key it needs).
 
 A [Dockerfile](Dockerfile) and [render.yaml](render.yaml) are included for self-hosted or Render deployment.
 
@@ -102,6 +102,24 @@ A [Dockerfile](Dockerfile) and [render.yaml](render.yaml) are included for self-
 ![BESS NPV and cash flow](files/screenshots/bess_npv.png)
 
 </details>
+
+---
+
+## Interface
+
+`app.py` is the router: it applies the design system once per run and declares a grouped top navigation with `st.navigation` (on narrow screens Streamlit moves the menu into the sidebar). Page modules live in `pages/`, and URL paths are fixed so direct links keep working.
+
+| Menu | Pages | URL path |
+|------|-------|----------|
+| Overview | Landing page: market snapshot, data-source status, layer directory | `/` |
+| Markets | Live Monitor (Layer 1), Macro Signals (Layer 3) | `/Live_Monitor`, `/Macro_Signals` |
+| Analytics | Quant Analysis (Layer 2), ML Models (Layer 4) | `/Quant_Analysis`, `/ML_Models` |
+| Signals & Risk | Mispricing Dashboard (Layer 5), Risk Dashboard (D4) | `/Mispricing_Dashboard`, `/Risk_Dashboard` |
+| Projects | BESS Optimiser | `/BESS_Optimiser` |
+
+The overview page opens with a market snapshot strip: TTF, JKM, Brent, EUA (CO2.L) and EUR/USD from Yahoo Finance, plus Nord Pool day-ahead daily averages for NO2 and the Continental reference (NL, because DE-LU is not published on the Nord Pool Data Portal). Each quote shows its day-over-day change and a short sparkline, is cached for 15 minutes, and falls back to a placeholder when a source is unavailable. When `GLOBE_URL` is set, the overview page also links to the companion 3D energy globe.
+
+The visual language lives in [utils/theme.py](utils/theme.py): design tokens (dark terminal palette, amber gas and cyan power accents, one accent per layer, Inter for text and JetBrains Mono for figures), the global stylesheet, reusable components (page header, section header, KPI card with optional sparkline, callout, chip, ticker strip, layer card, footer) and a registered Plotly template (`ptp`) that every chart uses. [.streamlit/config.toml](.streamlit/config.toml) mirrors the same tokens in Streamlit's native theme. The helpers in [utils/helpers.py](utils/helpers.py) (`kpi_card`, `commentary`, `pill`, `delta_span`) keep their signatures and render through the design system.
 
 ---
 
@@ -288,7 +306,7 @@ A full P0/P1/P2/P3 pre-deployment audit was conducted and documented in [files/A
 
 ## Running Locally
 
-The platform requires Python 3.11+. API keys for GIE AGSI+ (agsi.gie.eu) and ENTSO-E Transparency (transparency.entsoe.eu) are free to register and unlock the full feature set. Without keys, approximately 12 of the 31 modules load using public data only.
+The platform requires Python 3.11+ and Streamlit 1.56 or later (top navigation, horizontal containers and the theme options in `.streamlit/config.toml`). API keys for GIE AGSI+ (agsi.gie.eu) and ENTSO-E Transparency (transparency.entsoe.eu) are free to register and unlock the full feature set. Without keys, approximately 12 of the 31 modules load using public data only.
 
 ```bash
 git clone https://github.com/Gudbjerg/POWER-TRADER-PORTFOLIO.git
@@ -299,8 +317,11 @@ pip install torch --index-url https://download.pytorch.org/whl/cpu
 pip install transformers>=4.38.0
 export ENTSOE_API_KEY=<your_key>
 export AGSI_API_KEY=<your_key>
+export GLOBE_URL=<https://your-globe-deployment>   # optional: adds an "Open Energy Globe" button to the overview page
 streamlit run app.py
 ```
+
+`app.py` is the only entry point; open the pages through the top navigation or directly by URL path (for example `http://localhost:8501/Live_Monitor`).
 
 A [Dockerfile](Dockerfile) and [render.yaml](render.yaml) are included for self-hosted or Render deployment. The image builds with CPU-only PyTorch and expects a persistent disk mounted at `/mnt/data` for the FinBERT sentiment history file.
 

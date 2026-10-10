@@ -22,7 +22,7 @@ st.set_page_config(
 )
 
 from utils.helpers import apply_dark_theme, kpi_card, delta_span, commentary
-from utils.theme import CHART, PLOTLY_TEMPLATE
+from utils.theme import ACCENTS, CHART, PLOTLY_TEMPLATE, page_header, page_footer
 from config.settings import (
     SCORE_RISK_PREMIUM_EUR, SCORE_SEASONAL_HI_PCT, SCORE_SEASONAL_LO_PCT,
     COINT_ENTRY_Z, COINT_MIN_OBS, COINT_MIN_MATCH, HYDRO_MAX_LAG,
@@ -413,9 +413,11 @@ with st.sidebar:
     st.divider()
 
 # ── Header ───────────────────────────────────────────────────────────────────
-st.markdown("## Layer 2 · Quantitative Analysis")
-st.caption("Quantitative models for European power and gas market analysis.")
-st.divider()
+page_header(
+    "Layer 2", "Quantitative Analysis",
+    "Quantitative models for European power and gas market analysis.",
+    accent=ACCENTS["l2"],
+)
 
 with st.expander("Model overview", expanded=False):
     st.markdown("""
@@ -4007,14 +4009,8 @@ PCA assumes a stationary covariance structure — this breaks during major regim
 
 
 # ── Footer ────────────────────────────────────────────────────────────────────
-st.divider()
-st.markdown(
-    """<div style="color:#484f58;font-size:0.72rem;line-height:1.8;">
-    Built by Tobias Gudbjerg &nbsp;|&nbsp;
-    Storage data: <a href="https://agsi.gie.eu" style="color:#484f58;">GIE AGSI+</a> &nbsp;|&nbsp;
-    Gas price: <a href="https://finance.yahoo.com" style="color:#484f58;">ICE/Yahoo Finance (TTF)</a> &nbsp;|&nbsp;
-    Power price: <a href="https://www.nordpoolgroup.com" style="color:#484f58;">Nord Pool</a><br>
-    For informational purposes only. Not financial advice.
-    </div>""",
-    unsafe_allow_html=True,
-)
+page_footer([
+    ("Storage data", "GIE AGSI+", "https://agsi.gie.eu"),
+    ("Gas price", "ICE/Yahoo Finance (TTF)", "https://finance.yahoo.com"),
+    ("Power price", "Nord Pool", "https://www.nordpoolgroup.com"),
+])

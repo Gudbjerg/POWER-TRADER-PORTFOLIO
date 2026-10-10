@@ -17,7 +17,7 @@ st.set_page_config(
 )
 
 from utils.helpers import apply_dark_theme, kpi_card, delta_span, commentary
-from utils.theme import CHART, PLOTLY_TEMPLATE
+from utils.theme import ACCENTS, CHART, PLOTLY_TEMPLATE, page_header, page_footer
 from data.prices import get_ttf_data
 from data.events import load_events, events_in_range, CATEGORY_COLORS
 from data.commodities import get_commodity_data
@@ -126,12 +126,12 @@ with st.spinner(""):
 events_all = load_events()
 
 # ── Header ───────────────────────────────────────────────────────────────────
-st.markdown("## Layer 3 · Geopolitical and Macro Signals")
-st.caption(
-    "Geopolitical event context, EU gas supply mix, and cross-commodity price transmission. "
-    "Data sources: ICE/Yahoo Finance, manually curated event timeline."
+page_header(
+    "Layer 3", "Geopolitical and Macro Signals",
+    "Geopolitical event context, EU gas supply mix, and cross-commodity price transmission.",
+    sources=["ICE/Yahoo Finance", "Manually curated event timeline"],
+    accent=ACCENTS["l3"],
 )
-st.divider()
 
 tab_geo, tab_mix, tab_spill, tab_grid = st.tabs([
     "Geopolitical Overlay",
@@ -997,14 +997,8 @@ with tab_grid:
 
 
 # ── Footer ────────────────────────────────────────────────────────────────────
-st.divider()
-st.markdown(
-    """<div style="color:#484f58;font-size:0.72rem;line-height:1.8;">
-    Built by Tobias Gudbjerg &nbsp;|&nbsp;
-    Gas price: <a href="https://finance.yahoo.com" style="color:#484f58;">ICE/Yahoo Finance</a> &nbsp;|&nbsp;
-    Supply mix: GIE ALSI, Eurostat, IEA &nbsp;|&nbsp;
-    Agricultural futures: CBOT via Yahoo Finance<br>
-    For informational purposes only. Not financial advice.
-    </div>""",
-    unsafe_allow_html=True,
-)
+page_footer([
+    ("Gas price", "ICE/Yahoo Finance", "https://finance.yahoo.com"),
+    ("Supply mix", "GIE ALSI, Eurostat, IEA"),
+    ("Agricultural futures", "CBOT via Yahoo Finance"),
+])
