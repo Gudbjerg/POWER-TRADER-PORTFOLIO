@@ -221,7 +221,9 @@ def _get_scanner_prices(years: int = 3) -> pd.DataFrame:
             _cli = _EPC(api_key=_key, timeout=ENTSOE_TIMEOUT_S)
             _end = pd.Timestamp.now(tz="UTC").normalize()
             _st0 = _end - pd.Timedelta(days=int(years * 365))
-            for _lbl, _eic in [("de", "10Y1001A1001A63L"), ("fr", "10YFR-RTE------C")]:
+            # DE-LU bidding zone (10Y1001A1001A82H). The former DE-AT-LU zone
+            # (10Y1001A1001A63L) stopped publishing day-ahead prices on 1 Oct 2018.
+            for _lbl, _eic in [("de", "10Y1001A1001A82H"), ("fr", "10YFR-RTE------C")]:
                 _chunks: list = []
                 _cs = _st0
                 while _cs < _end:
@@ -3452,9 +3454,18 @@ with tab_scanner:
         _expected_extra = {"de", "fr", "nbp"}
         _missing_extra  = _expected_extra - set(_scan_cols)
         if _missing_extra:
+            _why = []
+            if _missing_extra & {"de", "fr"}:
+                _why.append(
+                    "DE/FR come from ENTSO-E A44 and returned no data"
+                    if os.getenv("ENTSOE_API_KEY", "")
+                    else "DE/FR need ENTSOE_API_KEY (ENTSO-E A44)"
+                )
+            if "nbp" in _missing_extra:
+                _why.append("NBP comes from Yahoo Finance (NBP=F) and returned no data")
             st.caption(
                 "Not loaded: " + ", ".join(m.upper() for m in sorted(_missing_extra))
-                + ": ENTSO-E A44 key required for DE/FR; NBP requires yfinance (ICE/Yahoo Finance)."
+                + ". " + "; ".join(_why) + "."
             )
 
         _scan_err_msg = None

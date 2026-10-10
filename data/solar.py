@@ -21,7 +21,8 @@ try:
 except ImportError:
     ENTSOE_PY_AVAILABLE = False
 
-DE_EIC = "10Y1001A1001A83F"
+DE_EIC = "10Y1001A1001A83F"        # Germany (generation per production type)
+DE_LU_EIC = "10Y1001A1001A82H"     # DE-LU bidding zone (day-ahead prices, A44)
 ENERGY_CHARTS_BASE = "https://api.energy-charts.info"
 
 
@@ -45,7 +46,7 @@ def _fetch_entsoe(days: int) -> pd.DataFrame:
     solar_df = pd.DataFrame()
 
     try:
-        prices = client.query_day_ahead_prices(DE_EIC, start=start, end=today)
+        prices = client.query_day_ahead_prices(DE_LU_EIC, start=start, end=today)
         prices = prices.tz_convert("Europe/Berlin")
         price_df = pd.DataFrame({"price": prices.values}, index=prices.index)
     except Exception:
