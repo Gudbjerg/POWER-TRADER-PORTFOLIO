@@ -71,6 +71,16 @@ def test_align_drops_dates_with_stale_fx():
     assert align_ttf_jkm(ttf, jkm, fx, fx_max_age_days=3).empty
 
 
+def test_align_accepts_mixed_datetime_resolutions():
+    dates = pd.to_datetime(["2026-02-02", "2026-02-03"])
+    ttf = pd.Series([40.0, 41.0], index=dates.as_unit("s"))
+    jkm = pd.Series([12.0, 12.5], index=dates.as_unit("us"))
+    fx = pd.Series([1.10, 1.10], index=dates.as_unit("ns"))
+    out = align_ttf_jkm(ttf, jkm, fx)
+    assert len(out) == 2
+    assert out.loc[1, "spread"] == pytest.approx(41.0 - 12.5 / 1.10 / 0.293071)
+
+
 def test_align_empty_inputs():
     empty = align_ttf_jkm(pd.Series(dtype=float), _s(["2026-01-01"], [1.0]), _s(["2026-01-01"], [1.1]))
     assert empty.empty

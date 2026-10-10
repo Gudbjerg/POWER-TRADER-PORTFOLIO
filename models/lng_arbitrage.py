@@ -59,7 +59,9 @@ def _to_daily_frame(series: pd.Series, name: str) -> pd.DataFrame:
     idx = pd.DatetimeIndex(pd.to_datetime(series.index))
     if idx.tz is not None:
         idx = idx.tz_localize(None)
-    frame = pd.DataFrame({"date": idx.normalize(), name: pd.to_numeric(series, errors="coerce").to_numpy()})
+    # One resolution for every input: merge_asof rejects keys with mixed datetime units
+    idx = idx.normalize().as_unit("ns")
+    frame = pd.DataFrame({"date": idx, name: pd.to_numeric(series, errors="coerce").to_numpy()})
     frame = frame.dropna(subset=[name]).sort_values("date")
     return frame.drop_duplicates(subset=["date"], keep="last").reset_index(drop=True)
 
