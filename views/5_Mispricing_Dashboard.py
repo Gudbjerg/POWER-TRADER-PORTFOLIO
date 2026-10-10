@@ -4,6 +4,7 @@ Composite rich/cheap signal aggregator across gas, power, storage, and spreads.
 Every signal carries a historical percentile and confidence rating derived from
 the same underlying data and models as Layers 1–4.
 """
+from config.settings import ENTSOE_TIMEOUT_S
 import os
 import streamlit as st
 import pandas as pd
@@ -347,7 +348,7 @@ def _get_mispricing_signals() -> list[dict]:
                 if _key8:
                     _now8 = _dt8.now(_tz8.timezone("Europe/Berlin"))
                     _s8   = pd.Timestamp(_now8.date(), tz="Europe/Berlin")
-                    _ser8 = _EP8(api_key=_key8).query_load(
+                    _ser8 = _EP8(api_key=_key8, timeout=ENTSOE_TIMEOUT_S).query_load(
                         "10Y1001A1001A83F", start=_s8, end=_s8 + pd.Timedelta(days=1)
                     )
                     if _ser8 is not None and not (hasattr(_ser8, "empty") and _ser8.empty):

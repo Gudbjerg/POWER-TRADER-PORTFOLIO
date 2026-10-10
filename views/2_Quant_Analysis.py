@@ -1,6 +1,7 @@
 """
 Layer 2: Quantitative Analysis
 """
+from config.settings import ENTSOE_TIMEOUT_S
 import os
 import streamlit as st
 import pandas as pd
@@ -217,7 +218,7 @@ def _get_scanner_prices(years: int = 3) -> pd.DataFrame:
     if _key:
         try:
             from entsoe import EntsoePandasClient as _EPC
-            _cli = _EPC(api_key=_key)
+            _cli = _EPC(api_key=_key, timeout=ENTSOE_TIMEOUT_S)
             _end = pd.Timestamp.now(tz="UTC").normalize()
             _st0 = _end - pd.Timedelta(days=int(years * 365))
             for _lbl, _eic in [("de", "10Y1001A1001A63L"), ("fr", "10YFR-RTE------C")]:
@@ -357,7 +358,7 @@ def _get_de_live_load_gw() -> tuple:
         _now = _dt.now(_tz)
         _start = pd.Timestamp(_now.date(), tz="Europe/Berlin")
         _end   = _start + pd.Timedelta(days=1)
-        _client_a65 = EntsoePandasClient(api_key=_key)
+        _client_a65 = EntsoePandasClient(api_key=_key, timeout=ENTSOE_TIMEOUT_S)
         try:
             _ser = _client_a65.query_load("10Y1001A1001A83F", start=_start, end=_end)
         except Exception:

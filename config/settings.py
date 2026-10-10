@@ -29,6 +29,13 @@ BIDDING_ZONES = {
     "NO":  "10YNO-0--------C",
 }
 
+# ── ENTSO-E request policy ──────────────────────────────────────────────────
+# entsoe-py waits indefinitely by default. The Transparency Platform occasionally
+# accepts a connection and then never answers, which froze whole pages. Every
+# client is created with this read timeout (seconds) so a stalled request fails
+# and the panel degrades like any other unavailable source.
+ENTSOE_TIMEOUT_S = 30
+
 # ── Alert thresholds ────────────────────────────────────────────────────────
 TTF_SPIKE_PCT        = 10.0   # % single-day move flagged as spike
 SPREAD_WARN_EUR      = 25.0   # Nordic–Continental spread (EUR/MWh) to warn

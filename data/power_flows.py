@@ -2,6 +2,7 @@
 ENTSO-E cross-border physical flow fetcher.
 Uses entsoe-py library. Requires ENTSOE_API_KEY in .env.
 """
+from config.settings import ENTSOE_TIMEOUT_S
 import os
 import pandas as pd
 import streamlit as st
@@ -40,7 +41,7 @@ def _client():
     key = os.getenv("ENTSOE_API_KEY", "")
     if not key or not ENTSOE_PY_AVAILABLE:
         return None
-    return EntsoePandasClient(api_key=key)
+    return EntsoePandasClient(api_key=key, timeout=ENTSOE_TIMEOUT_S)
 
 
 @st.cache_data(ttl=3600, persist="disk")

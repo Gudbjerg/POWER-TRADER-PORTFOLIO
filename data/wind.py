@@ -7,6 +7,7 @@ Fallback: energy-charts.info (Fraunhofer ISE) for DE — no key required.
 
 Returns daily GWh totals per country.
 """
+from config.settings import ENTSOE_TIMEOUT_S
 import os
 import pandas as pd
 import streamlit as st
@@ -27,7 +28,7 @@ def _client():
     key = os.getenv("ENTSOE_API_KEY", "")
     if not key or not ENTSOE_PY_AVAILABLE:
         return None
-    return EntsoePandasClient(api_key=key)
+    return EntsoePandasClient(api_key=key, timeout=ENTSOE_TIMEOUT_S)
 
 
 def _entsoe_wind(client, eic: str, start, end) -> pd.Series:

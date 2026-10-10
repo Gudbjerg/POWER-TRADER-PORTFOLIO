@@ -9,6 +9,7 @@ Fallback: energy-charts.info (Fraunhofer ISE) — public REST API, no key needed
 Returns hourly averages (hour 0-23) of day-ahead price and solar generation
 averaged over the last `days` days for Germany.
 """
+from config.settings import ENTSOE_TIMEOUT_S
 import os
 import pandas as pd
 import streamlit as st
@@ -28,7 +29,7 @@ def _entsoe_client():
     key = os.getenv("ENTSOE_API_KEY", "")
     if not key or not ENTSOE_PY_AVAILABLE:
         return None
-    return EntsoePandasClient(api_key=key)
+    return EntsoePandasClient(api_key=key, timeout=ENTSOE_TIMEOUT_S)
 
 
 def _fetch_entsoe(days: int) -> pd.DataFrame:

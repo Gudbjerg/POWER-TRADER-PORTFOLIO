@@ -4,6 +4,7 @@ Norwegian hydro reservoir filling level fetcher via ENTSO-E.
 Uses the Hydro Reservoirs & Water Value data (document type B31, EIC 10YNO-0--------C).
 Returns weekly filling levels for Norway aggregated, with historical percentile bands.
 """
+from config.settings import ENTSOE_TIMEOUT_S
 import os
 import pandas as pd
 import streamlit as st
@@ -22,7 +23,7 @@ def _client():
     key = os.getenv("ENTSOE_API_KEY", "")
     if not key or not ENTSOE_PY_AVAILABLE:
         return None
-    return EntsoePandasClient(api_key=key)
+    return EntsoePandasClient(api_key=key, timeout=ENTSOE_TIMEOUT_S)
 
 
 @st.cache_data(ttl=3600, persist="disk")

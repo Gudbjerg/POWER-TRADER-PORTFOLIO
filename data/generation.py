@@ -10,6 +10,8 @@ Only fetches quarters not already in the cache on subsequent calls.
 """
 from __future__ import annotations
 
+from config.settings import ENTSOE_TIMEOUT_S
+
 import os
 import threading
 import pandas as pd
@@ -36,7 +38,7 @@ def _client():
     key = os.getenv("ENTSOE_API_KEY", "")
     if not key or not ENTSOE_PY_AVAILABLE:
         return None
-    return EntsoePandasClient(api_key=key)
+    return EntsoePandasClient(api_key=key, timeout=ENTSOE_TIMEOUT_S)
 
 
 def _extract_coal_columns(df: pd.DataFrame) -> tuple:
