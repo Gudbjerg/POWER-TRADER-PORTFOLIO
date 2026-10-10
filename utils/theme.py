@@ -757,26 +757,6 @@ def begin_run() -> None:
     st.session_state[_RUN_KEY] = st.session_state.get(_RUN_KEY, 0) + 1
 
 
-def ensure_router() -> None:
-    """Make sure the run goes through the ``app.py`` router.
-
-    Streamlit treats an app that has a ``pages/`` folder as a legacy (v1) multipage app
-    until the entry point has executed ``st.navigation`` once in the server process. On
-    a fresh server, a first visitor who opens a deep link such as ``/Live_Monitor``
-    would get that page without the router: no stylesheet and no top navigation. Page
-    modules call this early (via ``utils.helpers.apply_dark_theme``). In that legacy
-    state it switches Streamlit to ``st.navigation`` mode and reruns, so ``app.py``
-    renders the requested page; URL paths match, so the same page is shown. In normal
-    operation, and when a single page file runs on its own (for example in AppTest),
-    it does nothing.
-    """
-    try:
-        from streamlit.runtime.pages_manager import PagesManager
-    except ImportError:  # internal module moved in a future release: keep default behaviour
-        return
-    if getattr(PagesManager, "uses_pages_directory", False):
-        PagesManager.uses_pages_directory = False
-        st.rerun()
 
 
 def _minify(css: str) -> str:

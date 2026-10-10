@@ -1,7 +1,7 @@
 """
-Phase E — BESS Optimiser
+Phase E: BESS Optimiser
 Battery Energy Storage System multi-market revenue stack and financial model for Nordic power markets.
-Markets: DAM arbitrage, FCR-N (Frequency Containment Reserve — Normal), FCR-D (Disturbed), intraday.
+Markets: DAM arbitrage, FCR-N (Frequency Containment Reserve, Normal), FCR-D (Disturbed), intraday.
 All revenue inputs derived from the existing NO2 feature matrix plus hardcoded Nordic FCR price averages.
 """
 import streamlit as st
@@ -422,7 +422,7 @@ _fig_bar.update_layout(
                zerolinecolor=CHART["zero"]),
     hovermode="x unified",
 )
-st.plotly_chart(_fig_bar, use_container_width=True)
+st.plotly_chart(_fig_bar, width="stretch")
 
 st.divider()
 
@@ -478,7 +478,7 @@ _fig_wf.update_layout(
                tickfont=dict(size=10, color=CHART["muted"])),
     showlegend=False,
 )
-st.plotly_chart(_fig_wf, use_container_width=True)
+st.plotly_chart(_fig_wf, width="stretch")
 st.caption("Depreciation shown for reference. Non-cash item; does not affect cash flow or NPV calculation.")
 
 st.divider()
@@ -530,7 +530,7 @@ _fig_cum.update_layout(
                tickfont=dict(size=10, color=CHART["muted"]), zeroline=False),
     hovermode="x unified",
 )
-st.plotly_chart(_fig_cum, use_container_width=True)
+st.plotly_chart(_fig_cum, width="stretch")
 
 st.divider()
 
@@ -565,7 +565,7 @@ for _var, _label, _kwarg in [
         "NPV range":   f"€{(_hi - _lo) / 1e6:.2f}M",
     })
 
-st.dataframe(pd.DataFrame(_sens_rows), use_container_width=True, hide_index=True)
+st.dataframe(pd.DataFrame(_sens_rows), width="stretch", hide_index=True)
 
 st.divider()
 

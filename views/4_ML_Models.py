@@ -205,7 +205,7 @@ with st.expander("Live Model 1: Train and Predict", expanded=lstm_is_trained()):
                             f"naive persistence baseline (€{_naive_f:.2f}/MWh). "
                             "Predictions currently revert toward the mean and should not be used for "
                             "trading decisions. Root cause: the Q1–Q2 2026 test window coincides with "
-                            "the Iran/Hormuz supply shock — a regime structurally outside the training "
+                            "the Iran/Hormuz supply shock, a regime structurally outside the training "
                             "distribution. Methodology fix (log-return target, quantile loss, "
                             "walk-forward validation) is scheduled for a future session.",
                             icon="⚠️",
@@ -264,7 +264,7 @@ with st.expander("Live Model 1: Train and Predict", expanded=lstm_is_trained()):
                 hovermode="x unified",
             )
             st.markdown("**Test set: actual vs predicted**")
-            st.plotly_chart(_fig_pred, use_container_width=True)
+            st.plotly_chart(_fig_pred, width="stretch")
             _lm2 = lstm_load_meta()
             st.caption(
                 f"Solid lines: actual day-ahead prices. Dotted lines: LSTM predictions. "
@@ -417,7 +417,7 @@ with st.expander("Live Model 2: Train and Classify", expanded=hmm_is_trained()):
                         yaxis=dict(showgrid=False, title=None),
                         hovermode="x unified",
                     )
-                    st.plotly_chart(_fig_r, use_container_width=True)
+                    st.plotly_chart(_fig_r, width="stretch")
 
                     # ── 3D: realised-volatility overlay on the regime timeline (roadmap 3D) ──
                     # Pure post-processing in models/regime_volatility.py; uses the decoded
@@ -518,7 +518,7 @@ with st.expander("Live Model 2: Train and Classify", expanded=hmm_is_trained()):
                                             showgrid=True, gridcolor=_C["grid"], rangemode="tozero"),
                                 hovermode="x unified",
                             )
-                            st.plotly_chart(_fig_rv, use_container_width=True)
+                            st.plotly_chart(_fig_rv, width="stretch")
 
                             # KPI row
                             _rvk1, _rvk2, _rvk3, _rvk4 = st.columns(4)
@@ -858,7 +858,7 @@ else:
             hovermode="x unified",
             height=260,
         )
-        st.plotly_chart(fig_s, use_container_width=True)
+        st.plotly_chart(fig_s, width="stretch")
 
     # Granger causality (requires ≥21 days)
     if not daily.empty and not ttf["prices"].empty and len(daily) >= 21:
@@ -904,7 +904,7 @@ else:
             ].copy()
             display["net_sentiment"] = display["net_sentiment"].round(3)
             display.columns = ["Date", "Source", "Net sentiment", "Headline"]
-            st.dataframe(display.set_index("Date"), use_container_width=True)
+            st.dataframe(display.set_index("Date"), width="stretch")
 
     if sent["fetched_at"]:
         st.caption(f"Last updated: {sent['fetched_at'].strftime('%Y-%m-%d %H:%M UTC')} · "

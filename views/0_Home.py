@@ -1,8 +1,6 @@
 """
 Home: landing page of the European Gas & Power Market Intelligence Platform.
 """
-import os
-
 import streamlit as st
 from dotenv import load_dotenv
 
@@ -11,6 +9,7 @@ load_dotenv()
 st.set_page_config(page_title="European Gas & Power: Market Intelligence Platform")
 
 from utils.helpers import apply_dark_theme, has_entsoe_key, has_agsi_key
+from utils.globe import GLOBE_VIEWS, globe_link, globe_view_url
 from utils.theme import (
     ACCENTS, callout, chip, layer_card, page_footer, render, section_header, ticker_strip,
 )
@@ -20,8 +19,6 @@ apply_dark_theme()
 
 
 # ── Hero ───────────────────────────────────────────────────────────────────────
-_GLOBE_URL = os.getenv("GLOBE_URL", "").strip()
-
 with st.container(key="ptp_hero"):
     _hero_l, _hero_r = st.columns([1.75, 1], gap="large", vertical_alignment="center")
     with _hero_l:
@@ -34,17 +31,16 @@ with st.container(key="ptp_hero"):
             'analytical workflow of a European gas and power trader.</div>'
             '<div class="ptp-hero__body">Live fundamental surveillance, quantitative signal generation, '
             'cross-commodity macro analysis, machine learning, portfolio risk simulation, and BESS project '
-            'economics, integrated across seven pages and 31 analytical modules.</div>'
+            'economics, integrated across seven pages and 35 analytical modules.</div>'
             "</div>"
         )
         with st.container(horizontal=True, gap="small", key="ptp_cta"):
             with st.container(width="content", key="ptp_cta_primary"):
-                st.page_link("pages/1_Live_Monitor.py", label="Open Live Monitor",
+                st.page_link("views/1_Live_Monitor.py", label="Open Live Monitor",
                              icon=":material/arrow_forward:", icon_position="right")
-            st.page_link("pages/5_Mispricing_Dashboard.py", label="Mispricing Dashboard",
+            st.page_link("views/5_Mispricing_Dashboard.py", label="Mispricing Dashboard",
                          icon=":material/track_changes:")
-            if _GLOBE_URL.startswith(("https://", "http://")):
-                st.page_link(_GLOBE_URL, label="Open Energy Globe", icon=":material/public:")
+            globe_link("north_sea", "Open Energy Globe")
     with _hero_r:
         render(
             '<div class="ptp-hero-stats">'
@@ -52,7 +48,7 @@ with st.container(key="ptp_hero"):
             '<div class="ptp-hero-stat__label">Analytical layers</div></div>'
             '<div class="ptp-hero-stat"><div class="ptp-hero-stat__value">7</div>'
             '<div class="ptp-hero-stat__label">Pages</div></div>'
-            '<div class="ptp-hero-stat"><div class="ptp-hero-stat__value">31</div>'
+            '<div class="ptp-hero-stat"><div class="ptp-hero-stat__value">35</div>'
             '<div class="ptp-hero-stat__label">Analytical modules</div></div>'
             '<div class="ptp-hero-stat"><div class="ptp-hero-stat__value">14</div>'
             '<div class="ptp-hero-stat__label">Quant models</div></div>'
@@ -101,31 +97,35 @@ section_header(
 )
 
 _LAYERS = [
-    dict(key="l1", page="pages/1_Live_Monitor.py", link="Open Live Monitor",
+    dict(key="l1", page="views/1_Live_Monitor.py", link="Open Live Monitor",
          kicker="Layer 1 · Markets", title="Live Market Monitor", stat="10 panels", icon="pulse",
          desc="Ten real-time panels: EU and German gas storage against 5-year bands, LNG sendout, "
-              "TTF spot and forward strip, Nordic day-ahead spreads, hydro, flows and solar."),
-    dict(key="l2", page="pages/2_Quant_Analysis.py", link="Open Quant Analysis",
+              "TTF spot and forward strip, Nordic and FI minus IT-North day-ahead spreads, hydro, "
+              "flows and solar."),
+    dict(key="l2", page="views/2_Quant_Analysis.py", link="Open Quant Analysis",
          kicker="Layer 2 · Analytics", title="Quantitative Analysis", stat="14 models", icon="chart",
          desc="Storage refill Monte Carlo, gas-to-power regression, German merit order, multi-pair "
-              "cointegration scanner and TTF forward curve PCA with calendar-spread and butterfly signals."),
-    dict(key="l3", page="pages/3_Macro_Signals.py", link="Open Macro Signals",
-         kicker="Layer 3 · Markets", title="Geopolitical & Macro Signals", stat="4 panels", icon="globe",
-         desc="TTF timeline with 19 annotated supply disruptions, EU supply-mix evolution, gas-to-"
-              "agriculture spillover and a 7×7 cross-commodity correlation grid with lead-lag."),
-    dict(key="l4", page="pages/4_ML_Models.py", link="Open ML Models",
+              "cointegration scanner with rolling stability, and TTF forward curve PCA with "
+              "calendar-spread and butterfly signals."),
+    dict(key="l3", page="views/3_Macro_Signals.py", link="Open Macro Signals",
+         kicker="Layer 3 · Markets", title="Geopolitical & Macro Signals", stat="5 panels", icon="globe",
+         desc="TTF timeline with 28 annotated market events, EU supply-mix evolution, gas-to-"
+              "agriculture spillover, a 7×7 cross-commodity correlation grid and the TTF vs JKM "
+              "inter-basin LNG spread."),
+    dict(key="l4", page="views/4_ML_Models.py", link="Open ML Models",
          kicker="Layer 4 · Analytics", title="ML Models", stat="3 models", icon="cpu",
          desc="LSTM next-day power price forecaster benchmarked against a naive baseline, a 4-state "
-              "Gaussian HMM regime classifier and a FinBERT news sentiment signal with Granger tests."),
-    dict(key="l5", page="pages/5_Mispricing_Dashboard.py", link="Open Mispricing Dashboard",
+              "Gaussian HMM regime classifier with a realised-volatility overlay, and a FinBERT news "
+              "sentiment signal with Granger tests."),
+    dict(key="l5", page="views/5_Mispricing_Dashboard.py", link="Open Mispricing Dashboard",
          kicker="Layer 5 · Signals aggregator", title="Mispricing Dashboard", stat="8 signals", icon="target",
          desc="Eight rich/cheap signals from Layers 1 to 4 ranked by historical percentile, with "
               "direction, confidence classification and composite commentary."),
-    dict(key="risk", page="pages/6_Risk_Dashboard.py", link="Open Risk Dashboard",
+    dict(key="risk", page="views/6_Risk_Dashboard.py", link="Open Risk Dashboard",
          kicker="D4 · Risk simulator", title="Risk Dashboard", stat="6 signals", icon="shield",
          desc="Portfolio simulator on the D3 signal suite: equity curves, Sharpe, 1-day 95%/99% VaR "
               "and Expected Shortfall, four stress scenarios and rolling signal correlations."),
-    dict(key="bess", page="pages/7_BESS_Optimiser.py", link="Open BESS Optimiser",
+    dict(key="bess", page="views/7_BESS_Optimiser.py", link="Open BESS Optimiser",
          kicker="Project toolkit", title="BESS Optimiser", stat="4 markets", icon="battery",
          desc="Battery storage economics for Nordic power: DAM arbitrage, FCR-N, FCR-D and intraday "
               "revenue stack with cash flow, NPV, IRR, payback and ±20% sensitivities."),
@@ -145,6 +145,20 @@ def _layer_grid(layers: list[dict]) -> None:
 
 _layer_grid(_LAYERS[:4])
 _layer_grid(_LAYERS[4:])
+
+# ── Companion 3D globe (shown only when GLOBE_URL is configured) ─────────────────
+if globe_view_url("north_sea"):
+    section_header(
+        "Energy Globe",
+        "The physical system behind the prices, in 3D: Norwegian shelf facilities and export "
+        "pipelines, European LNG terminals with live send-out, and the maritime chokepoints that "
+        "LNG and crude cargoes pass through.",
+    )
+    with st.container(horizontal=True, gap="small", key="ptp_globe_links"):
+        globe_link("north_sea", "Norwegian shelf and pipelines")
+        globe_link("lng_europe", "European LNG terminals")
+        globe_link("lng_routes", "LNG shipping chokepoints")
+        globe_link("hormuz", "Strait of Hormuz")
 
 # ── About ──────────────────────────────────────────────────────────────────────
 with st.expander("About this platform", expanded=False):

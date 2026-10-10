@@ -486,7 +486,7 @@ for _s in _signals:
 
     _dp = _s["pctile"]
     if np.isnan(_dp):
-        _bar_html = "<span style='color:#484f58;font-size:0.80rem'>—</span>"
+        _bar_html = "<span style='color:#484f58;font-size:0.80rem'>n/a</span>"
     else:
         _bar_clr = ({"up": "#3fb950", "down": "#f85149", "neutral": "#58a6ff"}
                     .get(_s["direction"], "#58a6ff"))

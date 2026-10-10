@@ -1,5 +1,5 @@
 """
-D4 — Risk Dashboard
+D4: Risk Dashboard
 Portfolio VaR / stress-scenario simulator built on the D3 signal suite.
 All signals are derived from the same feature matrix and logic used in Layer 2 / Mispricing Dashboard.
 No new data sources required.
@@ -20,6 +20,7 @@ st.set_page_config(
 )
 
 from utils.helpers import apply_dark_theme, kpi_card, delta_span
+from utils.globe import globe_link
 from utils.theme import ACCENTS, CHART, PLOTLY_TEMPLATE, callout, page_header, page_footer, render
 from models.feature_assembly import assemble_features
 
@@ -394,7 +395,7 @@ with _k3:
         )
     else:
         st.markdown(
-            kpi_card("Simulated cum. P&L", "—",
+            kpi_card("Simulated cum. P&L", "n/a",
                      delta_span("set notionals to activate", "blue")),
             unsafe_allow_html=True,
         )
@@ -411,7 +412,7 @@ with _k4:
             st.markdown(kpi_card("1-day 95% VaR", "n/a", delta_span("insufficient history", "blue")),
                         unsafe_allow_html=True)
     else:
-        st.markdown(kpi_card("1-day 95% VaR", "—", delta_span("set notionals to activate", "blue")),
+        st.markdown(kpi_card("1-day 95% VaR", "n/a", delta_span("set notionals to activate", "blue")),
                     unsafe_allow_html=True)
 
 st.divider()
@@ -456,7 +457,7 @@ else:
                    tickfont=dict(size=10, color=CHART["muted"]), zeroline=False),
         hovermode="x unified",
     )
-    st.plotly_chart(_fig_eq, use_container_width=True)
+    st.plotly_chart(_fig_eq, width="stretch")
 
     # Per-signal stats table
     _rows = []
@@ -478,7 +479,7 @@ else:
             "Max Drawdown": f"€{_dd:,.0f}",
         })
     if _rows:
-        st.dataframe(pd.DataFrame(_rows), use_container_width=True, hide_index=True)
+        st.dataframe(pd.DataFrame(_rows), width="stretch", hide_index=True)
 
 st.divider()
 
@@ -540,7 +541,7 @@ else:
                    tickfont=dict(size=10, color=CHART["muted"])),
         showlegend=False, bargap=0.02,
     )
-    st.plotly_chart(_fig_dist, use_container_width=True)
+    st.plotly_chart(_fig_dist, width="stretch")
 
     _skew = float(pd.Series(_arr).skew())
     _kurt = float(pd.Series(_arr).kurtosis())
@@ -557,6 +558,7 @@ st.divider()
 # SECTION 3 — STRESS SCENARIOS
 # ════════════════════════════════════════════════════════════════════════════════
 st.markdown("#### Stress Scenarios: Single-Day Impact Estimates")
+globe_link("hormuz", "Strait of Hormuz on the 3D globe")
 st.caption(
     "Stressed P&L = current signal direction × scenario price move × notional. "
     "Price moves are calibrated from historical analogues. Current direction = last day in lagged series."
@@ -586,7 +588,7 @@ else:
                 _breakdown.append(f"{_SIG_BY_ID[_sid]['label']}: €{_pl:+,.0f}")
 
         with _sc_cols[_ci % 2]:
-            _arrow = "▼" if _sc_total < 0 else ("▲" if _sc_total > 0 else "—")
+            _arrow = "▼" if _sc_total < 0 else ("▲" if _sc_total > 0 else "–")
             _col   = "red" if _sc_total < 0 else ("green" if _sc_total > 0 else "blue")
             st.markdown(
                 kpi_card(_sc_name, f"{_arrow} €{_sc_total:+,.0f}",
@@ -666,7 +668,7 @@ else:
         xaxis=dict(tickfont=dict(size=9, color=CHART["muted"]), tickangle=-30),
         yaxis=dict(tickfont=dict(size=9, color=CHART["muted"]), autorange="reversed"),
     )
-    st.plotly_chart(_fig_hm, use_container_width=True)
+    st.plotly_chart(_fig_hm, width="stretch")
 
     # Highlight highly correlated pairs
     _high: list[str] = []

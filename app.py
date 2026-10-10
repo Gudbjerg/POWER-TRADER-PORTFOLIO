@@ -3,8 +3,10 @@ European Gas & Power Market Intelligence Platform: application entry point.
 
 ``app.py`` is the router. It configures the page defaults, applies the design system
 once per run, declares the grouped navigation and runs the selected page. Page modules
-live in ``pages/``; their URL paths are fixed below so existing links (for example
-``/Live_Monitor``) keep working.
+live in ``views/``; their URL paths are fixed below so existing links (for example
+``/Live_Monitor``) keep working. The folder is deliberately not called ``pages/``:
+Streamlit treats a ``pages/`` folder as a legacy multipage app until the router has run
+once, so on a fresh server a deep link would bypass the navigation and the theme.
 
 Run with:  streamlit run app.py
 """
@@ -28,28 +30,28 @@ render_logo()
 PAGES = {
     # Overview: the landing page sits directly in the bar rather than in a one-item menu.
     "": [
-        st.Page("pages/0_Home.py", title="Overview", icon=":material/space_dashboard:", default=True),
+        st.Page("views/0_Home.py", title="Overview", icon=":material/space_dashboard:", default=True),
     ],
     "Markets": [
-        st.Page("pages/1_Live_Monitor.py", title="Live Monitor",
+        st.Page("views/1_Live_Monitor.py", title="Live Monitor",
                 icon=":material/monitoring:", url_path="Live_Monitor"),
-        st.Page("pages/3_Macro_Signals.py", title="Macro Signals",
+        st.Page("views/3_Macro_Signals.py", title="Macro Signals",
                 icon=":material/public:", url_path="Macro_Signals"),
     ],
     "Analytics": [
-        st.Page("pages/2_Quant_Analysis.py", title="Quant Analysis",
+        st.Page("views/2_Quant_Analysis.py", title="Quant Analysis",
                 icon=":material/query_stats:", url_path="Quant_Analysis"),
-        st.Page("pages/4_ML_Models.py", title="ML Models",
+        st.Page("views/4_ML_Models.py", title="ML Models",
                 icon=":material/memory:", url_path="ML_Models"),
     ],
     "Signals & Risk": [
-        st.Page("pages/5_Mispricing_Dashboard.py", title="Mispricing Dashboard",
+        st.Page("views/5_Mispricing_Dashboard.py", title="Mispricing Dashboard",
                 icon=":material/track_changes:", url_path="Mispricing_Dashboard"),
-        st.Page("pages/6_Risk_Dashboard.py", title="Risk Dashboard",
+        st.Page("views/6_Risk_Dashboard.py", title="Risk Dashboard",
                 icon=":material/shield:", url_path="Risk_Dashboard"),
     ],
     "Projects": [
-        st.Page("pages/7_BESS_Optimiser.py", title="BESS Optimiser",
+        st.Page("views/7_BESS_Optimiser.py", title="BESS Optimiser",
                 icon=":material/battery_charging_full:", url_path="BESS_Optimiser"),
     ],
 }

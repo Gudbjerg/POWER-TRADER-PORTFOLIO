@@ -547,14 +547,14 @@ try:
                else ("down" if _sc_fuel in ("wind", "solar", "hydro")
                      else "neutral"))
     _sc_fuel_note = {
-        "gas":   "Gas-marginal regime — TTF drives power prices",
-        "oil":   "Oil/peaker marginal — demand near capacity ceiling",
-        "coal":  "Coal-marginal — mid-stack clearing",
-        "wind":  "Renewable-marginal — structurally low-cost clearing",
-        "solar": "Renewable-marginal — structurally low-cost clearing",
-        "hydro": "Hydro-marginal — low-cost supply clearing",
-        "lignite": "Lignite-marginal — mid-stack clearing",
-        "biomass": "Biomass-marginal — mid-stack clearing",
+        "gas":   "Gas-marginal regime: TTF drives power prices",
+        "oil":   "Oil/peaker marginal: demand near capacity ceiling",
+        "coal":  "Coal-marginal: mid-stack clearing",
+        "wind":  "Renewable-marginal: structurally low-cost clearing",
+        "solar": "Renewable-marginal: structurally low-cost clearing",
+        "hydro": "Hydro-marginal: low-cost supply clearing",
+        "lignite": "Lignite-marginal: mid-stack clearing",
+        "biomass": "Biomass-marginal: mid-stack clearing",
     }.get(_sc_fuel, f"{_sc_fuel} marginal")
     if _sc_live_load is None:
         _sc_fuel_note += f" · A65 n/a: {_sc_load_src}"
@@ -809,7 +809,7 @@ with tab_mc:
                        range=[max(0, current_pct - 5), 102]),
             hovermode="x unified",
         )
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig, width="stretch")
 
         if not has_empirical:
             st.info(
@@ -972,7 +972,7 @@ with tab_reg:
                 yaxis=dict(title="NL day-ahead (EUR/MWh)", showgrid=True, gridcolor=C["grid"]),
                 height=340,
             )
-            st.plotly_chart(fig_sc, use_container_width=True)
+            st.plotly_chart(fig_sc, width="stretch")
 
         # Residuals time series
         with col_resid:
@@ -1003,7 +1003,7 @@ with tab_reg:
                 hovermode="x unified",
                 height=340,
             )
-            st.plotly_chart(fig_res, use_container_width=True)
+            st.plotly_chart(fig_res, width="stretch")
 
         # Signal interpretation
         if abs(latest_z) >= 2.0:
@@ -1189,7 +1189,7 @@ with tab_spike:
             yaxis=dict(title="z-score (30-day rolling)", showgrid=True, gridcolor=C["grid"]),
             hovermode="x unified",
         )
-        st.plotly_chart(fig_z, use_container_width=True)
+        st.plotly_chart(fig_z, width="stretch")
 
         with st.expander("Methodology", expanded=False):
             st.markdown(f"""
@@ -1336,7 +1336,7 @@ with tab_bt:
             hovermode="x unified",
             height=300,
         )
-        st.plotly_chart(fig_bt, use_container_width=True)
+        st.plotly_chart(fig_bt, width="stretch")
 
         # ── Cumulative P&L line ──────────────────────────────────────────────
         fig_cum = go.Figure()
@@ -1362,7 +1362,7 @@ with tab_bt:
             hovermode="x",
             height=220,
         )
-        st.plotly_chart(fig_cum, use_container_width=True)
+        st.plotly_chart(fig_cum, width="stretch")
 
         # ── Crisis context note ──────────────────────────────────────────────
         exc = stats.get("avg_pnl_ex_crisis")
@@ -1386,7 +1386,7 @@ with tab_bt:
             display = bt[["label", "summer_avg", "winter_avg", "spread", "pnl"]].copy()
             display.columns = ["Gas Year", "Summer avg (€/MWh)", "Winter avg (€/MWh)",
                                 "Spread (€/MWh)", f"P&L net of €{storage_cost:.1f} cost (€/MWh)"]
-            st.dataframe(display.set_index("Gas Year"), use_container_width=True)
+            st.dataframe(display.set_index("Gas Year"), width="stretch")
 
         # ── Signal: current gas year injection economics ──────────────────────
         if not ttf_hist.empty:
@@ -1469,7 +1469,7 @@ with tab_bt:
 # TAB 5: MERIT ORDER / SUPPLY STACK
 # ════════════════════════════════════════════════════════════════════════════
 with tab_stack:
-    st.markdown("### German Merit Order — Supply Stack")
+    st.markdown("### German Merit Order: Supply Stack")
     st.caption(
         "German generation fleet ordered by short-run marginal cost (SRMC). "
         "Demand line shows where on the merit order current consumption clears. "
@@ -1588,7 +1588,7 @@ with tab_stack:
     fig_stack = make_merit_order_figure(
         stack_df, demand_gw, marginal, actual_power_price=nl_latest,
     )
-    st.plotly_chart(fig_stack, use_container_width=True)
+    st.plotly_chart(fig_stack, width="stretch")
 
     # ── Commentary ───────────────────────────────────────────────────────────
     if marginal["fuel"] == "gas":
@@ -1604,7 +1604,7 @@ with tab_stack:
         prose = (
             f"At {demand_gw:.0f} GW demand, the marginal fuel is hard coal at an implied clearing price of "
             f"€{marginal['marginal_cost']:.1f}/MWh. Gas CCGT SRMC (€{gas_srmc:.1f}/MWh) is above coal, "
-            "meaning gas plant is off the margin — a coal-marginal regime. The clean-dark spread is the "
+            "meaning gas plant is off the margin: a coal-marginal regime. The clean-dark spread is the "
             "relevant signal for generation economics in this demand scenario."
         )
         status = "warn"
@@ -1614,7 +1614,7 @@ with tab_stack:
             _gap = nl_latest - marginal["marginal_cost"]
             _gap_note = (
                 f" NL day-ahead at €{nl_latest:.1f}/MWh is €{_gap:.1f}/MWh above the structural cost "
-                "floor of €0/MWh — this is not a scarcity premium. It reflects grid constraints, "
+                "floor of €0/MWh: this is not a scarcity premium. It reflects grid constraints, "
                 "reserve capacity costs, import flows (NordLink, NorNed), or real-time demand that "
                 "the simplified merit order does not capture."
             )
@@ -1684,14 +1684,14 @@ with tab_decomp:
     st.markdown("### Nordic Price Decomposition")
     st.caption(
         "Rolling 90-day multivariate OLS decomposes the NO2 day-ahead price into contributions "
-        "from continental price (NL), gas price (TTF), and — where available — Norwegian hydro "
+        "from continental price (NL), gas price (TTF), and, where available, Norwegian hydro "
         "reservoir level and German wind output. Regressors are standardised so beta magnitudes "
         "are directly comparable across drivers."
     )
 
     # Lazy-load feature matrix: only assembled when this tab is first visited
     if "features_l2" not in st.session_state:
-        with st.spinner("Assembling feature matrix (first visit — subsequent loads are instant)…"):
+        with st.spinner("Assembling feature matrix (first visit; subsequent loads are instant)…"):
             st.session_state["features_l2"] = _get_features_l2()
     features_df = st.session_state["features_l2"]
 
@@ -1714,9 +1714,9 @@ with tab_decomp:
         if len(feat_cols) < 4:
             st.info(
                 f"Active: **{model_label}**. "
-                + ("Hydro and wind data unavailable — ENTSO-E key required for full 4-factor model."
+                + ("Hydro and wind data unavailable: ENTSO-E key required for full 4-factor model."
                    if len(feat_cols) == 2 else
-                   "Wind data unavailable — ENTSO-E key or Fraunhofer fallback required for 4-factor model.")
+                   "Wind data unavailable: ENTSO-E key or Fraunhofer fallback required for 4-factor model.")
                 + f" | Rolling OLS: {_decomp_tag}, {_decomp_ms/1000:.1f}s",
                 icon="ℹ️",
             )
@@ -1774,17 +1774,17 @@ with tab_decomp:
                 "Unit: EUR/MWh per one standard deviation of the factor."
             )
             fig_beta = make_beta_chart(decomp_results, feat_cols, window=90)
-            st.plotly_chart(fig_beta, use_container_width=True)
+            st.plotly_chart(fig_beta, width="stretch")
 
             # ── Today's contribution bar ──────────────────────────────────────
             if contribs:
                 st.markdown("#### Today's Factor Contributions")
                 st.caption(
-                    "Each bar shows β_i × z_i — how much that driver is currently adding or subtracting "
+                    "Each bar shows β_i × z_i: how much that driver is currently adding or subtracting "
                     "from the model-implied NO2 price, in EUR/MWh."
                 )
                 fig_contrib = make_contribution_bar(contribs, no2_actual=latest_no2)
-                st.plotly_chart(fig_contrib, use_container_width=True)
+                st.plotly_chart(fig_contrib, width="stretch")
 
             # ── Interpretation ────────────────────────────────────────────────
             if driver_key in contribs:
@@ -1872,7 +1872,7 @@ with tab_wind:
 
     # ── Load feature matrix (lazy — only when this tab is visited) ───────────
     if "features_l2" not in st.session_state:
-        with st.spinner("Assembling feature matrix (first visit — subsequent loads are instant)…"):
+        with st.spinner("Assembling feature matrix (first visit; subsequent loads are instant)…"):
             st.session_state["features_l2"] = _get_features_l2()
     features_df = st.session_state["features_l2"]
 
@@ -1915,7 +1915,7 @@ with tab_wind:
         st.info(
             "Both forecast (ENTSO-E A69) and actual (ENTSO-E B18/B19 or Fraunhofer ISE) "
             "data are required for error computation. Actual DE wind is available via "
-            "Fraunhofer ISE fallback — forecast data requires an active ENTSO-E API key.",
+            "Fraunhofer ISE fallback: forecast data requires an active ENTSO-E API key.",
             icon="ℹ️",
         )
     else:
@@ -1925,7 +1925,7 @@ with tab_wind:
 
         if error_df.empty:
             st.warning(
-                "Could not compute forecast errors — no overlapping dates between "
+                "Could not compute forecast errors: no overlapping dates between "
                 "forecast and actual data. This typically means the zones with "
                 "forecast data (e.g. DK1, NO, GB) do not have corresponding actual "
                 "generation data available via the current fallback chain."
@@ -1963,7 +1963,7 @@ with tab_wind:
             st.markdown("#### Daily Forecast Error (last 60 days)")
             st.caption("Red = over-forecast (forecast > actual). Green = under-forecast.")
             fig_err = make_error_bar_chart(error_df, fc_zones, last_n_days=60)
-            st.plotly_chart(fig_err, use_container_width=True)
+            st.plotly_chart(fig_err, width="stretch")
 
             # ── RMSE chart ────────────────────────────────────────────────────
             if not rmse_df.empty:
@@ -1973,7 +1973,7 @@ with tab_wind:
                     "RMSE spikes typically coincide with rapid weather pattern changes."
                 )
                 fig_rmse = make_rmse_chart(rmse_df, fc_zones)
-                st.plotly_chart(fig_rmse, use_container_width=True)
+                st.plotly_chart(fig_rmse, width="stretch")
 
             # ── Correlation scatter ───────────────────────────────────────────
             primary_zone = fc_zones[0] if fc_zones else "DE"
@@ -1987,7 +1987,7 @@ with tab_wind:
                     "implies wind forecast error is a viable intraday volatility predictor."
                 )
                 fig_corr = make_correlation_scatter(corr_df, zone=primary_zone)
-                st.plotly_chart(fig_corr, use_container_width=True)
+                st.plotly_chart(fig_corr, width="stretch")
 
                 latest_rho = corr_df["rolling_corr"].dropna().iloc[-1] if not corr_df["rolling_corr"].dropna().empty else float("nan")
                 if not np.isnan(latest_rho):
@@ -2012,7 +2012,7 @@ with tab_wind:
     # ── Methodology ───────────────────────────────────────────────────────────
     with st.expander("Methodology", expanded=False):
         st.markdown("""
-        **Wind forecast data:** ENTSO-E A69 (Day-Ahead Aggregated Generation — Wind and Solar),
+        **Wind forecast data:** ENTSO-E A69 (Day-Ahead Aggregated Generation, Wind and Solar),
         queried via `query_wind_and_solar_forecast()` in `entsoe-py`. Onshore (B19) + offshore
         (B18) PSR types are summed to daily GWh.
 
@@ -2030,7 +2030,7 @@ with tab_wind:
 
         **Price correlation:** Pearson correlation between `|forecast_error_gwh|` and
         `|day-over-day NO2 price change (EUR/MWh)|` over a 30-day trailing window.
-        The NO2 price change is used as a proxy for intraday/next-day market volatility —
+        The NO2 price change is used as a proxy for intraday/next-day market volatility;
         a direct intraday continuous price series requires REMIT / Epex intraday data.
 
         **ENTSO-E A69 vs B16/B19 availability:** A69 (forecasts) and B16/B19 (actuals) are
@@ -2038,7 +2038,7 @@ with tab_wind:
         If A69 is unavailable, the tab shows a clear error banner rather than silent null data.
 
         **Countries:** DE (Fraunhofer actuals, A69 forecast), DK1 (ENTSO-E both), NO (ENTSO-E both),
-        GB (ENTSO-E both — availability may vary post-Brexit).
+        GB (ENTSO-E for both; availability may vary post-Brexit).
         """)
 
     st.caption(
@@ -2055,7 +2055,7 @@ with tab_granger:
     st.caption(
         "Tests whether lagged energy news sentiment Granger-causes next-day TTF price returns. "
         "A statistically significant result (p < 0.05) means past sentiment adds predictive power "
-        "beyond TTF's own history — a potential leading indicator for gas price direction."
+        "beyond TTF's own history: a potential leading indicator for gas price direction."
     )
 
     with st.spinner("Loading sentiment history…"):
@@ -2075,7 +2075,7 @@ with tab_granger:
         _ttf_prices_df = ttf.get("prices", pd.DataFrame())
 
         if _ttf_prices_df.empty:
-            st.warning("TTF price data unavailable — cannot compute Granger test.", icon="⚠️")
+            st.warning("TTF price data unavailable: cannot compute Granger test.", icon="⚠️")
         elif _daily_sent.empty:
             st.info(
                 "No sentiment history yet. Granger test requires at least 21 days of scored headlines. "
@@ -2114,7 +2114,7 @@ with tab_granger:
                         _merged.tail(10)[["date", "net_sentiment", "return"]].rename(columns={
                             "date": "Date", "net_sentiment": "Net Sentiment", "return": "TTF Return (%)"
                         }),
-                        use_container_width=True, hide_index=True,
+                        width="stretch", hide_index=True,
                     )
             else:
                 # ── Run Granger test ──────────────────────────────────────────
@@ -2219,7 +2219,7 @@ with tab_granger:
                         height=360,
                         showlegend=False,
                     )
-                    st.plotly_chart(_fig_gc, use_container_width=True)
+                    st.plotly_chart(_fig_gc, width="stretch")
 
                     # ── Sentiment + TTF return overlay ────────────────────────
                     st.markdown("#### Net Sentiment vs TTF Daily Return")
@@ -2261,7 +2261,7 @@ with tab_granger:
                         height=320,
                         hovermode="x unified",
                     )
-                    st.plotly_chart(_fig_ts, use_container_width=True)
+                    st.plotly_chart(_fig_ts, width="stretch")
 
                     # ── Commentary ────────────────────────────────────────────
                     if _min_p < 0.05:
@@ -2272,7 +2272,7 @@ with tab_granger:
                             "information for next-day TTF returns, beyond TTF's own lagged values. "
                             "In practical terms: when sentiment deteriorates sharply, a TTF upside move "
                             f"tends to follow within {_best_lag} trading day(s). "
-                            "Note: Granger causality does not imply structural causality — "
+                            "Note: Granger causality does not imply structural causality; "
                             "both may respond to a common unobserved shock (e.g. a supply disruption "
                             "hits news feeds before it is fully priced in)."
                         )
@@ -2280,7 +2280,7 @@ with tab_granger:
                     elif _min_p < 0.10:
                         _prose = (
                             f"Borderline Granger causality at lag {_best_lag}d (p={_min_p:.3f}). "
-                            "Sentiment shows weak predictive value for TTF returns — directionally "
+                            "Sentiment shows weak predictive value for TTF returns; directionally "
                             "interesting but not robust enough to trade on without additional confirmation. "
                             f"Sample size: {_n_merged} days."
                         )
@@ -2349,7 +2349,7 @@ with tab_storage_reg:
     st.markdown("### EU Storage → TTF Price Regression")
     st.caption(
         "OLS regression of TTF front-month price on EU aggregate storage fill level. "
-        "The residual — actual TTF minus the storage-implied fair value — is the "
+        "The residual (actual TTF minus the storage-implied fair value) is the "
         "supply-risk premium: a positive residual means the market prices in additional "
         "fear (geopolitical, supply disruption) beyond what storage fundamentals explain."
     )
@@ -2446,7 +2446,7 @@ with tab_storage_reg:
                 st.divider()
 
                 # ── Scatter + OLS fit ─────────────────────────────────────────
-                st.markdown("#### Storage Fill % vs TTF Price — Scatter & OLS Fit")
+                st.markdown("#### Storage Fill % vs TTF Price: Scatter & OLS Fit")
                 st.caption(
                     "Each dot is one trading day. Colour indicates year. "
                     "Red dot = current observation. Regression line shows the storage-implied fair value."
@@ -2501,7 +2501,7 @@ with tab_storage_reg:
                     margin=dict(l=60, r=20, t=30, b=50),
                     height=420,
                 )
-                st.plotly_chart(_fig_scatter, use_container_width=True)
+                st.plotly_chart(_fig_scatter, width="stretch")
 
                 # ── Residual time series ──────────────────────────────────────
                 st.markdown("#### Supply-Risk Premium (OLS Residual) Over Time")
@@ -2546,7 +2546,7 @@ with tab_storage_reg:
                     height=320,
                     showlegend=False,
                 )
-                st.plotly_chart(_fig_resid, use_container_width=True)
+                st.plotly_chart(_fig_resid, width="stretch")
 
                 # ── Commentary ────────────────────────────────────────────────
                 _eq_str = f"TTF = {_alpha:.1f} + {_beta:.2f} × storage_pct"
@@ -2632,13 +2632,13 @@ with tab_hydro_lag:
     st.caption(
         "Cross-correlation of Norwegian hydro reservoir fill level (% of historical max) "
         "with NO2 day-ahead price at lags 0–21 days. A negative correlation at lag k means "
-        "high reservoir fill k days ago is associated with lower prices today — quantifying "
+        "high reservoir fill k days ago is associated with lower prices today, quantifying "
         "how far ahead hydro fundamentals lead the spot market."
     )
 
     # Lazy-load feature matrix
     if "features_l2" not in st.session_state:
-        with st.spinner("Assembling feature matrix (first visit — subsequent loads are instant)…"):
+        with st.spinner("Assembling feature matrix (first visit; subsequent loads are instant)…"):
             st.session_state["features_l2"] = _get_features_l2()
     _hydro_feat_df = st.session_state["features_l2"]
 
@@ -2712,7 +2712,7 @@ with tab_hydro_lag:
             st.markdown("#### Cross-Correlation ρ(hydro_pct[t−k], NO2[t]) by Lag")
             st.caption(
                 "Negative correlation (blue) means higher hydro fill at lag k is associated with lower "
-                "NO2 price today — the expected direction. The lag with the largest |ρ| is the point "
+                "NO2 price today, the expected direction. The lag with the largest |ρ| is the point "
                 "where hydro has the most predictive power for NO2."
             )
 
@@ -2751,7 +2751,7 @@ with tab_hydro_lag:
                 height=380,
                 showlegend=False,
             )
-            st.plotly_chart(_fig_cc, use_container_width=True)
+            st.plotly_chart(_fig_cc, width="stretch")
 
             # ── Rolling correlation time series ───────────────────────────────
             _roll_win = 90
@@ -2797,7 +2797,7 @@ with tab_hydro_lag:
                 height=300,
                 showlegend=False,
             )
-            st.plotly_chart(_fig_roll, use_container_width=True)
+            st.plotly_chart(_fig_roll, width="stretch")
 
             # ── Commentary ────────────────────────────────────────────────────
             if abs(_peak_corr) > 0.4:
@@ -2806,14 +2806,14 @@ with tab_hydro_lag:
                     f"{'Higher' if _peak_corr < 0 else 'Lower'} Norwegian hydro reservoir fill {_peak_lag} days ago "
                     f"is associated with {'lower' if _peak_corr < 0 else 'higher'} NO2 day-ahead prices today. "
                     "This confirms Norwegian hydro as a leading fundamental driver of Nordic spot prices. "
-                    "Hydro reservoir changes — from precipitation, snowmelt, or drawdown — propagate into "
+                    "Hydro reservoir changes (from precipitation, snowmelt or drawdown) propagate into "
                     f"spot market pricing with a delay of roughly {_peak_lag} trading day(s)."
                 )
                 _h_status = "warn" if _peak_corr > 0 else "ok"
             elif abs(_peak_corr) > 0.2:
                 _h_prose = (
                     f"Moderate hydro→NO2 correlation at lag {_peak_lag}d (ρ = {_peak_corr:.3f}). "
-                    "The hydro signal is present but not dominant — other factors (continental prices, TTF, "
+                    "The hydro signal is present but not dominant: other factors (continental prices, TTF, "
                     "grid constraints) are likely exerting stronger influence on NO2 in the current sample."
                 )
                 _h_status = "ok"
@@ -3060,7 +3060,7 @@ with tab_ttf_norm:
                 margin=dict(l=60, r=20, t=30, b=50),
                 height=420,
             )
-            st.plotly_chart(_fig_norm, use_container_width=True)
+            st.plotly_chart(_fig_norm, width="stretch")
 
             # ── Commentary ────────────────────────────────────────────────────
             if _pct_rank is not None:
@@ -3137,7 +3137,7 @@ with tab_coint:
 
     # Lazy-load feature matrix
     if "features_l2" not in st.session_state:
-        with st.spinner("Assembling feature matrix (first visit — subsequent loads are instant)…"):
+        with st.spinner("Assembling feature matrix (first visit; subsequent loads are instant)…"):
             st.session_state["features_l2"] = _get_features_l2()
     _coint_feat = st.session_state["features_l2"]
 
@@ -3303,7 +3303,7 @@ with tab_coint:
                     height=360,
                     hovermode="x unified",
                 )
-                st.plotly_chart(_fig_z_ci, use_container_width=True)
+                st.plotly_chart(_fig_z_ci, width="stretch")
 
                 # ── Raw spread + NO2 / NL price overlay ──────────────────────
                 st.markdown("#### NO2 vs NL Day-Ahead Prices")
@@ -3332,7 +3332,7 @@ with tab_coint:
                     height=300,
                     hovermode="x unified",
                 )
-                st.plotly_chart(_fig_px, use_container_width=True)
+                st.plotly_chart(_fig_px, width="stretch")
 
                 # ── Commentary ────────────────────────────────────────────────
                 if _ci_pval < 0.05:
@@ -3453,7 +3453,7 @@ with tab_scanner:
         if _missing_extra:
             st.caption(
                 "Not loaded: " + ", ".join(m.upper() for m in sorted(_missing_extra))
-                + " — ENTSO-E A44 key required for DE/FR; NBP requires yfinance (ICE/Yahoo Finance)."
+                + ": ENTSO-E A44 key required for DE/FR; NBP requires yfinance (ICE/Yahoo Finance)."
             )
 
         _scan_err_msg = None
@@ -3468,7 +3468,7 @@ with tab_scanner:
             st.error(f"Scanner failed — {_scan_err_msg}", icon="🚨")
         elif not _scan_res:
             st.info(
-                "No pairs tested — no pair had sufficient overlapping data "
+                "No pairs tested: no pair had sufficient overlapping data "
                 f"(≥{COINT_MIN_OBS} obs required per pair).",
                 icon="ℹ️",
             )
@@ -3555,7 +3555,7 @@ with tab_scanner:
             # ── end D2_alt computation ────────────────────────────────────────────
 
             # ── Ranked table ──────────────────────────────────────────────────────
-            st.markdown("#### All Pairs — Ranked by Cointegration Strength")
+            st.markdown("#### All Pairs: Ranked by Cointegration Strength")
 
             _STATUS_BADGE = {
                 "Actionable": ("<span style='background:#3d1515;color:#f85149;border-radius:4px;"
@@ -3672,7 +3672,7 @@ with tab_scanner:
                     xaxis=dict(title=None, showgrid=False),
                     yaxis=dict(title=None, autorange="reversed", tickfont=dict(size=11)),
                 )
-                st.plotly_chart(_fig_stab, use_container_width=True, key="sc_stability_heatmap")
+                st.plotly_chart(_fig_stab, width="stretch", key="sc_stability_heatmap")
 
                 _stab_rows = []
                 for _p in _stab_ok_pairs:
@@ -3832,7 +3832,7 @@ with tab_scanner:
                             hovermode="x unified",
                         )
                         _cp_key = _cp["pair"].replace("/", "_")
-                        st.plotly_chart(_dfig_z, use_container_width=True, key=f"sc_z_{_cp_key}")
+                        st.plotly_chart(_dfig_z, width="stretch", key=f"sc_z_{_cp_key}")
 
                         # Price overlay
                         _dfig_px = go.Figure()
@@ -3858,7 +3858,7 @@ with tab_scanner:
                             height=260,
                             hovermode="x unified",
                         )
-                        st.plotly_chart(_dfig_px, use_container_width=True, key=f"sc_px_{_cp_key}")
+                        st.plotly_chart(_dfig_px, width="stretch", key=f"sc_px_{_cp_key}")
 
                         # ── D2_alt: rolling-stability context for the signal commentary ──
                         _cps = _stab_map.get(_cp["pair"])
@@ -3954,7 +3954,7 @@ with tab_scanner:
 # TAB 14: FORWARD CURVE PCA
 # ════════════════════════════════════════════════════════════════════════════
 with tab_pca:
-    st.markdown("### Forward Curve PCA — TTF M+1–M+18 Structural Decomposition")
+    st.markdown("### Forward Curve PCA: TTF M+1–M+18 Structural Decomposition")
     st.caption(
         "PCA on a model-derived TTF forward strip. "
         "PC1 = level shift · PC2 = slope (steepening/flattening) · PC3 = curvature (butterfly). "
@@ -4031,7 +4031,7 @@ with tab_pca:
             xaxis=dict(gridcolor=CHART["grid"]),
             showlegend=False,
         )
-        st.plotly_chart(_fig_ev, use_container_width=True)
+        st.plotly_chart(_fig_ev, width="stretch")
 
         # ── Factor loadings ───────────────────────────────────────────────────
         st.markdown("#### Factor Loadings (M+1 to M+18)")
@@ -4059,10 +4059,10 @@ with tab_pca:
             legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="left", x=0),
             hovermode="x unified",
         )
-        st.plotly_chart(_fig_ld, use_container_width=True)
+        st.plotly_chart(_fig_ld, width="stretch")
 
         # ── Factor scores time series ─────────────────────────────────────────
-        st.markdown("#### Factor Scores — Full Panel History")
+        st.markdown("#### Factor Scores: Full Panel History")
         _fig_sc = go.Figure()
         for _pc, _col, _lbl in [
             ("PC1", "#58a6ff", "PC1 (Level)"),
@@ -4085,10 +4085,10 @@ with tab_pca:
             legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="left", x=0),
             hovermode="x unified",
         )
-        st.plotly_chart(_fig_sc, use_container_width=True)
+        st.plotly_chart(_fig_sc, width="stretch")
 
         # ── Trade signals ─────────────────────────────────────────────────────
-        st.markdown("#### Trade Signals — PC2 and PC3 Z-Scores")
+        st.markdown("#### Trade Signals: PC2 and PC3 Z-Scores")
         st.caption(
             f"Expanding z-score (no look-ahead). "
             f"PC2 z > +{PCA_ENTRY_Z:.0f}σ: curve unusually steep → short front / long back. "
@@ -4126,7 +4126,7 @@ with tab_pca:
             legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="left", x=0),
             hovermode="x unified",
         )
-        st.plotly_chart(_fig_sig, use_container_width=True)
+        st.plotly_chart(_fig_sig, width="stretch")
 
         # Current signal status boxes
         _sc_last = _sc_df.iloc[-1]
@@ -4151,7 +4151,7 @@ with tab_pca:
             elif _z <= -PCA_ENTRY_Z:
                 _msg, _border = _bear_msg, "#3fb950"
             else:
-                _msg, _border = "In neutral zone — no trade signal", "#58a6ff"
+                _msg, _border = "In neutral zone: no trade signal", "#58a6ff"
             st.markdown(
                 f"<div class='commentary' style='border-left-color:{_border};'>"
                 f"<strong>{_lbl}</strong>&nbsp;&nbsp;"

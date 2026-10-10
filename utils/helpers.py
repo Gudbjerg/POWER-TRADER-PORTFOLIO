@@ -48,12 +48,10 @@ def apply_dark_theme():
     """Apply the platform design system. Call once per page, after set_page_config.
 
     The router in ``app.py`` injects the stylesheet once per run for every page, so this
-    is normally a no-op. It also routes a legacy pages-directory run (a deep link opened
-    before the router has run on a fresh server) back through ``app.py``; see
-    ``utils.theme.ensure_router``.
+    is normally a no-op. It still injects the stylesheet when a page module runs on its
+    own (for example under Streamlit's AppTest).
     """
-    from utils.theme import ensure_router, inject_theme
-    ensure_router()
+    from utils.theme import inject_theme
     inject_theme()
 
 

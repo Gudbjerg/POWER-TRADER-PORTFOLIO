@@ -35,6 +35,7 @@ from components.lng_chart            import render_lng_chart
 from components.hydro_chart          import render_hydro_chart
 from components.forward_curve_chart  import render_forward_curve_chart
 from components.coal_chart           import render_coal_chart
+from utils.globe     import globe_link
 from utils.helpers   import (
     has_entsoe_key, has_agsi_key, apply_dark_theme,
     pill, commentary, kpi_card, delta_span,
@@ -474,6 +475,7 @@ with tab_gas:
 # ═══════════════════════════════════════════════════════════════════════════
 with tab_lng:
     render_lng_chart(lng)
+    globe_link("lng_europe", "LNG terminals on the 3D globe")
 
     # ── 3B: TTF vs JKM spread card (roadmap 3B) ──────────────────────────────
     # Keyless inter-basin price signal next to the send-out chart; the full
@@ -660,7 +662,7 @@ with tab_prices:
                 showlegend=False,
                 hovermode="x unified",
             )
-            st.plotly_chart(_fig_sp, use_container_width=True)
+            st.plotly_chart(_fig_sp, width="stretch")
 
     with st.expander("Price interpretation reference", expanded=True):
         st.markdown("""
@@ -676,7 +678,7 @@ with tab_prices:
 
         **Nordic-Continental spread (NL − NO2):**
         Computed as `NL day-ahead − NO2 day-ahead` (EUR/MWh). Source: Nord Pool public endpoint, 365-day history.
-        Reference levels: ±€20/MWh are empirical thresholds — above +€20, NordLink has historically run above 90% utilisation.
+        Reference levels: ±€20/MWh are empirical thresholds; above +€20, NordLink has historically run above 90% utilisation.
 
         - Positive spread (Continental above Nordic): Norwegian hydro has a clear export incentive. Interconnectors are likely constrained.
         - Near zero: Markets are broadly coupled under normal conditions.
@@ -721,7 +723,7 @@ with tab_prices:
                         _color = "red" if abs(_diff) > 10 else ("amber" if abs(_diff) > 3 else "green")
                         _delta = delta_span(f"{'▲' if _diff >= 0 else '▼'} {abs(_diff):.1f} vs SYS", _color)
                     else:
-                        _delta = delta_span("—", "blue")
+                        _delta = delta_span("n/a", "blue")
                     st.markdown(
                         kpi_card(_NO_ZONE_LABELS[_zone], f"€{_zp:.1f}", _delta),
                         unsafe_allow_html=True,
@@ -767,14 +769,14 @@ with tab_prices:
                         font=dict(size=10)),
             hovermode="x unified",
         )
-        st.plotly_chart(_fig_no, use_container_width=True)
+        st.plotly_chart(_fig_no, width="stretch")
 
         with st.expander("Norwegian zonal pricing context", expanded=False):
             st.markdown("""
             **Why five zones?** Norway is divided into five bidding zones (NO1–NO5) reflecting
             geographic bottlenecks in the transmission grid. When the grid can carry surplus freely,
-            all zones clear at the same price. Congestion on key lines — particularly the north–south
-            corridor — causes zones to diverge.
+            all zones clear at the same price. Congestion on key lines (particularly the north–south
+            corridor) causes zones to diverge.
 
             **System price (SYS):** The Nordic system price is a theoretical unconstrained clearing
             price assuming no transmission limits within the Nordic area. It serves as the settlement
@@ -784,7 +786,7 @@ with tab_prices:
             **Key bottlenecks driving divergence:**
             - NO1 (Oslo) vs NO2 (Kristiansand/SW Norway): Affected by north–south flow on Sørlandsbanen lines.
             - NO3 (Central/Mid-Norway) vs NO1/NO5: Snøhvit and inland hydro reservoir imbalances push NO3 low in wet periods.
-            - NO4 (North Norway / Tromsø): Structurally cheap — large hydro surplus, limited southward export capacity.
+            - NO4 (North Norway / Tromsø): Structurally cheap: large hydro surplus, limited southward export capacity.
             - NO5 (West Norway / Bergen): High hydro density; diverges from NO1 on congestion into central grid.
 
             **Norgespris debate:** Norway is considering moving to a single national price zone
@@ -948,7 +950,7 @@ with tab_prices:
                                zeroline=False)
         _fiit_fig.update_yaxes(title_text="EUR/MWh", row=1, col=1)
         _fiit_fig.update_yaxes(title_text="Spread (EUR/MWh)", row=2, col=1)
-        st.plotly_chart(_fiit_fig, use_container_width=True)
+        st.plotly_chart(_fiit_fig, width="stretch")
 
         _fiit_span_note = (
             f"Spread shown for {len(_fiit_df)} overlapping delivery days "

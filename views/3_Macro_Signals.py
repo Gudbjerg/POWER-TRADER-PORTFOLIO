@@ -17,6 +17,7 @@ st.set_page_config(
 )
 
 from utils.helpers import apply_dark_theme, kpi_card, delta_span, commentary
+from utils.globe import globe_link
 from utils.theme import ACCENTS, CHART, PLOTLY_TEMPLATE, page_header, page_footer
 from data.prices import get_ttf_data
 from data.events import load_events, events_in_range, CATEGORY_COLORS
@@ -228,7 +229,7 @@ with tab_geo:
             height=300,
             hovermode="x unified",
         )
-        st.plotly_chart(_fig_mom, use_container_width=True)
+        st.plotly_chart(_fig_mom, width="stretch")
         st.caption(
             "Momentum = (current price / price N days ago − 1) × 100. "
             "Red shading = historically elevated (+5/+10%). Green = historically cheap (−5/−10%)."
@@ -280,6 +281,7 @@ with tab_geo:
 # ════════════════════════════════════════════════════════════════════════════
 with tab_mix:
     st.markdown("### EU Gas Supply Mix (2020-2026)")
+    globe_link("north_sea", "Norwegian export pipelines on the 3D globe")
     st.caption(
         "Approximate EU gas import supply shares by origin. "
         "Based on GIE, Eurostat, and IEA data. "
@@ -341,7 +343,7 @@ with tab_mix:
                    gridcolor=C["grid"], range=[0, 105]),
         hovermode="x unified",
     )
-    st.plotly_chart(fig_mix, use_container_width=True)
+    st.plotly_chart(fig_mix, width="stretch")
 
     st.markdown(
         commentary(
@@ -415,7 +417,7 @@ with tab_spill:
             yaxis=dict(title="Index (100 = start date)", showgrid=True, gridcolor=C["grid"]),
             hovermode="x unified",
         )
-        st.plotly_chart(fig_comm, use_container_width=True)
+        st.plotly_chart(fig_comm, width="stretch")
 
         # Rolling correlations
         st.markdown("#### Rolling 90-Day Pearson Correlations")
@@ -455,7 +457,7 @@ with tab_spill:
                 hovermode="x unified",
                 height=250,
             )
-            st.plotly_chart(fig_corr, use_container_width=True)
+            st.plotly_chart(fig_corr, width="stretch")
 
             # Latest KPIs
             c1, c2, c3 = st.columns(3)
@@ -549,7 +551,7 @@ with tab_spill:
                            tickfont=dict(size=10, color=CHART["muted"]), zeroline=False),
                 hovermode="x unified",
             )
-            st.plotly_chart(_fig_cu, use_container_width=True)
+            st.plotly_chart(_fig_cu, width="stretch")
 
             # Rolling 90-day correlation chart
             _cu_lr = np.log(_cu / _cu.shift(1)).dropna()
@@ -578,7 +580,7 @@ with tab_spill:
                            tickfont=dict(size=10, color=CHART["muted"]), range=[-1, 1]),
                 showlegend=False, hovermode="x unified",
             )
-            st.plotly_chart(_fig_cu_corr, use_container_width=True)
+            st.plotly_chart(_fig_cu_corr, width="stretch")
 
             # KPI row
             _cu_corr_now = float(_roll_corr_cu.iloc[-1])
@@ -624,8 +626,8 @@ with tab_spill:
             Copper is the primary conductor in high-voltage transmission lines, transformers, and
             EV charging infrastructure. European grid operators (ENTSO-E TYNDPs, national TSO
             investment programmes) require large volumes of copper for network reinforcement projects.
-            As grid build-out accelerates — driven by renewable integration, offshore wind connections,
-            and cross-border interconnector upgrades — copper demand rises, supporting LME prices.
+            As grid build-out accelerates (driven by renewable integration, offshore wind connections
+            and cross-border interconnector upgrades), copper demand rises, supporting LME prices.
 
             **Transmission channel to power prices:**
             A sustained copper rally (+15%+ over 6 months) has historically preceded grid capex
@@ -709,7 +711,7 @@ with tab_spill:
                            tickfont=dict(size=10, color=CHART["muted"]), zeroline=False),
                 showlegend=False, hovermode="x unified",
             )
-            st.plotly_chart(_fig_al, use_container_width=True)
+            st.plotly_chart(_fig_al, width="stretch")
 
             # KPI row
             _al1, _al2, _al3 = st.columns(3)
@@ -892,7 +894,7 @@ with tab_grid:
             xaxis=dict(side="bottom", tickfont=dict(size=11)),
             yaxis=dict(tickfont=dict(size=11), autorange="reversed"),
         )
-        st.plotly_chart(_fig_hm, use_container_width=True)
+        st.plotly_chart(_fig_hm, width="stretch")
         st.caption(
             "Computed over the 90 most recent trading days using daily log-returns. "
             "Diagonal = 1.0 (self-correlation, shown for reference)."
@@ -962,10 +964,10 @@ with tab_grid:
             | TTF    | TTF=F   | ICE TTF Natural Gas front-month (EUR/MWh) |
             | Brent  | BZ=F    | ICE Brent Crude Oil front-month (USD/bbl) |
             | Coal   | MTF=F   | ICE Rotterdam API2 Coal front-month (USD/t) |
-            | EUA    | CO2.L   | EU Emission Allowance — ICE EUA Dec (EUR/tCO₂) |
+            | EUA    | CO2.L   | EU Emission Allowance, ICE EUA Dec (EUR/tCO₂) |
             | Copper | HG=F    | COMEX High-Grade Copper (USD/lb, LME proxy) |
             | Alum   | ALI=F   | COMEX Aluminium (USD/t, LME proxy) |
-            | BDI    | BDRY    | Breakwave Dry Bulk Shipping ETF — Baltic Dry proxy |
+            | BDI    | BDRY    | Breakwave Dry Bulk Shipping ETF, Baltic Dry proxy |
 
             **Correlation methodology**
 
@@ -1003,6 +1005,7 @@ with tab_grid:
 # (models/lng_arbitrage.py), KPI row, three-panel chart, commentary, expanders.
 # ════════════════════════════════════════════════════════════════════════════
 with tab_jkm:
+    globe_link("lng_routes", "LNG chokepoints on the 3D globe")
     from plotly.subplots import make_subplots as _jkm_subplots
     from data.lng_prices import load_ttf_jkm as _jkm_load
     from models.lng_arbitrage import (
@@ -1118,7 +1121,7 @@ with tab_jkm:
         _jfig.update_yaxes(title_text="EUR/MWh", row=1, col=1)
         _jfig.update_yaxes(title_text="Spread", row=2, col=1)
         _jfig.update_yaxes(title_text="Pctl", range=[0, 100], row=3, col=1)
-        st.plotly_chart(_jfig, use_container_width=True)
+        st.plotly_chart(_jfig, width="stretch")
         st.caption(
             f"{len(_jkm_df):,} common settlement dates from {_jkm_df['date'].iloc[0]:%d %b %Y} to "
             f"{_jkm_df['date'].iloc[-1]:%d %b %Y}. Bars: green when TTF is above JKM, red when below. "
