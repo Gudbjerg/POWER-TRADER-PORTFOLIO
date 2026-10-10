@@ -58,8 +58,11 @@ IT_NORTH_LICENCE_DEFAULT = (
 ENTSOE_ATTRIBUTION = "ENTSO-E Transparency Platform (A44 day-ahead prices)"
 
 _REQUEST_SPACING_S = 0.5   # pause between consecutive energy-charts.info requests
-_MAX_ATTEMPTS = 4          # attempts per chunk (first try plus three retries)
+_MAX_ATTEMPTS = 3          # attempts per chunk (first try plus two retries)
 _MAX_BACKOFF_S = 20.0      # cap on any single back-off sleep
+_REQUEST_TIMEOUT_S = 15    # per-request timeout
+_FETCH_BUDGET_S = 60.0     # wall-clock budget for one chunked history fetch
+_MAX_DEAD_CHUNKS = 2       # consecutive unanswered chunks before the source is treated as down
 
 
 # ── Pure helpers (unit-tested in tests/test_italy_prices.py) ─────────────────
@@ -173,15 +176,28 @@ def daily_average_by_delivery_day(
 
 # ── Network helpers ──────────────────────────────────────────────────────────
 
-def _get_json_with_retry(url: str, params: dict, timeout: int = 30) -> tuple[dict | None, str | None]:
-    """GET a JSON document, retrying HTTP 429/5xx and transport errors with back-off."""
+def _get_json_with_retry(
+    url: str,
+    params: dict,
+    timeout: int = _REQUEST_TIMEOUT_S,
+    deadline: float | None = None,
+) -> tuple[dict | None, str | None]:
+    """
+    GET a JSON document, retrying HTTP 429/5xx and transport errors with
+    back-off. `deadline` (time.monotonic() value) stops further attempts and
+    sleeps once reached, so an unresponsive source cannot stall the page.
+    """
     last_error = None
     for attempt in range(_MAX_ATTEMPTS):
+        if deadline is not None and time.monotonic() >= deadline:
+            return None, last_error or "time budget exhausted"
         try:
             resp = requests.get(url, params=params, timeout=timeout)
         except requests.RequestException as exc:
             last_error = f"{type(exc).__name__}"
-            time.sleep(min(2.0 * (2 ** attempt), _MAX_BACKOFF_S))
+            wait = min(2.0 * (2 ** attempt), _MAX_BACKOFF_S)
+            if attempt < _MAX_ATTEMPTS - 1 and (deadline is None or time.monotonic() + wait < deadline):
+                time.sleep(wait)
             continue
         if resp.status_code == 429 or resp.status_code >= 500:
             last_error = f"HTTP {resp.status_code}"
@@ -190,7 +206,9 @@ def _get_json_with_retry(url: str, params: dict, timeout: int = 30) -> tuple[dic
                 wait = float(retry_after)
             except ValueError:
                 wait = 2.0 * (2 ** attempt)
-            time.sleep(min(max(wait, 1.0), _MAX_BACKOFF_S))
+            wait = min(max(wait, 1.0), _MAX_BACKOFF_S)
+            if attempt < _MAX_ATTEMPTS - 1 and (deadline is None or time.monotonic() + wait < deadline):
+                time.sleep(wait)
             continue
         if resp.status_code != 200:
             return None, f"HTTP {resp.status_code}"
@@ -209,22 +227,34 @@ def _fetch_energy_charts(bzn: str, start: date, end: date) -> tuple[pd.Series, s
     licenses some zones (for example FI) for private and internal use only,
     which is incompatible with a public dashboard.
 
+    The whole fetch runs within _FETCH_BUDGET_S seconds, and after
+    _MAX_DEAD_CHUNKS consecutive unanswered chunks the remaining chunks are
+    skipped, so an outage degrades the panel instead of stalling the page.
+
     Returns (series, licence_text, failed) where `failed` lists
     (chunk_start, chunk_end, reason) for every chunk that delivered no data.
     """
     parts: list[pd.Series] = []
     licence = None
     failed: list[tuple[date, date, str]] = []
+    deadline = time.monotonic() + _FETCH_BUDGET_S
+    dead_chunks = 0
     for i, (c_start, c_end) in enumerate(date_chunks(start, end, ENERGY_CHARTS_MAX_CHUNK_DAYS)):
+        if dead_chunks >= _MAX_DEAD_CHUNKS or time.monotonic() >= deadline:
+            failed.append((c_start, c_end, "skipped: source unresponsive"))
+            continue
         if i > 0:
             time.sleep(_REQUEST_SPACING_S)
         payload, err = _get_json_with_retry(
             ENERGY_CHARTS_PRICE_URL,
             {"bzn": bzn, "start": c_start.isoformat(), "end": c_end.isoformat()},
+            deadline=deadline,
         )
         if payload is None:
             failed.append((c_start, c_end, err or "no response"))
+            dead_chunks += 1
             continue
+        dead_chunks = 0
         payload_licence = str(payload.get("license_info", ""))
         if "CC BY" not in payload_licence.upper():
             failed.append((c_start, c_end, "licence is not CC BY"))
@@ -256,7 +286,8 @@ def _fetch_entsoe(eic: str, start: date, end: date) -> pd.Series:
     except ImportError:
         return pd.Series(dtype=float, name="price")
 
-    client = EntsoePandasClient(api_key=key)
+    # Bounded timeout and retries: entsoe-py waits indefinitely by default.
+    client = EntsoePandasClient(api_key=key, timeout=30, retry_count=2, retry_delay=5)
     parts: list[pd.Series] = []
     for c_start, c_end in date_chunks(start, end, 365):
         try:

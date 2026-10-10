@@ -136,3 +136,55 @@ def test_naive_index_rejected_and_empty_input():
     with pytest.raises(ValueError):
         daily_average_by_delivery_day(naive)
     assert daily_average_by_delivery_day(pd.Series(dtype=float)).empty
+
+
+# ── Chunked fetch behaviour (requests mocked, no network) ────────────────────
+
+class _Resp:
+    def __init__(self, status=200, payload=None, headers=None):
+        self.status_code = status
+        self._payload = payload
+        self.headers = headers or {}
+
+    def json(self):
+        if self._payload is None:
+            raise ValueError("no json")
+        return self._payload
+
+
+def _cc_payload():
+    return {"license_info": "CC BY 4.0 (creativecommons.org/licenses/by/4.0) from Bundesnetzagentur | SMARD.de",
+            "unix_seconds": [1790805600, 1790806500], "price": [100.0, 110.0], "unit": "EUR / MWh"}
+
+
+def test_fetch_stops_after_consecutive_dead_chunks(monkeypatch):
+    import requests
+    import data.italy_prices as ip
+
+    calls = []
+
+    def boom(*args, **kwargs):
+        calls.append(kwargs.get("params"))
+        raise requests.ConnectionError("down")
+
+    monkeypatch.setattr(ip.requests, "get", boom)
+    monkeypatch.setattr(ip.time, "sleep", lambda s: None)
+    series, licence, failed = ip._fetch_energy_charts("IT-North", date(2025, 1, 1), date(2025, 12, 31))
+    assert series.empty and licence is None
+    assert len(failed) == 5                                  # five 90-day chunks
+    assert len(calls) == 2 * ip._MAX_ATTEMPTS                # only two chunks were attempted
+    assert all(reason == "skipped: source unresponsive" for *_, reason in failed[2:])
+
+
+def test_fetch_rejects_non_cc_by_licence_and_retries_429(monkeypatch):
+    import data.italy_prices as ip
+
+    restricted = dict(_cc_payload(), license_info="Private and internal use only")
+    responses = iter([_Resp(429, headers={"Retry-After": "1"}), _Resp(200, _cc_payload()),
+                      _Resp(200, restricted)])
+    monkeypatch.setattr(ip.requests, "get", lambda *a, **k: next(responses))
+    monkeypatch.setattr(ip.time, "sleep", lambda s: None)
+    series, licence, failed = ip._fetch_energy_charts("IT-North", date(2025, 1, 1), date(2025, 6, 1))
+    assert len(series) == 2 and licence.startswith("CC BY")
+    # Chunks: 1 Jan to 31 Mar (429, then accepted) and 1 Apr to 1 Jun (restricted licence)
+    assert failed == [(date(2025, 4, 1), date(2025, 6, 1), "licence is not CC BY")]
