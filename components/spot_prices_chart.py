@@ -6,6 +6,7 @@ Data source: Nord Pool Data Portal (no API key required).
 import plotly.graph_objects as go
 import streamlit as st
 import pandas as pd
+from utils.theme import CHART, PLOTLY_TEMPLATE
 
 ZONE_COLORS = {
     "NO1":   "#4caf8f",
@@ -28,10 +29,10 @@ ZONE_LABELS = {
 COLORS = {
     "nordic_avg":      "#3fb950",
     "continental_avg": "#e07b39",
-    "grid":      "rgba(255,255,255,0.06)",
-    "text":      "#c9d1d9",
-    "bg":        "#0d1117",
-    "panel_bg":  "#161b22",
+    "grid":      CHART["grid"],
+    "text":      CHART["text"],
+    "bg":        CHART["bg"],
+    "panel_bg":  CHART["panel_bg"],
 }
 
 
@@ -98,7 +99,7 @@ def render_spot_prices_chart(spot_data: dict):
         ))
 
     fig.update_layout(
-        template="plotly_dark",
+        template=PLOTLY_TEMPLATE,
         paper_bgcolor=COLORS["bg"],
         plot_bgcolor=COLORS["panel_bg"],
         font=dict(color=COLORS["text"], size=12),
@@ -109,7 +110,7 @@ def render_spot_prices_chart(spot_data: dict):
         hovermode="x unified",
     )
 
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig, width="stretch")
 
     # Insight on latest date
     if not df.empty:

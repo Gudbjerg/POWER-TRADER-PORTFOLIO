@@ -21,6 +21,7 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
+from utils.theme import CHART, PLOTLY_TEMPLATE
 
 try:
     from statsmodels.regression.rolling import RollingOLS
@@ -73,8 +74,8 @@ def select_features(df: pd.DataFrame) -> tuple[list[str], str]:
         features.append("de_wind_gwh")
 
     labels = {
-        2: "2-factor model (NL + TTF only — hydro and wind unavailable)",
-        3: "3-factor model (NL + TTF + hydro — wind unavailable)",
+        2: "2-factor model (NL + TTF only; hydro and wind unavailable)",
+        3: "3-factor model (NL + TTF + hydro; wind unavailable)",
         4: "4-factor model (NL + TTF + hydro + wind)",
     }
     return features, labels[len(features)]
@@ -107,7 +108,7 @@ def run_rolling_decomposition(
     NaN rows correspond to observations within the first window period.
     """
     if not _STATSMODELS:
-        return pd.DataFrame(), [], "statsmodels unavailable — pip install statsmodels"
+        return pd.DataFrame(), [], "statsmodels unavailable: pip install statsmodels"
 
     feature_cols, model_label = select_features(df)
     target = "no2"
@@ -223,23 +224,23 @@ def make_beta_chart(
             hovertemplate=f"<b>{label}</b><br>β = %{{y:.2f}} EUR/MWh per σ<extra></extra>",
         ))
 
-    fig.add_hline(y=0, line=dict(color="rgba(255,255,255,0.2)", width=1))
+    fig.add_hline(y=0, line=dict(color=CHART["zero"], width=1))
 
     fig.update_layout(
-        template="plotly_dark",
-        paper_bgcolor="#0d1117",
-        plot_bgcolor="#161b22",
+        template=PLOTLY_TEMPLATE,
+        paper_bgcolor=CHART["bg"],
+        plot_bgcolor=CHART["panel_bg"],
         height=320,
         margin=dict(l=50, r=20, t=20, b=40),
-        xaxis=dict(gridcolor="rgba(255,255,255,0.06)", tickfont=dict(size=10, color="#8b949e")),
+        xaxis=dict(gridcolor=CHART["grid"], tickfont=dict(size=10, color=CHART["muted"])),
         yaxis=dict(
-            title=f"β (EUR/MWh per 1 std dev) — {window}-day rolling",
-            gridcolor="rgba(255,255,255,0.06)",
-            tickfont=dict(size=10, color="#8b949e"),
+            title=f"β (EUR/MWh per 1 std dev), {window}-day rolling",
+            gridcolor=CHART["grid"],
+            tickfont=dict(size=10, color=CHART["muted"]),
         ),
         legend=dict(
             orientation="h", yanchor="bottom", y=1.02, xanchor="left", x=0,
-            font=dict(size=10, color="#8b949e"),
+            font=dict(size=10, color=CHART["muted"]),
         ),
         hovermode="x unified",
     )
@@ -282,19 +283,19 @@ def make_contribution_bar(
             annotation_position="top right",
         )
 
-    fig.add_hline(y=0, line=dict(color="rgba(255,255,255,0.2)", width=1))
+    fig.add_hline(y=0, line=dict(color=CHART["zero"], width=1))
 
     fig.update_layout(
-        template="plotly_dark",
-        paper_bgcolor="#0d1117",
-        plot_bgcolor="#161b22",
+        template=PLOTLY_TEMPLATE,
+        paper_bgcolor=CHART["bg"],
+        plot_bgcolor=CHART["panel_bg"],
         height=280,
         margin=dict(l=50, r=20, t=20, b=60),
-        xaxis=dict(tickfont=dict(size=11, color="#8b949e")),
+        xaxis=dict(tickfont=dict(size=11, color=CHART["muted"])),
         yaxis=dict(
             title="Contribution (EUR/MWh)",
-            gridcolor="rgba(255,255,255,0.06)",
-            tickfont=dict(size=10, color="#8b949e"),
+            gridcolor=CHART["grid"],
+            tickfont=dict(size=10, color=CHART["muted"]),
         ),
         showlegend=False,
     )

@@ -17,14 +17,16 @@ st.set_page_config(
 )
 
 from utils.helpers import apply_dark_theme, commentary, kpi_card, delta_span, has_torch
+from utils.theme import ACCENTS, CHART, PLOTLY_TEMPLATE, page_header, page_footer
 from data.sentiment import get_sentiment_data
 from data.prices import get_ttf_data
 
 apply_dark_theme()
 
-st.markdown("## Layer 4 · Machine Learning")
-st.caption(
-    "Machine learning applied to European power and gas market forecasting and regime classification."
+page_header(
+    "Layer 4", "Machine Learning",
+    "Machine learning applied to European power and gas market forecasting and regime classification.",
+    accent=ACCENTS["l4"],
 )
 
 _TORCH_AVAILABLE = has_torch()
@@ -253,12 +255,12 @@ with st.expander("Live Model 1: Train and Predict", expanded=lstm_is_trained()):
                 hovertemplate="NL predicted: €%{y:.1f}<extra></extra>",
             ))
             _fig_pred.update_layout(
-                template="plotly_dark", paper_bgcolor="#0d1117", plot_bgcolor="#161b22",
-                font=dict(color="#c9d1d9", size=12),
+                template=PLOTLY_TEMPLATE, paper_bgcolor=CHART["bg"], plot_bgcolor=CHART["panel_bg"],
+                font=dict(color=CHART["text"], size=12),
                 margin=dict(l=10, r=10, t=10, b=10),
                 legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
-                xaxis=dict(showgrid=True, gridcolor="rgba(255,255,255,0.06)"),
-                yaxis=dict(title="EUR/MWh", showgrid=True, gridcolor="rgba(255,255,255,0.06)"),
+                xaxis=dict(showgrid=True, gridcolor=CHART["grid"]),
+                yaxis=dict(title="EUR/MWh", showgrid=True, gridcolor=CHART["grid"]),
                 hovermode="x unified",
             )
             st.markdown("**Test set: actual vs predicted**")
@@ -395,7 +397,7 @@ with st.expander("Live Model 2: Train and Classify", expanded=hmm_is_trained()):
                 # Regime history chart
                 _hist_df = get_regime_history(_features_df)
                 if not _hist_df.empty:
-                    _C = {"bg": "#0d1117", "panel_bg": "#161b22", "grid": "rgba(255,255,255,0.06)", "text": "#c9d1d9"}
+                    _C = {"bg": CHART["bg"], "panel_bg": CHART["panel_bg"], "grid": CHART["grid"], "text": CHART["text"]}
                     _fig_r = go.Figure()
                     for _regime, _grp in _hist_df.groupby("regime"):
                         _color = REGIME_COLORS.get(_regime, "#8b949e")
@@ -407,7 +409,7 @@ with st.expander("Live Model 2: Train and Classify", expanded=hmm_is_trained()):
                             hovertemplate=f"<b>{_regime}</b><br>%{{x|%Y-%m-%d}}<extra></extra>",
                         ))
                     _fig_r.update_layout(
-                        template="plotly_dark", paper_bgcolor=_C["bg"], plot_bgcolor=_C["panel_bg"],
+                        template=PLOTLY_TEMPLATE, paper_bgcolor=_C["bg"], plot_bgcolor=_C["panel_bg"],
                         font=dict(color=_C["text"], size=11),
                         margin=dict(l=10, r=10, t=10, b=10), height=200,
                         legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
@@ -532,10 +534,10 @@ else:
     scored = sent["scored"]
 
     C = {
-        "bg": "#0d1117", "panel_bg": "#161b22",
-        "grid": "rgba(255,255,255,0.06)", "text": "#c9d1d9",
+        "bg": CHART["bg"], "panel_bg": CHART["panel_bg"],
+        "grid": CHART["grid"], "text": CHART["text"],
         "pos": "#3fb950", "neg": "#f85149",
-        "ma":  "#58a6ff", "zero": "rgba(255,255,255,0.2)",
+        "ma":  "#58a6ff", "zero": CHART["zero"],
     }
 
     # KPI row
@@ -596,7 +598,7 @@ else:
         fig_s.add_hline(y=0, line_dash="solid", line_color=C["zero"], line_width=0.8)
         fig_s.update_layout(
             title=dict(text="Daily Energy News Sentiment (FinBERT, net = positive − negative)", font=dict(size=12)),
-            template="plotly_dark",
+            template=PLOTLY_TEMPLATE,
             paper_bgcolor=C["bg"], plot_bgcolor=C["panel_bg"],
             font=dict(color=C["text"], size=12),
             margin=dict(l=10, r=10, t=40, b=10),
@@ -681,12 +683,6 @@ with st.expander("Feature pipeline and ENTSO-E data status", expanded=True):
     to include wind and hydro when those sources return.
     """)
 
-st.divider()
-st.markdown(
-    """<div style="color:#484f58;font-size:0.72rem;line-height:1.8;">
-    Built by Tobias Gudbjerg &nbsp;|&nbsp;
-    Frameworks: PyTorch &nbsp;·&nbsp; hmmlearn &nbsp;·&nbsp; Hugging Face Transformers (FinBERT)<br>
-    For informational purposes only. Not financial advice.
-    </div>""",
-    unsafe_allow_html=True,
-)
+page_footer([
+    ("Frameworks", "PyTorch · hmmlearn · Hugging Face Transformers (FinBERT)"),
+])

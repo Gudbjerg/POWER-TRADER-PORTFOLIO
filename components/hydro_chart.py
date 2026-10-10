@@ -7,16 +7,17 @@ import plotly.graph_objects as go
 import streamlit as st
 import pandas as pd
 from datetime import datetime
+from utils.theme import CHART, PLOTLY_TEMPLATE
 
 COLORS = {
     "current":  "#4caf8f",
     "p50":      "#8b949e",
     "band":     "rgba(139,148,158,0.15)",
     "band_mid": "rgba(139,148,158,0.25)",
-    "grid":     "rgba(255,255,255,0.06)",
-    "text":     "#c9d1d9",
-    "bg":       "#0d1117",
-    "panel_bg": "#161b22",
+    "grid":     CHART["grid"],
+    "text":     CHART["text"],
+    "bg":       CHART["bg"],
+    "panel_bg": CHART["panel_bg"],
 }
 
 
@@ -82,7 +83,7 @@ def render_hydro_chart(hydro_data: dict):
     ))
 
     fig.update_layout(
-        template="plotly_dark",
+        template=PLOTLY_TEMPLATE,
         paper_bgcolor=COLORS["bg"],
         plot_bgcolor=COLORS["panel_bg"],
         font=dict(color=COLORS["text"], size=12),
@@ -94,7 +95,7 @@ def render_hydro_chart(hydro_data: dict):
         hovermode="x unified",
     )
 
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig, width="stretch")
 
     # Insight text — all comparisons in TWh vs percentile bands
     if not current.empty:

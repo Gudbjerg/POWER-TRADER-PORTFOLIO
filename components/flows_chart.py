@@ -5,6 +5,7 @@ import plotly.graph_objects as go
 import streamlit as st
 import pandas as pd
 from datetime import date, timedelta
+from utils.theme import CHART, PLOTLY_TEMPLATE
 
 PAIR_COLORS = {
     "NO1->SE3": "#4cc9f0",
@@ -17,10 +18,10 @@ PAIR_COLORS = {
 }
 
 COLORS = {
-    "grid":     "rgba(255,255,255,0.06)",
-    "text":     "#c9d1d9",
-    "bg":       "#0d1117",
-    "panel_bg": "#161b22",
+    "grid":     CHART["grid"],
+    "text":     CHART["text"],
+    "bg":       CHART["bg"],
+    "panel_bg": CHART["panel_bg"],
 }
 
 
@@ -60,7 +61,7 @@ def render_flows_chart(flow_data: dict):
 
     fig.update_layout(
         barmode="group",
-        template="plotly_dark",
+        template=PLOTLY_TEMPLATE,
         paper_bgcolor=COLORS["bg"],
         plot_bgcolor=COLORS["panel_bg"],
         font=dict(color=COLORS["text"], size=12),
@@ -75,7 +76,7 @@ def render_flows_chart(flow_data: dict):
         hovermode="x unified",
     )
 
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig, width="stretch")
 
     # NO2→GB handelsbalanse metric (year-to-date export/import ratio)
     no2_gb = df[df["pair"] == "NO2->GB"].copy()

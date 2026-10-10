@@ -23,6 +23,7 @@ st.set_page_config(
 )
 
 from utils.helpers import apply_dark_theme, kpi_card, delta_span
+from utils.theme import ACCENTS, page_header, page_footer
 from config.settings import (
     COINT_ENTRY_Z, COINT_MIN_OBS,
 )
@@ -386,11 +387,12 @@ def _get_mispricing_signals() -> list[dict]:
 
 # ── Page ─────────────────────────────────────────────────────────────────────
 
-st.markdown("## Layer 5 · Mispricing Dashboard")
-st.caption(
+page_header(
+    "Layer 5", "Mispricing Dashboard",
     "Composite rich/cheap signal aggregator across gas, power, storage, and spread markets. "
     "Each signal shows its current value and historical percentile within a 2–7 year rolling window. "
-    "Signals are sorted by extremity. The most off-centre appear first."
+    "Signals are sorted by extremity. The most off-centre appear first.",
+    accent=ACCENTS["l5"],
 )
 
 with st.spinner("Computing signals…"):
@@ -597,14 +599,8 @@ with st.expander("Methodology", expanded=False):
     """)
 
 # ── Footer ────────────────────────────────────────────────────────────────────
-st.divider()
-st.markdown(
-    """<div style="color:#484f58;font-size:0.72rem;line-height:1.8;">
-    Built by Tobias Gudbjerg &nbsp;|&nbsp;
-    Gas price: <a href="https://finance.yahoo.com" style="color:#484f58;">ICE/Yahoo Finance (TTF)</a> &nbsp;|&nbsp;
-    Power price: <a href="https://transparency.entsoe.eu" style="color:#484f58;">ENTSO-E A44</a> &nbsp;|&nbsp;
-    Storage: <a href="https://agsi.gie.eu" style="color:#484f58;">GIE AGSI+</a><br>
-    For informational purposes only. Not financial advice.
-    </div>""",
-    unsafe_allow_html=True,
-)
+page_footer([
+    ("Gas price", "ICE/Yahoo Finance (TTF)", "https://finance.yahoo.com"),
+    ("Power price", "ENTSO-E A44", "https://transparency.entsoe.eu"),
+    ("Storage", "GIE AGSI+", "https://agsi.gie.eu"),
+])
