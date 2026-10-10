@@ -44,7 +44,7 @@ def _client():
     return EntsoePandasClient(api_key=key, timeout=ENTSOE_TIMEOUT_S)
 
 
-@st.cache_data(ttl=3600, persist="disk")
+@st.cache_data(ttl=3600)
 def fetch_all_flows(days: int = 30) -> pd.DataFrame:
     """Fetch net daily cross-border flows for Nordic corridor pairs."""
     client = _client()

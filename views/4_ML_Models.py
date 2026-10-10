@@ -53,7 +53,7 @@ from models.hmm_model import (
 st.divider()
 
 # ── Load feature matrix (cached) ─────────────────────────────────────────────
-@st.cache_data(ttl=3600, show_spinner=False, persist="disk")
+@st.cache_data(ttl=3600, show_spinner=False)
 def _get_features():
     return assemble_features(years=3)
 

@@ -133,7 +133,7 @@ def _build_hourly_from_entsoe(client, fetch_from: pd.Timestamp, fetch_to: pd.Tim
     return daily
 
 
-@st.cache_data(ttl=21600, persist="disk")
+@st.cache_data(ttl=21600)
 def fetch_coal_generation() -> dict:
     """
     Fetch German hard coal and lignite generation from ENTSO-E A75.

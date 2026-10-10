@@ -53,15 +53,15 @@ from data.sentiment import get_sentiment_data
 apply_dark_theme()
 
 # ── Load data ────────────────────────────────────────────────────────────────
-@st.cache_data(ttl=3600, show_spinner=False, persist="disk")
+@st.cache_data(ttl=3600, show_spinner=False)
 def _get_features_l2():
     return assemble_features(years=3)
 
-@st.cache_data(ttl=3600, show_spinner=False, persist="disk")
+@st.cache_data(ttl=3600, show_spinner=False)
 def _run_decomp_cached(df: pd.DataFrame, window: int = 90):
     return run_rolling_decomposition(df, window)
 
-@st.cache_data(ttl=3600, show_spinner=False, persist="disk")
+@st.cache_data(ttl=3600, show_spinner=False)
 def _run_ols_cached(reg_df: pd.DataFrame):
     return run_full_ols(reg_df)
 
@@ -69,11 +69,11 @@ def _run_ols_cached(reg_df: pd.DataFrame):
 def _get_sentiment_l2():
     return get_sentiment_data()
 
-@st.cache_data(ttl=3600, show_spinner=False, persist="disk")
+@st.cache_data(ttl=3600, show_spinner=False)
 def _get_eua():
     return fetch_eua_price()
 
-@st.cache_data(ttl=3600, show_spinner=False, persist="disk")
+@st.cache_data(ttl=3600, show_spinner=False)
 def _get_ttf_history_norm():
     return fetch_ttf_history(years=7)
 
@@ -206,7 +206,7 @@ def _run_pca(panel: pd.DataFrame) -> dict | None:
         return None
 
 
-@st.cache_data(ttl=3600, show_spinner=False, persist="disk")
+@st.cache_data(ttl=3600, show_spinner=False)
 def _get_scanner_prices(years: int = 3) -> pd.DataFrame:
     """Wide-format daily prices for cointegration scanner: NO2, NL, TTF + DE, FR (ENTSO-E A44) + NBP (yfinance)."""
     _base = _get_features_l2()
@@ -340,7 +340,7 @@ def _run_coint_scanner(price_df: pd.DataFrame) -> list[dict]:
     return _results
 
 
-@st.cache_data(ttl=1800, show_spinner=False, persist="disk")
+@st.cache_data(ttl=1800, show_spinner=False)
 def _get_de_live_load_gw() -> tuple:
     """
     Fetch today's German total load from ENTSO-E A65.
@@ -1878,11 +1878,11 @@ with tab_wind:
     features_df = st.session_state["features_l2"]
 
     # ── Load wind data ────────────────────────────────────────────────────────
-    @st.cache_data(ttl=3600, show_spinner=False, persist="disk")
+    @st.cache_data(ttl=3600, show_spinner=False)
     def _get_wind_forecast():
         return fetch_wind_forecast(days=90)
 
-    @st.cache_data(ttl=3600, show_spinner=False, persist="disk")
+    @st.cache_data(ttl=3600, show_spinner=False)
     def _get_wind_actual():
         return fetch_wind_daily(days=90)
 

@@ -87,7 +87,7 @@ def _energy_charts_wind(days: int) -> pd.Series:
     return pd.concat(parts, axis=1).sum(axis=1)
 
 
-@st.cache_data(ttl=3600, persist="disk")
+@st.cache_data(ttl=3600)
 def fetch_wind_daily(days: int = 730) -> dict:
     """
     Fetch daily wind generation totals for DE and NO.
@@ -181,7 +181,7 @@ def _entsoe_wind_forecast(client, eic: str, start, end) -> pd.Series:
     return total
 
 
-@st.cache_data(ttl=3600, persist="disk")
+@st.cache_data(ttl=3600)
 def fetch_wind_forecast(days: int = 90) -> dict:
     """
     Fetch ENTSO-E A69 day-ahead wind generation forecasts for DE, DK1, NO, GB.

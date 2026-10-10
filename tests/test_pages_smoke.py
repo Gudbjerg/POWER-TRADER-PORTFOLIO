@@ -11,6 +11,11 @@ import pytest
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), os.pardir))
 
+# Seconds allowed for one full script run. With live ENTSO-E and GIE keys a cold
+# cache makes the heaviest page (Quant Analysis: 14 tabs over a three-year
+# feature matrix) take several minutes; override with PTP_SMOKE_TIMEOUT.
+TIMEOUT_S = int(os.getenv("PTP_SMOKE_TIMEOUT", "900"))
+
 PAGES = [
     "views/1_Live_Monitor.py",
     "views/2_Quant_Analysis.py",
@@ -25,7 +30,7 @@ PAGES = [
 def _run(path: str):
     from streamlit.testing.v1 import AppTest
 
-    return AppTest.from_file(os.path.join(ROOT, path), default_timeout=300).run()
+    return AppTest.from_file(os.path.join(ROOT, path), default_timeout=TIMEOUT_S).run()
 
 
 @pytest.mark.network

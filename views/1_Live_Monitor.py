@@ -55,7 +55,7 @@ from config.settings import (
 apply_dark_theme()
 
 
-@st.cache_data(ttl=3600, persist="disk", show_spinner=False)
+@st.cache_data(ttl=3600, show_spinner=False)
 def _get_spot_history_l1():
     return fetch_spot_prices(days=365)
 
