@@ -71,7 +71,7 @@ def get_lng_data() -> dict:
     """
     Returns dict with keys:
       'sendout'      : DataFrame — per-country daily sendout (long format)
-      'totals'       : DataFrame — date, total_sendout_twh, ma7
+      'totals'       : DataFrame: date, total_sendout (GWh/d, as published by ALSI), ma7
       'wow_change_pct': float or None — week-on-week % change in total sendout
       'alert'        : bool — True if sendout dropped > LNG_SENDOUT_DROP_PCT
       'fetched_at'   : datetime

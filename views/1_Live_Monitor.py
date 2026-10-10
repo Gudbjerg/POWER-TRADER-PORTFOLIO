@@ -279,7 +279,7 @@ with k6:
     if lng_total_today is not None:
         color = "red" if lng_alert else ("amber" if lng_wow is not None and lng_wow < -7 else "green")
         d = delta_span(f"{lng_wow:+.1f}% vs prior 7d" if lng_wow is not None else "calculating", color)
-        st.markdown(kpi_card("NW EU LNG Sendout", f"{lng_total_today:.1f} TWh/d", d), unsafe_allow_html=True)
+        st.markdown(kpi_card("NW EU LNG Sendout", f"{lng_total_today:,.0f} GWh/d", d), unsafe_allow_html=True)
     else:
         st.markdown(kpi_card("NW EU LNG Sendout", "n/a", delta_span("AGSI key required", "amber")), unsafe_allow_html=True)
 
@@ -525,7 +525,7 @@ with tab_lng:
 
     with st.expander("Understanding LNG sendout", expanded=True):
         st.markdown("""
-        **Definition:** LNG (liquefied natural gas) arrives by tanker at import terminals, where it is regasified and injected into the pipeline grid. The sendout rate (TWh/day) measures how much gas is delivered to the European grid from each terminal.
+        **Definition:** LNG (liquefied natural gas) arrives by tanker at import terminals, where it is regasified and injected into the pipeline grid. The sendout rate (GWh/day, as published by GIE ALSI) measures how much gas is delivered to the European grid from each terminal.
 
         **Market significance:** LNG is Europe's swing supply source. Cargoes can be diverted between Europe and Asia depending on relative benchmark prices (TTF versus JKM). When European TTF prices are elevated relative to Asian LNG, cargoes flow to Europe, supporting storage injection. A sustained decline in sendout tightens the European gas balance.
 

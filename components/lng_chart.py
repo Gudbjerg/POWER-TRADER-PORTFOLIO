@@ -30,7 +30,7 @@ def render_lng_chart(lng_data: dict):
     alert      = lng_data.get("alert", False)
     fetched_at = lng_data.get("fetched_at")
 
-    st.subheader("NW European LNG Terminal Sendout (TWh/day)")
+    st.subheader("NW European LNG Terminal Sendout (GWh/day)")
 
     if df.empty:
         st.warning(
@@ -67,7 +67,7 @@ def render_lng_chart(lng_data: dict):
             y=subset["sendOut"],
             name=label,
             marker_color=COUNTRY_COLORS.get(country, "#888"),
-            hovertemplate=f"{label}: %{{y:.2f}} TWh/d<extra></extra>",
+            hovertemplate=f"{label}: %{{y:,.1f}} GWh/d<extra></extra>",
         ))
 
     # 7-day MA total overlay
@@ -78,7 +78,7 @@ def render_lng_chart(lng_data: dict):
             y=totals_plot["ma7"],
             name="7-day MA (total)",
             line=dict(color=COLORS["ma_line"], width=2, dash="dot"),
-            hovertemplate="7d MA: %{y:.2f} TWh/d<extra></extra>",
+            hovertemplate="7d MA: %{y:,.1f} GWh/d<extra></extra>",
         ))
 
     fig.update_layout(
@@ -90,7 +90,7 @@ def render_lng_chart(lng_data: dict):
         margin=dict(l=10, r=10, t=10, b=10),
         legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
         xaxis=dict(showgrid=True, gridcolor=COLORS["grid"], title=None),
-        yaxis=dict(title="TWh/day", showgrid=True, gridcolor=COLORS["grid"]),
+        yaxis=dict(title="GWh/day", showgrid=True, gridcolor=COLORS["grid"]),
         hovermode="x unified",
     )
 
