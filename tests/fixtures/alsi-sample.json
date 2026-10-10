@@ -1,0 +1,349 @@
+{
+  "_note": "Trimmed from GIE ALSI responses captured on 2026-10-10 (gas day 2026-10-08): the public facility listing (https://alsi.gie.eu/api/about?show=listing) and per-facility data (https://alsi.gie.eu/api?country=..&company=..&facility=..&size=2). No API key is stored. Test-only; source referral: GIE ALSI.",
+  "listing": [
+    {
+      "name": "Fluxys LNG S.A.",
+      "short_name": "Fluxys LNG",
+      "type": "LSO",
+      "eic": "21X000000001006T",
+      "country": "BE",
+      "url": "https://alsi.gie.eu/api?country=BE&company=21X000000001006T",
+      "facilities": [
+        {
+          "name": "Zeebrugge LNG Terminal",
+          "type": "LAND",
+          "eic": "21W0000000001245",
+          "country": "BE",
+          "company": "21X000000001006T",
+          "url": "https://alsi.gie.eu/api?country=BE&company=21X000000001006T&facility=21W0000000001245",
+          "operational_start_date": "2011-01-01",
+          "operational_end_date": null
+        }
+      ]
+    },
+    {
+      "name": "Hamina LNG Oy",
+      "short_name": "Hamina LNG (3)",
+      "type": "LSO",
+      "eic": "66X-00000000024H",
+      "country": "FI",
+      "url": "https://alsi.gie.eu/api?country=FI&company=66X-00000000024H",
+      "facilities": [
+        {
+          "name": "Hamina LNG Terminal",
+          "type": "LAND",
+          "eic": "66W000000000001U",
+          "country": "FI",
+          "company": "66X-00000000024H",
+          "url": "https://alsi.gie.eu/api?country=FI&company=66X-00000000024H&facility=66W000000000001U",
+          "operational_start_date": "3000-10-06",
+          "operational_end_date": null
+        }
+      ]
+    },
+    {
+      "name": "TotalEnergies LNG Services France",
+      "short_name": "TELSF",
+      "type": "LSO",
+      "eic": "63X218318139939Y",
+      "country": "FR",
+      "url": "https://alsi.gie.eu/api?country=FR&company=63X218318139939Y",
+      "facilities": [
+        {
+          "name": "Le Havre LNG Terminal (FSRU Cape Ann)",
+          "type": "FSRU",
+          "eic": "63W835858561887S",
+          "country": "FR",
+          "company": "63X218318139939Y",
+          "url": "https://alsi.gie.eu/api?country=FR&company=63X218318139939Y&facility=63W835858561887S",
+          "operational_start_date": "2023-10-26",
+          "operational_end_date": "2026-01-22"
+        }
+      ]
+    },
+    {
+      "name": "Deutsche Energy Terminal GmbH",
+      "short_name": "Deutsche Energy Terminal",
+      "type": "LSO",
+      "eic": "21X000000001403J",
+      "country": "DE",
+      "url": "https://alsi.gie.eu/api?country=DE&company=21X000000001403J",
+      "facilities": [
+        {
+          "name": "Wilhelmshaven LNG Terminal 1 (FSRU Hoegh Esperanza)",
+          "type": "FSRU",
+          "eic": "21W000000000129W",
+          "country": "DE",
+          "company": "21X000000001403J",
+          "url": "https://alsi.gie.eu/api?country=DE&company=21X000000001403J&facility=21W000000000129W",
+          "operational_start_date": "2022-12-16",
+          "operational_end_date": null
+        },
+        {
+          "name": "Stade LNG Terminal 1 (FSRU Energos Force)",
+          "type": "FSRU",
+          "eic": "37W000000000110L",
+          "country": "DE",
+          "company": "21X000000001403J",
+          "url": "https://alsi.gie.eu/api?country=DE&company=21X000000001403J&facility=37W000000000110L",
+          "operational_start_date": "3000-02-01",
+          "operational_end_date": null
+        },
+        {
+          "name": "Wilhelmshaven LNG Terminal 2 (FSRU Excelerate Excelsior)",
+          "type": "FSRU",
+          "eic": "37W000000000111J",
+          "country": "DE",
+          "company": "21X000000001403J",
+          "url": "https://alsi.gie.eu/api?country=DE&company=21X000000001403J&facility=37W000000000111J",
+          "operational_start_date": "2025-08-29",
+          "operational_end_date": null
+        }
+      ]
+    },
+    {
+      "name": "GNL Italia S.p.A.",
+      "short_name": "GNL Italia",
+      "type": "LSO",
+      "eic": "26X00000117915-0",
+      "country": "IT",
+      "url": "https://alsi.gie.eu/api?country=IT&company=26X00000117915-0",
+      "facilities": [
+        {
+          "name": "Panigaglia LNG Terminal (Historical data prior to 1 March 2025)",
+          "type": "LAND",
+          "eic": "59W0000000000011",
+          "country": "IT",
+          "company": "26X00000117915-0",
+          "url": "https://alsi.gie.eu/api?country=IT&company=26X00000117915-0&facility=59W0000000000011",
+          "operational_start_date": "2011-01-01",
+          "operational_end_date": "2025-03-01"
+        }
+      ]
+    },
+    {
+      "name": "SNAM LNG Srl",
+      "short_name": "SNAM LNG",
+      "type": "LSO",
+      "eic": "59XFSRUITALIASTY",
+      "country": "IT",
+      "url": "https://alsi.gie.eu/api?country=IT&company=59XFSRUITALIASTY",
+      "facilities": [
+        {
+          "name": "Piombino LNG Terminal (FSRU Golar Tundra)",
+          "type": "FSRU",
+          "eic": "59WFSRUGOLARTUNH",
+          "country": "IT",
+          "company": "59XFSRUITALIASTY",
+          "url": "https://alsi.gie.eu/api?country=IT&company=59XFSRUITALIASTY&facility=59WFSRUGOLARTUNH",
+          "operational_start_date": "2023-07-04",
+          "operational_end_date": "3000-01-01"
+        },
+        {
+          "name": "Panigaglia LNG Terminal",
+          "type": "LAND",
+          "eic": "59W0000000000011",
+          "country": "IT",
+          "company": "59XFSRUITALIASTY",
+          "url": "https://alsi.gie.eu/api?country=IT&company=59XFSRUITALIASTY&facility=59W0000000000011",
+          "operational_start_date": "2025-03-01",
+          "operational_end_date": null
+        }
+      ]
+    },
+    {
+      "name": "All Spanish Terminals",
+      "short_name": "All Spanish Terminals",
+      "type": "LSO",
+      "eic": "21X0000000013368",
+      "country": "ES*",
+      "url": "https://alsi.gie.eu/api?country=ES*&company=21X0000000013368",
+      "facilities": [
+        {
+          "name": "TVB (Virtual balancing LNG tank)",
+          "type": "LAND",
+          "eic": "18W000000000GVMT",
+          "country": "ES*",
+          "company": "21X0000000013368",
+          "url": "https://alsi.gie.eu/api?country=ES*&company=21X0000000013368&facility=18W000000000GVMT",
+          "operational_start_date": "2020-04-01",
+          "operational_end_date": null
+        }
+      ]
+    },
+    {
+      "name": "National Grid Gas plc / Grain LNG",
+      "short_name": "National Grid - Grain LNG (Post-Brexit)",
+      "type": "LSO",
+      "eic": "21X-GB-A-A0A0A-7",
+      "country": "GB*",
+      "url": "https://alsi.gie.eu/api?country=GB*&company=21X-GB-A-A0A0A-7",
+      "facilities": [
+        {
+          "name": "Isle of Grain LNG Terminal (Post-Brexit)",
+          "type": "LAND",
+          "eic": "21W000000000099F",
+          "country": "GB*",
+          "company": "21X-GB-A-A0A0A-7",
+          "url": "https://alsi.gie.eu/api?country=GB*&company=21X-GB-A-A0A0A-7&facility=21W000000000099F",
+          "operational_start_date": "2020-12-31",
+          "operational_end_date": "2022-02-10"
+        }
+      ]
+    },
+    {
+      "name": "National Grid Gas plc / Grain LNG",
+      "short_name": "National Grid - Grain LNG",
+      "type": "LSO",
+      "eic": "21X-GB-A-A0A0A-7",
+      "country": "GB",
+      "url": "https://alsi.gie.eu/api?country=GB&company=21X-GB-A-A0A0A-7",
+      "facilities": [
+        {
+          "name": "Isle of Grain LNG Terminal",
+          "type": "LAND",
+          "eic": "21W000000000099F",
+          "country": "GB",
+          "company": "21X-GB-A-A0A0A-7",
+          "url": "https://alsi.gie.eu/api?country=GB&company=21X-GB-A-A0A0A-7&facility=21W000000000099F",
+          "operational_start_date": "2011-01-01",
+          "operational_end_date": "2020-12-31"
+        }
+      ]
+    }
+  ],
+  "facilities": {
+    "21W0000000001245": {
+      "last_page": 1799,
+      "total": 3,
+      "dataset": "<a href=\"/data-overview/eu\">EU</a> > <a href=\"/data-overview/be\">BE</a> > <a href=\"/data-overview/21x000000001006t/be\">Fluxys LNG</a> > Zeebrugge LNG Terminal",
+      "gas_day": "2026-10-08",
+      "data": [
+        {
+          "name": "Zeebrugge LNG Terminal",
+          "code": "21W0000000001245",
+          "url": "21W0000000001245/BE/21X000000001006T",
+          "longitude": "3.1819",
+          "latitude": "51.3529",
+          "type": "LAND",
+          "updatedAt": "2026-10-09 12:20:03",
+          "gasDayStart": "2026-10-08",
+          "gasDayEnd": "2026-10-09",
+          "inventory": {
+            "lng": "108.29",
+            "gwh": "727.69"
+          },
+          "sendOut": "24",
+          "dtmi": {
+            "lng": "566",
+            "gwh": "3803.42"
+          },
+          "dtrs": "724.1",
+          "contractedCapacity": "724.1",
+          "availableCapacity": "0",
+          "info": [],
+          "status": "C"
+        },
+        {
+          "name": "Zeebrugge LNG Terminal",
+          "code": "21W0000000001245",
+          "url": "21W0000000001245/BE/21X000000001006T",
+          "longitude": "3.1819",
+          "latitude": "51.3529",
+          "type": "LAND",
+          "updatedAt": "2026-10-08 12:20:03",
+          "gasDayStart": "2026-10-07",
+          "gasDayEnd": "2026-10-08",
+          "inventory": {
+            "lng": "112.27",
+            "gwh": "754.47"
+          },
+          "sendOut": "24.7",
+          "dtmi": {
+            "lng": "566",
+            "gwh": "3803.6"
+          },
+          "dtrs": "724.1",
+          "contractedCapacity": "724.1",
+          "availableCapacity": "0",
+          "info": [],
+          "status": "C"
+        }
+      ]
+    },
+    "21W000000000129W": {
+      "last_page": 5395,
+      "total": 1,
+      "dataset": "<a href=\"/data-overview/eu\">EU</a> > <a href=\"/data-overview/de\">DE</a> > <a href=\"/data-overview/21x000000001403j/de\">Deutsche Energy Terminal</a> > Wilhelmshaven LNG Terminal 1 (FSRU Hoegh Esperanza)",
+      "gas_day": "2026-10-08",
+      "data": [
+        {
+          "name": "Wilhelmshaven LNG Terminal 1 (FSRU Hoegh Esperanza)",
+          "code": "21W000000000129W",
+          "url": "21W000000000129W/DE/21X000000001403J",
+          "longitude": "8.1519",
+          "latitude": "53.5224",
+          "type": "FSRU",
+          "updatedAt": "2026-10-09 13:39:33",
+          "gasDayStart": "2026-10-08",
+          "gasDayEnd": "2026-10-09",
+          "inventory": {
+            "lng": "9.87",
+            "gwh": "67.64"
+          },
+          "sendOut": "136.1",
+          "dtmi": {
+            "lng": "167.56",
+            "gwh": "1148.3"
+          },
+          "dtrs": "160.1",
+          "contractedCapacity": "160.1",
+          "availableCapacity": "0",
+          "info": [],
+          "status": "C"
+        }
+      ]
+    },
+    "37W000000000110L": {
+      "last_page": 5395,
+      "total": 1,
+      "dataset": "<a href=\"/data-overview/eu\">EU</a> > <a href=\"/data-overview/de\">DE</a> > <a href=\"/data-overview/21x000000001403j/de\">Deutsche Energy Terminal</a> > Stade LNG Terminal 1 (FSRU Energos Force)",
+      "gas_day": "2026-10-08",
+      "data": [
+        {
+          "name": "Stade LNG Terminal 1 (FSRU Energos Force)",
+          "code": "37W000000000110L",
+          "url": "37W000000000110L/DE/21X000000001403J",
+          "longitude": "9.5199",
+          "latitude": "53.6556",
+          "type": "FSRU",
+          "updatedAt": "2026-10-09 22:02:06",
+          "gasDayStart": "2026-10-08",
+          "gasDayEnd": "2026-10-09",
+          "inventory": {
+            "lng": "-",
+            "gwh": "-"
+          },
+          "sendOut": "-",
+          "dtmi": {
+            "lng": "-",
+            "gwh": "-"
+          },
+          "dtrs": "-",
+          "contractedCapacity": "-",
+          "availableCapacity": "-",
+          "info": [],
+          "status": "N"
+        }
+      ]
+    }
+  },
+  "accessDenied": {
+    "last_page": 0,
+    "total": 0,
+    "dataset": "lng ERROR",
+    "error": "access denied",
+    "message": "Invalid or missing API key",
+    "data": []
+  }
+}

@@ -1,0 +1,687 @@
+{
+  "id": "maritime-chokepoints",
+  "name": "Maritime Chokepoints",
+  "output": "chokepoints.geojsonl",
+  "output_sha256": "0f8e8f2dc781c8a852426546865d63b7cc58e15d2bb073c7d2bf8680eb2d47de",
+  "feature_count": 10,
+  "with_eia_figures": [
+    "Bab el-Mandeb",
+    "Cape of Good Hope",
+    "Danish Straits",
+    "Panama Canal",
+    "Strait of Hormuz",
+    "Strait of Malacca",
+    "Suez Canal",
+    "Turkish Straits"
+  ],
+  "without_eia_figures": [
+    "Dover Strait",
+    "Strait of Gibraltar"
+  ],
+  "inputs": [
+    {
+      "key": "eia-world-oil-transit-chokepoints",
+      "url": "https://www.eia.gov/international/content/analysis/special_topics/World_Oil_Transit_Chokepoints/",
+      "page_url": "https://www.eia.gov/international/analysis/special-topics/World_Oil_Transit_Chokepoints",
+      "retrieved_at": "2026-10-10T17:24:26+00:00",
+      "bytes": 69763,
+      "sha256": "02b4f8d7ae321c458c412d0abe25693dc5322d30d05995209c1ccfb29c4c353d"
+    },
+    {
+      "key": "natural-earth-countries",
+      "path": "src/data/local_data/natural_earth/countries.json",
+      "sha256": "b9f865783a8e539cd39ea6a0fb506c86482f04a5723fb48b6059b1c634456e50",
+      "use": "land check of the centre lines only; nothing is copied"
+    }
+  ],
+  "licences": {
+    "Gates": "Drawn for this project from the positions of named shores; no third-party data",
+    "EIA": "Public domain (U.S. government publication); EIA asks for an acknowledgment with the publication date: \"Source: U.S. Energy Information Administration (Mar 2026)\". https://www.eia.gov/about/copyrights_reuse.php",
+    "Natural Earth": "Public domain; used only to check the gates"
+  },
+  "rules": {
+    "gates": "Corridor of the stated half-width either side of each centre line, built in a local equirectangular plane with mitred bends (capped at 2x) and flat ends; coordinates rounded to 4 decimals; counter-clockwise rings. Approximate counting areas, not legal, navigational or EIA boundaries.",
+    "land_check": "Each centre line is sampled every 1 km; every sample must lie outside the bundled Natural Earth country outlines, except where exempt.",
+    "eia_figures": "Latest column of EIA Table 1 (million barrels per day of crude oil and petroleum liquids) and of the matching LNG row of Tables 2 to 8 (billion cubic feet per day). 1H25 is the first half of 2025; the Panama Canal is reported by fiscal year (FY2025, October 2024 to September 2025).",
+    "eia_last_updated": "March 3, 2026",
+    "live_counts": "Added at request time by /api/vessels/chokepoints.geojsonl from the AISStream cache (vessels with a position in the last 30 minutes); not part of this dataset."
+  },
+  "gates": [
+    {
+      "id": "chokepoint-hormuz",
+      "parts": [
+        {
+          "name": "Strait of Hormuz",
+          "half_width_km": 14,
+          "centre_line": [
+            [
+              55.9,
+              26.4
+            ],
+            [
+              56.2,
+              26.56
+            ],
+            [
+              56.45,
+              26.6
+            ],
+            [
+              56.7,
+              26.4
+            ],
+            [
+              56.85,
+              26.1
+            ]
+          ]
+        }
+      ],
+      "centre_line_samples": 129,
+      "samples_at_sea_in_natural_earth": 129,
+      "land_check": "passed"
+    },
+    {
+      "id": "chokepoint-bab-el-mandeb",
+      "parts": [
+        {
+          "name": "Bab el-Mandeb",
+          "half_width_km": 7,
+          "centre_line": [
+            [
+              43.55,
+              12.35
+            ],
+            [
+              43.38,
+              12.52
+            ],
+            [
+              43.29,
+              12.64
+            ],
+            [
+              43.18,
+              12.8
+            ],
+            [
+              43.05,
+              13.0
+            ]
+          ]
+        }
+      ],
+      "centre_line_samples": 90,
+      "samples_at_sea_in_natural_earth": 90,
+      "land_check": "passed"
+    },
+    {
+      "id": "chokepoint-suez-canal",
+      "parts": [
+        {
+          "name": "Suez Canal",
+          "half_width_km": 3,
+          "centre_line": [
+            [
+              32.31,
+              31.3
+            ],
+            [
+              32.32,
+              30.85
+            ],
+            [
+              32.3,
+              30.58
+            ],
+            [
+              32.378,
+              30.428
+            ],
+            [
+              32.483,
+              30.268
+            ],
+            [
+              32.529,
+              30.24
+            ],
+            [
+              32.571,
+              30.177
+            ],
+            [
+              32.575,
+              30.1
+            ],
+            [
+              32.581,
+              30.0
+            ],
+            [
+              32.567,
+              29.935
+            ]
+          ]
+        }
+      ],
+      "centre_line_samples": 156,
+      "samples_at_sea_in_natural_earth": 5,
+      "land_check": "exempt: Canal: inland waterway"
+    },
+    {
+      "id": "chokepoint-malacca",
+      "parts": [
+        {
+          "name": "Strait of Malacca",
+          "half_width_km": 12,
+          "centre_line": [
+            [
+              100.6,
+              3.2
+            ],
+            [
+              100.99,
+              2.85
+            ],
+            [
+              101.4,
+              2.48
+            ],
+            [
+              101.75,
+              2.18
+            ],
+            [
+              102.2,
+              1.9
+            ]
+          ]
+        }
+      ],
+      "centre_line_samples": 229,
+      "samples_at_sea_in_natural_earth": 229,
+      "land_check": "passed"
+    },
+    {
+      "id": "chokepoint-turkish-straits",
+      "parts": [
+        {
+          "name": "Bosporus",
+          "half_width_km": 1.5,
+          "centre_line": [
+            [
+              28.995,
+              41.005
+            ],
+            [
+              29.015,
+              41.04
+            ],
+            [
+              29.045,
+              41.075
+            ],
+            [
+              29.058,
+              41.088
+            ],
+            [
+              29.06,
+              41.12
+            ],
+            [
+              29.075,
+              41.16
+            ],
+            [
+              29.11,
+              41.21
+            ],
+            [
+              29.13,
+              41.24
+            ]
+          ]
+        },
+        {
+          "name": "Dardanelles",
+          "half_width_km": 2,
+          "centre_line": [
+            [
+              26.17,
+              40.03
+            ],
+            [
+              26.27,
+              40.07
+            ],
+            [
+              26.36,
+              40.12
+            ],
+            [
+              26.4,
+              40.15
+            ],
+            [
+              26.45,
+              40.2
+            ],
+            [
+              26.55,
+              40.3
+            ],
+            [
+              26.68,
+              40.41
+            ]
+          ]
+        }
+      ],
+      "centre_line_samples": 84,
+      "samples_at_sea_in_natural_earth": 75,
+      "land_check": "exempt: The Bosporus and Dardanelles narrow to under 1.5 km, below the outline resolution"
+    },
+    {
+      "id": "chokepoint-danish-straits",
+      "parts": [
+        {
+          "name": "Øresund",
+          "half_width_km": 3,
+          "centre_line": [
+            [
+              12.55,
+              56.15
+            ],
+            [
+              12.65,
+              56.04
+            ],
+            [
+              12.7,
+              55.9
+            ],
+            [
+              12.75,
+              55.75
+            ],
+            [
+              12.75,
+              55.6
+            ],
+            [
+              12.8,
+              55.45
+            ]
+          ]
+        },
+        {
+          "name": "Great Belt",
+          "half_width_km": 4,
+          "centre_line": [
+            [
+              10.95,
+              56.0
+            ],
+            [
+              10.84,
+              55.74
+            ],
+            [
+              10.9,
+              55.55
+            ],
+            [
+              10.97,
+              55.33
+            ],
+            [
+              11.02,
+              55.15
+            ],
+            [
+              10.93,
+              54.97
+            ],
+            [
+              10.9,
+              54.85
+            ],
+            [
+              10.88,
+              54.7
+            ]
+          ]
+        }
+      ],
+      "centre_line_samples": 221,
+      "samples_at_sea_in_natural_earth": 221,
+      "land_check": "passed"
+    },
+    {
+      "id": "chokepoint-gibraltar",
+      "parts": [
+        {
+          "name": "Strait of Gibraltar",
+          "half_width_km": 6,
+          "centre_line": [
+            [
+              -6.0,
+              35.93
+            ],
+            [
+              -5.75,
+              35.95
+            ],
+            [
+              -5.55,
+              35.96
+            ],
+            [
+              -5.35,
+              35.98
+            ],
+            [
+              -5.2,
+              36.0
+            ]
+          ]
+        }
+      ],
+      "centre_line_samples": 72,
+      "samples_at_sea_in_natural_earth": 72,
+      "land_check": "passed"
+    },
+    {
+      "id": "chokepoint-panama-canal",
+      "parts": [
+        {
+          "name": "Panama Canal",
+          "half_width_km": 2.5,
+          "centre_line": [
+            [
+              -79.92,
+              9.38
+            ],
+            [
+              -79.92,
+              9.27
+            ],
+            [
+              -79.87,
+              9.19
+            ],
+            [
+              -79.78,
+              9.14
+            ],
+            [
+              -79.7,
+              9.12
+            ],
+            [
+              -79.65,
+              9.06
+            ],
+            [
+              -79.61,
+              9.02
+            ],
+            [
+              -79.58,
+              8.98
+            ],
+            [
+              -79.53,
+              8.9
+            ]
+          ]
+        }
+      ],
+      "centre_line_samples": 72,
+      "samples_at_sea_in_natural_earth": 17,
+      "land_check": "exempt: Canal: inland waterway"
+    },
+    {
+      "id": "chokepoint-cape-of-good-hope",
+      "parts": [
+        {
+          "name": "Cape of Good Hope",
+          "half_width_km": 30,
+          "centre_line": [
+            [
+              17.9,
+              -34.2
+            ],
+            [
+              18.3,
+              -34.55
+            ],
+            [
+              19.0,
+              -34.9
+            ],
+            [
+              20.0,
+              -35.15
+            ],
+            [
+              21.0,
+              -35.1
+            ]
+          ]
+        }
+      ],
+      "centre_line_samples": 314,
+      "samples_at_sea_in_natural_earth": 314,
+      "land_check": "passed"
+    },
+    {
+      "id": "chokepoint-dover-strait",
+      "parts": [
+        {
+          "name": "Dover Strait",
+          "half_width_km": 10,
+          "centre_line": [
+            [
+              0.95,
+              50.75
+            ],
+            [
+              1.25,
+              50.9
+            ],
+            [
+              1.45,
+              51.0
+            ],
+            [
+              1.65,
+              51.12
+            ],
+            [
+              1.9,
+              51.25
+            ]
+          ]
+        }
+      ],
+      "centre_line_samples": 85,
+      "samples_at_sea_in_natural_earth": 85,
+      "land_check": "passed"
+    }
+  ],
+  "eia_figures": [
+    {
+      "id": "chokepoint-hormuz",
+      "oil_row": "Strait of Hormuz",
+      "oil_mb_d": {
+        "2020": 19.2,
+        "2021": 19.7,
+        "2022": 21.9,
+        "2023": 21.8,
+        "2024": 20.7,
+        "1H25": 20.9
+      },
+      "lng_row": "LNG flows through Strait of Hormuz (billion cubic feet per day)",
+      "lng_bcf_d": {
+        "2020": 10.7,
+        "2021": 10.8,
+        "2022": 11.0,
+        "2023": 10.6,
+        "2024": 10.5,
+        "1H25": 11.4
+      }
+    },
+    {
+      "id": "chokepoint-bab-el-mandeb",
+      "oil_row": "Bab el-Mandeb",
+      "oil_mb_d": {
+        "2020": 5.7,
+        "2021": 6.0,
+        "2022": 8.0,
+        "2023": 9.3,
+        "2024": 4.1,
+        "1H25": 4.2
+      },
+      "lng_row": "LNG flows through Bab el-Mandeb Strait (billion cubic feet per day)",
+      "lng_bcf_d": {
+        "2020": 3.8,
+        "2021": 4.7,
+        "2022": 4.6,
+        "2023": 4.2,
+        "2024": 0.0,
+        "1H25": 0.0
+      }
+    },
+    {
+      "id": "chokepoint-suez-canal",
+      "oil_row": "Suez Canal and SUMED Pipeline",
+      "oil_mb_d": {
+        "2020": 5.4,
+        "2021": 5.2,
+        "2022": 7.3,
+        "2023": 8.8,
+        "2024": 4.8,
+        "1H25": 4.9
+      },
+      "lng_row": "LNG flows through the Suez Canal (billion cubic feet per day)",
+      "lng_bcf_d": {
+        "2020": 3.8,
+        "2021": 4.7,
+        "2022": 4.6,
+        "2023": 4.1,
+        "2024": 0.5,
+        "1H25": 0.9
+      }
+    },
+    {
+      "id": "chokepoint-malacca",
+      "oil_row": "Strait of Malacca",
+      "oil_mb_d": {
+        "2020": 22.8,
+        "2021": 22.1,
+        "2022": 23.0,
+        "2023": 24.0,
+        "2024": 22.5,
+        "1H25": 23.2
+      },
+      "lng_row": "LNG flows through Strait of Malacca (billion cubic feet per day)",
+      "lng_bcf_d": {
+        "2020": 7.4,
+        "2021": 8.9,
+        "2022": 8.3,
+        "2023": 9.4,
+        "2024": 10.1,
+        "1H25": 9.2
+      }
+    },
+    {
+      "id": "chokepoint-turkish-straits",
+      "oil_row": "Turkish Straits (Dardanelles)",
+      "oil_mb_d": {
+        "2020": 3.2,
+        "2021": 3.3,
+        "2022": 3.2,
+        "2023": 3.5,
+        "2024": 3.6,
+        "1H25": 3.7
+      },
+      "lng_row": "LNG flows through the Dardanelles Strait (billion cubic feet per day)",
+      "lng_bcf_d": {
+        "2020": 0.6,
+        "2021": 0.6,
+        "2022": 0.6,
+        "2023": 0.5,
+        "2024": 0.5,
+        "1H25": 0.6
+      },
+      "bosporus_row": "Total oil flows through the Bosporus Strait",
+      "bosporus_mb_d": {
+        "2020": 2.9,
+        "2021": 3.0,
+        "2022": 2.9,
+        "2023": 3.3,
+        "2024": 3.3,
+        "1H25": 3.3
+      }
+    },
+    {
+      "id": "chokepoint-danish-straits",
+      "oil_row": "Danish Straits a",
+      "oil_mb_d": {
+        "2020": 3.1,
+        "2021": 3.1,
+        "2022": 4.2,
+        "2023": 5.0,
+        "2024": 4.9,
+        "1H25": 4.9
+      },
+      "lng_row": "LNG flows through the Danish Straits (billion cubic feet per day)",
+      "lng_bcf_d": {
+        "2020": 0.5,
+        "2021": 0.5,
+        "2022": 1.1,
+        "2023": 1.4,
+        "2024": 1.4,
+        "1H25": 1.6
+      }
+    },
+    {
+      "id": "chokepoint-panama-canal",
+      "oil_row": "Panama Canal b",
+      "oil_mb_d": {
+        "2020": 1.7,
+        "2021": 1.8,
+        "2022": 2.2,
+        "2023": 2.2,
+        "2024": 2.0,
+        "1H25": 2.3
+      },
+      "lng_text": "In FY 2025, LNG cargoes through the Panama Canal declined to less than 0.3 Bcf/d",
+      "oil_period_note": "Table 1 note b: fiscal years (October 1 to September 30); equals Table 7 \"Panama Canal total oil\" FY 2025"
+    },
+    {
+      "id": "chokepoint-cape-of-good-hope",
+      "oil_row": "Cape of Good Hope",
+      "oil_mb_d": {
+        "2020": 7.9,
+        "2021": 7.2,
+        "2022": 6.1,
+        "2023": 6.2,
+        "2024": 9.3,
+        "1H25": 9.1
+      },
+      "lng_row": "LNG flows around the cape (billion cubic feet per day)",
+      "lng_bcf_d": {
+        "2020": 3.5,
+        "2021": 3.3,
+        "2022": 1.5,
+        "2023": 2.1,
+        "2024": 7.8,
+        "1H25": 5.7
+      }
+    }
+  ]
+}

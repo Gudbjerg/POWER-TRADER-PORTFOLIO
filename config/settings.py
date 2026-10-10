@@ -151,3 +151,18 @@ COINT_ROLL_ALPHA     = 0.05   # significance level for a cointegrated window
 COINT_STABLE_SHARE   = 0.75   # share of cointegrated windows labelled "Persistent"
 COINT_EPISODIC_SHARE = 0.25   # share labelled "Episodic" (below it "Rare", zero "Absent")
 # ── end rolling cointegration stability ──────────────────────────────────────
+
+# ── Energy Globe (3D infrastructure page) ─────────────────────────────────────
+# Live LNG terminal figures come from GIE ALSI, one request per facility in operation.
+# GIE allows 60 requests per minute per address and can ban repeat violators, so the
+# globe paces its own requests and caches a full pass for three hours (ALSI publishes
+# one figure per gas day).
+GLOBE_ALSI_TTL_S          = 3 * 60 * 60   # cache lifetime of one full ALSI pass (seconds)
+GLOBE_ALSI_TIMEOUT_S      = 20            # read timeout per ALSI request (seconds)
+GLOBE_ALSI_SPACING_S      = 0.25          # minimum gap between two ALSI request starts (seconds)
+GLOBE_ALSI_PER_MINUTE     = 50            # rolling per-minute request budget (GIE limit: 60)
+GLOBE_ALSI_WORKERS        = 4             # facility requests in flight at once
+GLOBE_ALSI_DEADLINE_S     = 75            # wall-clock budget for one full pass (seconds)
+GLOBE_ALSI_MIN_SHARE      = 0.5           # minimum share of facilities with data for a pass to count
+GLOBE_HEIGHT_PX           = 660           # height of the embedded globe (CSS pixels)
+# ── end Energy Globe ──────────────────────────────────────────────────────────

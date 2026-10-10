@@ -15,7 +15,7 @@ pinned: false
 
 [![Live Demo](https://img.shields.io/badge/Live%20Demo-HuggingFace%20Spaces-orange)](https://huggingface.co/spaces/TobGud/power-trader-portfolio)
 [![Python](https://img.shields.io/badge/Python-3.11%2B-blue)](https://www.python.org/)
-![Pages](https://img.shields.io/badge/7%20pages-35%20analytical%20modules-lightgrey)
+![Pages](https://img.shields.io/badge/8%20pages-36%20analytical%20modules-lightgrey)
 ![Sources](https://img.shields.io/badge/9%20data%20sources-live%20feeds-green)
 
 The platform integrates live fundamental data from ENTSO-E Transparency, GIE AGSI+/ALSI, Nord Pool, and ICE/Yahoo Finance into a unified analytical environment covering storage balances, forward curve dynamics, cross-commodity price transmission, machine learning regime detection, portfolio risk simulation, and battery storage project economics. All models are implemented from scratch in Python; no third-party signal providers or data vendors are used beyond the public API layer. The architecture escalates from raw market observation in Layer 1 to actionable composite signals in Layer 5, following the analytical hierarchy a physical desk would apply before taking a position.
@@ -112,23 +112,35 @@ A [Dockerfile](Dockerfile) and [render.yaml](render.yaml) are included for self-
 | Menu | Pages | URL path |
 |------|-------|----------|
 | Overview | Landing page: market snapshot, data-source status, layer directory | `/` |
-| Markets | Live Monitor (Layer 1), Macro Signals (Layer 3) | `/Live_Monitor`, `/Macro_Signals` |
+| Markets | Live Monitor (Layer 1), Macro Signals (Layer 3), Energy Globe (3D infrastructure) | `/Live_Monitor`, `/Macro_Signals`, `/Energy_Globe` |
 | Analytics | Quant Analysis (Layer 2), ML Models (Layer 4) | `/Quant_Analysis`, `/ML_Models` |
 | Signals & Risk | Mispricing Dashboard (Layer 5), Risk Dashboard (D4) | `/Mispricing_Dashboard`, `/Risk_Dashboard` |
 | Projects | BESS Optimiser | `/BESS_Optimiser` |
 
 The overview page opens with a market snapshot strip: TTF, JKM, Brent, EUA (CO2.L) and EUR/USD from Yahoo Finance, plus Nord Pool day-ahead daily averages for NO2 and the Continental reference (NL, because DE-LU is not published on the Nord Pool Data Portal). Each quote shows its day-over-day change and a short sparkline, is cached for 15 minutes, and falls back to a placeholder when a source is unavailable.
 
-**Companion 3D globe.** When `GLOBE_URL` points at a running instance of the companion Energy Globe (a CesiumJS application built on gods-eye-view), the platform deep-links into it: [utils/globe.py](utils/globe.py) encodes the camera position and the globe's share-link layer tokens in the URL hash, so each link opens the relevant infrastructure directly. Without `GLOBE_URL` the links are hidden.
+**Energy Globe.** The physical system behind the prices is a page of the platform ([views/8_Energy_Globe.py](views/8_Energy_Globe.py)): an interactive CesiumJS globe embedded with `st.iframe`, so it runs wherever the platform runs, locally or hosted, with no separate server. It draws four layers from bundled, licensed datasets ([data/globe/](data/globe/README.md)) plus live figures:
 
-| Link | Where | Globe view |
-|------|-------|------------|
-| Norwegian shelf and pipelines | Overview, Layer 3 supply mix | Energy Facilities + Energy Pipelines over the North Sea |
-| European LNG terminals | Overview, Layer 1 LNG tab | LNG Terminals (live, GIE ALSI) + Energy Facilities over NW Europe |
-| LNG shipping chokepoints | Overview, Layer 3 TTF vs JKM | Chokepoints (live AIS counts, EIA flows) + live LNG terminals |
-| Strait of Hormuz | Overview, Risk Dashboard stress scenarios | Chokepoints zoomed on Hormuz |
+| Layer | Content | Source |
+|-------|---------|--------|
+| Shelf facilities | 124 Norwegian shelf installations, storage units, onshore plants and landfalls, and offshore wind farms | Sodir FactMaps (NLOD) |
+| Export pipelines | 66 Norwegian shelf export pipelines (gas, oil, condensate, CO2) and 8 receiving terminals | Sodir FactMaps (NLOD) |
+| LNG terminals | 38 European LNG import terminals; gauge markers sized by live send-out with an arc for utilisation; send-out, stocks and capacities per gas day | Global Energy Monitor GGIT (CC BY 4.0); live: GIE ALSI |
+| Chokepoints | 10 maritime chokepoints with oil and LNG flows | U.S. EIA, World Oil Transit Chokepoints (Mar 2026) |
 
-The live globe layers need their own keys on the globe's server (`GIE_API_KEY` for ALSI, `AISSTREAM_API_KEY` for AIS); without them the globe still draws the static infrastructure and names the missing key.
+[data/energy_globe.py](data/energy_globe.py) requests the public ALSI facility listing and then each facility in operation with the GIE key (`AGSI_API_KEY`; one GIE account covers AGSI+ and ALSI), paced below GIE's 60-requests-per-minute limit and cached for three hours, and joins the figures to the terminal markers through the EIC crosswalk in the facilities dataset. Without the key, every terminal still appears with its capacity. Camera views, layer switches, the basemap choice (Esri World Dark Gray, NASA VIIRS Black Marble night lights or Esri World Imagery, all keyless) and the details card run inside the frame, so they never rerun the script. CesiumJS 1.138.0 loads from jsDelivr with Subresource Integrity. Tables under the globe carry the same data.
+
+Other pages link straight into a view through [utils/globe.py](utils/globe.py) (`/Energy_Globe?view=<key>`):
+
+| Link | Where | View |
+|------|-------|------|
+| European gas infrastructure | Overview | Norwegian shelf, export pipelines and LNG terminals across Europe |
+| Norwegian shelf and pipelines | Overview, Layer 3 supply mix | Shelf facilities and export pipelines over the North Sea |
+| European LNG terminals | Overview, Layer 1 LNG tab | LNG terminals with live send-out over north-west Europe |
+| LNG shipping chokepoints | Overview, Layer 3 TTF vs JKM | Chokepoints between the Gulf, Asia and Europe |
+| Strait of Hormuz | Overview, Risk Dashboard stress scenarios | Hormuz and the Gulf |
+
+Optional: with `GLOBE_URL` pointing at a running instance of the stand-alone gods-eye-view globe (where the datasets were first built), the page also offers each view there, encoding the camera and the globe's share-link layer tokens in the URL hash.
 
 The visual language lives in [utils/theme.py](utils/theme.py): design tokens (dark terminal palette, amber gas and cyan power accents, one accent per layer, Inter for text and JetBrains Mono for figures), the global stylesheet, reusable components (page header, section header, KPI card with optional sparkline, callout, chip, ticker strip, layer card, footer) and a registered Plotly template (`ptp`) that every chart uses. [.streamlit/config.toml](.streamlit/config.toml) mirrors the same tokens in Streamlit's native theme. The helpers in [utils/helpers.py](utils/helpers.py) (`kpi_card`, `commentary`, `pill`, `delta_span`) keep their signatures and render through the design system.
 
@@ -237,6 +249,7 @@ The layered model reflects how a physical desk processes information: raw observ
 | Mispricing Dashboard | Layer 5 | 8-signal composite scorecard; each signal: current value, historical percentile (expanding window, 2-7 year history), Bullish/Bearish/Neutral badge, High/Medium/Low confidence; sorted by extremity from median | [views/5_Mispricing_Dashboard.py](views/5_Mispricing_Dashboard.py) |
 | Risk Dashboard (D4) | Page 6 | 6-signal backtestable portfolio; non-parametric 1,000-path bootstrap for 95%/99% 1-day VaR and Expected Shortfall; 4 named stress scenarios; 30-day rolling signal correlation matrix | [views/6_Risk_Dashboard.py](views/6_Risk_Dashboard.py) |
 | BESS Optimiser | Page 7 | Multi-market revenue stack: DAM arbitrage (historical NO2 spread, top-20% dispatch days), FCR-N + FCR-D (capacity-based, Nordic market averages); linear degradation on energy revenues; NPV, IRR (bisection 0-300%), simple payback; ±20% sensitivity table | Hameed and Træholt (2025); Lohndorf and Wozabal (2024); [views/7_BESS_Optimiser.py](views/7_BESS_Optimiser.py) |
+| Energy Globe | Page 8 | CesiumJS 3D globe of Norwegian shelf facilities and export pipelines (Sodir), European LNG import terminals (GEM) joined to live GIE ALSI send-out, utilisation (send-out / DTRS) and tank stocks (inventory / DTMI) through an EIC crosswalk, and EIA chokepoint flows; paced and cached ALSI pass; curated views linked from other pages | [data/energy_globe.py](data/energy_globe.py), [components/energy_globe.py](components/energy_globe.py), [views/8_Energy_Globe.py](views/8_Energy_Globe.py) |
 
 ---
 
@@ -246,6 +259,10 @@ The layered model reflects how a physical desk processes information: raw observ
 |--------|----------|-----------------|--------------|
 | GIE AGSI+ | REST API (agsi.gie.eu) | Daily | EU and German gas storage fill %, working volume, seasonal bands |
 | GIE ALSI | REST API (alsi.gie.eu) | Daily | LNG terminal sendout: Zeebrugge, Gate, South Hook, Dunkirk; WoW alert |
+| GIE ALSI (per facility) | REST API (alsi.gie.eu, facility listing + one request per facility) | Daily (per gas day), cached 3 h | Energy Globe: send-out, utilisation of DTRS, tank stocks of DTMI per EU LNG terminal |
+| Sodir FactMaps | Bundled (data/globe/, NLOD) | Static snapshot | Energy Globe: Norwegian shelf facilities, export pipelines, receiving terminals |
+| Global Energy Monitor GGIT | Bundled (data/globe/, CC BY 4.0) | Static snapshot | Energy Globe: European LNG import terminal positions, capacity and start-up |
+| U.S. EIA World Oil Transit Chokepoints | Bundled (data/globe/, public domain) | Static snapshot (Mar 2026) | Energy Globe: chokepoint oil and LNG flows |
 | ENTSO-E A44 | Transparency Platform (entsoe-py) | Daily | Day-ahead prices: NO2, NL, DE, FR for regression and cointegration; FI history and IT-North fallback for the FI minus IT-North spread |
 | ENTSO-E A65 | Transparency Platform (entsoe-py) | Hourly | German total load for live merit order demand input |
 | ENTSO-E A69 | Transparency Platform (entsoe-py) | Day-ahead | Wind generation forecasts for forecast error tracker |
@@ -262,7 +279,7 @@ The layered model reflects how a physical desk processes information: raw observ
 | ProsusAI FinBERT | HuggingFace Transformers | On-demand | Energy headline classification: positive/negative/neutral |
 | RSS News Feeds | BBC Business, Guardian Energy, LNG World News, Energy Monitor | 6-hourly cache | Raw headline text for FinBERT pipeline |
 
-**Notes on data availability.** Gas storage (GIE), ENTSO-E flows, hydro, wind, solar, and generation all require free API keys. The platform degrades gracefully without them: all Nord Pool spot, energy-charts.info (IT-North) and yfinance data loads without credentials, covering approximately 14 of the 35 modules. The public Nord Pool endpoint only serves roughly the latest two months of delivery days (older dates return HTTP 401), so keyless histories built on it (the FI leg of the FI minus IT-North spread, and the feature matrix fallback used by Layers 2 and 4) are limited to that window until `ENTSOE_API_KEY` is set. API2 Rotterdam coal futures (formerly MTF=F on Yahoo Finance) are not currently available via the free Yahoo Finance tier; the 7x7 correlation grid displays a "Coal unavailable" caption when the ticker returns no data.
+**Notes on data availability.** Gas storage (GIE), ENTSO-E flows, hydro, wind, solar, and generation all require free API keys. The platform degrades gracefully without them: all Nord Pool spot, energy-charts.info (IT-North) and yfinance data loads without credentials, covering approximately 15 of the 36 modules (the Energy Globe's static layers need no key). The public Nord Pool endpoint only serves roughly the latest two months of delivery days (older dates return HTTP 401), so keyless histories built on it (the FI leg of the FI minus IT-North spread, and the feature matrix fallback used by Layers 2 and 4) are limited to that window until `ENTSOE_API_KEY` is set. API2 Rotterdam coal futures (formerly MTF=F on Yahoo Finance) are not currently available via the free Yahoo Finance tier; the 7x7 correlation grid displays a "Coal unavailable" caption when the ticker returns no data.
 
 ---
 
@@ -336,7 +353,7 @@ A full P0/P1/P2/P3 pre-deployment audit was conducted and documented in [files/A
 
 ## Running Locally
 
-The platform requires Python 3.11+ and Streamlit 1.56 or later (top navigation, horizontal containers and the theme options in `.streamlit/config.toml`). API keys for GIE AGSI+ (agsi.gie.eu) and ENTSO-E Transparency (transparency.entsoe.eu) are free to register and unlock the full feature set. Without keys, approximately 14 of the 35 modules load using public data only.
+The platform requires Python 3.11+ and Streamlit 1.56 or later (top navigation, horizontal containers and the theme options in `.streamlit/config.toml`). API keys for GIE AGSI+ (agsi.gie.eu) and ENTSO-E Transparency (transparency.entsoe.eu) are free to register and unlock the full feature set. Without keys, approximately 15 of the 36 modules load using public data only.
 
 ```bash
 git clone https://github.com/Gudbjerg/POWER-TRADER-PORTFOLIO.git
@@ -347,7 +364,7 @@ pip install torch --index-url https://download.pytorch.org/whl/cpu
 pip install transformers>=4.38.0
 export ENTSOE_API_KEY=<your_key>
 export AGSI_API_KEY=<your_key>
-export GLOBE_URL=<https://your-globe-deployment>   # optional: adds an "Open Energy Globe" button to the overview page
+export GLOBE_URL=<http://127.0.0.1:5173>          # optional: also offers each globe view in the stand-alone gods-eye-view globe
 streamlit run app.py
 ```
 
@@ -360,7 +377,7 @@ A [Dockerfile](Dockerfile) and [render.yaml](render.yaml) are included for self-
 ```bash
 pip install pytest
 pytest -m "not network"   # unit tests for the pure model and data helpers (offline, deterministic)
-pytest                    # adds Streamlit AppTest smoke tests for pages 1 to 4 (live data, several minutes)
+pytest                    # adds Streamlit AppTest smoke tests for the router and every page (live data, several minutes)
 ```
 
 The smoke tests assert that each changed page runs end to end without raising; missing ENTSO-E or GIE keys are treated as an expected, gracefully degraded state.

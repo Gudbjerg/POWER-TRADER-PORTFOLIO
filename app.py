@@ -36,7 +36,9 @@ PAGES = {
         st.Page("views/1_Live_Monitor.py", title="Live Monitor",
                 icon=":material/monitoring:", url_path="Live_Monitor"),
         st.Page("views/3_Macro_Signals.py", title="Macro Signals",
-                icon=":material/public:", url_path="Macro_Signals"),
+                icon=":material/timeline:", url_path="Macro_Signals"),
+        st.Page("views/8_Energy_Globe.py", title="Energy Globe",
+                icon=":material/public:", url_path="Energy_Globe"),
     ],
     "Analytics": [
         st.Page("views/2_Quant_Analysis.py", title="Quant Analysis",

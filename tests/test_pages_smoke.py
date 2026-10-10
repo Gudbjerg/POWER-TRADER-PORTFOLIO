@@ -24,6 +24,7 @@ PAGES = [
     "views/5_Mispricing_Dashboard.py",
     "views/6_Risk_Dashboard.py",
     "views/7_BESS_Optimiser.py",
+    "views/8_Energy_Globe.py",
 ]
 
 

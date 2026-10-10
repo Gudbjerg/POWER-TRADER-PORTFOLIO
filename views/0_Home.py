@@ -9,7 +9,7 @@ load_dotenv()
 st.set_page_config(page_title="European Gas & Power: Market Intelligence Platform")
 
 from utils.helpers import apply_dark_theme, has_entsoe_key, has_agsi_key
-from utils.globe import GLOBE_VIEWS, globe_link, globe_view_url
+from utils.globe import globe_link
 from utils.theme import (
     ACCENTS, callout, chip, layer_card, page_footer, render, section_header, ticker_strip,
 )
@@ -31,7 +31,8 @@ with st.container(key="ptp_hero"):
             'analytical workflow of a European gas and power trader.</div>'
             '<div class="ptp-hero__body">Live fundamental surveillance, quantitative signal generation, '
             'cross-commodity macro analysis, machine learning, portfolio risk simulation, and BESS project '
-            'economics, integrated across seven pages and 35 analytical modules.</div>'
+            'economics, integrated across eight pages and 36 analytical modules, with a 3D globe of the '
+            'infrastructure behind the prices.</div>'
             "</div>"
         )
         with st.container(horizontal=True, gap="small", key="ptp_cta"):
@@ -40,15 +41,15 @@ with st.container(key="ptp_hero"):
                              icon=":material/arrow_forward:", icon_position="right")
             st.page_link("views/5_Mispricing_Dashboard.py", label="Mispricing Dashboard",
                          icon=":material/track_changes:")
-            globe_link("north_sea", "Open Energy Globe")
+            globe_link("europe", "Open Energy Globe")
     with _hero_r:
         render(
             '<div class="ptp-hero-stats">'
             '<div class="ptp-hero-stat"><div class="ptp-hero-stat__value">5</div>'
             '<div class="ptp-hero-stat__label">Analytical layers</div></div>'
-            '<div class="ptp-hero-stat"><div class="ptp-hero-stat__value">7</div>'
+            '<div class="ptp-hero-stat"><div class="ptp-hero-stat__value">8</div>'
             '<div class="ptp-hero-stat__label">Pages</div></div>'
-            '<div class="ptp-hero-stat"><div class="ptp-hero-stat__value">35</div>'
+            '<div class="ptp-hero-stat"><div class="ptp-hero-stat__value">36</div>'
             '<div class="ptp-hero-stat__label">Analytical modules</div></div>'
             '<div class="ptp-hero-stat"><div class="ptp-hero-stat__value">14</div>'
             '<div class="ptp-hero-stat__label">Quant models</div></div>'
@@ -129,6 +130,10 @@ _LAYERS = [
          kicker="Project toolkit", title="BESS Optimiser", stat="4 markets", icon="battery",
          desc="Battery storage economics for Nordic power: DAM arbitrage, FCR-N, FCR-D and intraday "
               "revenue stack with cash flow, NPV, IRR, payback and ±20% sensitivities."),
+    dict(key="globe", page="views/8_Energy_Globe.py", link="Open Energy Globe",
+         kicker="Infrastructure · 3D", title="Energy Globe", stat="4 layers", icon="orbit",
+         desc="Interactive CesiumJS globe of the physical system: Norwegian shelf facilities and export "
+              "pipelines, European LNG terminals sized by live GIE ALSI send-out, and EIA chokepoint flows."),
 ]
 
 
@@ -146,19 +151,19 @@ def _layer_grid(layers: list[dict]) -> None:
 _layer_grid(_LAYERS[:4])
 _layer_grid(_LAYERS[4:])
 
-# ── Companion 3D globe (shown only when GLOBE_URL is configured) ─────────────────
-if globe_view_url("north_sea"):
-    section_header(
-        "Energy Globe",
-        "The physical system behind the prices, in 3D: Norwegian shelf facilities and export "
-        "pipelines, European LNG terminals with live send-out, and the maritime chokepoints that "
-        "LNG and crude cargoes pass through.",
-    )
-    with st.container(horizontal=True, gap="small", key="ptp_globe_links"):
-        globe_link("north_sea", "Norwegian shelf and pipelines")
-        globe_link("lng_europe", "European LNG terminals")
-        globe_link("lng_routes", "LNG shipping chokepoints")
-        globe_link("hormuz", "Strait of Hormuz")
+# ── Energy Globe views ─────────────────────────────────────────────────────────
+section_header(
+    "Energy Globe",
+    "The physical system behind the prices, in 3D: Norwegian shelf facilities and export "
+    "pipelines, European LNG terminals with live send-out, and the maritime chokepoints that "
+    "LNG and crude cargoes pass through.",
+)
+with st.container(horizontal=True, gap="small", key="ptp_globe_links"):
+    globe_link("europe", "European gas infrastructure")
+    globe_link("north_sea", "Norwegian shelf and pipelines")
+    globe_link("lng_europe", "European LNG terminals")
+    globe_link("lng_routes", "LNG shipping chokepoints")
+    globe_link("hormuz", "Strait of Hormuz")
 
 # ── About ──────────────────────────────────────────────────────────────────────
 with st.expander("About this platform", expanded=False):

@@ -67,6 +67,7 @@ ACCENTS: dict[str, str] = {
     "l5":    "#fb7185",   # Mispricing Dashboard: rose
     "risk":  "#d4ac3a",   # Risk Dashboard: gold
     "bess":  "#2dd4bf",   # BESS Optimiser: teal
+    "globe": "#f0883e",   # Energy Globe: orange
 }
 
 # Semantic tones shared by chips, callouts and pills.
@@ -953,6 +954,7 @@ ICONS: dict[str, str] = {
     "target":  '<circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="4.5"/><circle cx="12" cy="12" r="1" fill="currentColor"/>',
     "shield":  '<path d="M12 3.2 19 6v5.2c0 4.4-2.9 8.2-7 9.6-4.1-1.4-7-5.2-7-9.6V6z"/><path d="m9 12 2.1 2.1L15.3 10"/>',
     "battery": '<rect x="2.8" y="7" width="16.4" height="10" rx="2.2"/><path d="M21.2 10.5v3"/><path d="m11.6 9-2.1 3.2h3l-2.1 3.3"/>',
+    "orbit":   '<circle cx="12" cy="12" r="6"/><path d="M6.6 9.6c-3.3 1.6-4.9 3.4-4.2 4.6 1 1.7 6.1.8 11.5-2.3s9.1-6.8 8.1-8.5c-.7-1.2-3.1-1-6.3.2"/><circle cx="19.2" cy="5.6" r="1" fill="currentColor"/>',
 }
 
 

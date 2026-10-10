@@ -1,14 +1,16 @@
-"""Deep links into the companion 3D Energy Globe.
+"""Links to the Energy Globe.
 
-The globe (a CesiumJS application) restores a complete view from its share-link hash:
-the camera position (``lat``, ``lon``, ``alt``, ``heading``, ``pitch``, ``roll``) and the
-enabled layers, encoded as share-link tokens in ``l``. This module builds such links for
-a few curated views so that a panel can open the matching infrastructure in 3D.
+The Energy Globe is a page of this platform (``views/8_Energy_Globe.py``): a CesiumJS
+globe of Norwegian shelf facilities and export pipelines, European LNG terminals with
+live GIE ALSI figures, and maritime chokepoints. ``globe_link`` renders a button that
+opens the page on one of the curated views below; the view travels as the ``view``
+query parameter, so a link such as ``/Energy_Globe?view=hormuz`` also works on its own.
 
-Configuration: set ``GLOBE_URL`` to the globe's base address, for example
-``http://localhost:5173`` for a local development server or the address of a hosted
-deployment. Without it (or with anything other than an http(s) address) every helper
-returns ``None`` or renders nothing, so the platform runs unchanged.
+Optional: the same views can be opened in the stand-alone gods-eye-view globe (the
+CesiumJS application the datasets were first built for). Set ``GLOBE_URL`` to its base
+address, for example ``http://127.0.0.1:5173``; ``external_globe_url`` then encodes the
+camera position and the globe's share-link layer tokens in the URL hash. Without it (or
+with anything other than an http(s) address) the external link is not offered.
 """
 from __future__ import annotations
 
@@ -17,9 +19,11 @@ from urllib.parse import urlencode, urlsplit
 
 import streamlit as st
 
-# Share-link tokens the globe registers for these layers. They are part of the globe's
-# public link format (src/data/layerStateTokenReservations.json in the globe repository)
-# and never change once published.
+GLOBE_PAGE = "views/8_Energy_Globe.py"
+
+# Share-link tokens the stand-alone globe registers for these layers. They are part of
+# its public link format (src/data/layerStateTokenReservations.json in the globe
+# repository) and never change once published.
 LAYER_TOKENS: dict[str, str] = {
     "energy_facilities": "3",   # Energy Facilities: Norwegian shelf and European LNG terminals
     "energy_pipelines": "4",    # Energy Pipelines: Norwegian shelf export lines and receiving terminals
@@ -27,33 +31,68 @@ LAYER_TOKENS: dict[str, str] = {
     "chokepoints": "6",         # Chokepoints: maritime gates with live AIS counts and EIA flows
 }
 
-# Curated views. The camera looks straight down (pitch -90 degrees) from ``alt`` metres.
+# Curated views: target ``lat``/``lon``, camera distance ``alt`` (metres) and the camera
+# ``pitch`` (degrees) the platform's globe uses; external links always look straight down.
+# ``layers`` lists the stand-alone globe's layers for the external link; the platform's
+# own globe shows every layer and lets the reader switch them.
 GLOBE_VIEWS: dict[str, dict] = {
+    "europe": {
+        "label": "Europe",
+        "lat": 51.5, "lon": 7.0, "alt": 5_600_000, "pitch": -72,
+        "layers": ("energy_facilities", "energy_pipelines", "lng_live"),
+        "title": "European gas infrastructure: Norwegian shelf, export pipelines and LNG import terminals",
+    },
     "north_sea": {
-        "lat": 58.6, "lon": 3.6, "alt": 1_700_000,
+        "label": "Norwegian shelf",
+        "lat": 58.6, "lon": 3.6, "alt": 1_700_000, "pitch": -62,
         "layers": ("energy_facilities", "energy_pipelines"),
         "title": "Norwegian shelf: offshore facilities, export pipelines and receiving terminals",
     },
     "lng_europe": {
-        "lat": 49.5, "lon": 4.0, "alt": 3_200_000,
+        "label": "European LNG",
+        "lat": 49.5, "lon": 4.0, "alt": 3_200_000, "pitch": -70,
         "layers": ("lng_live", "energy_facilities"),
         "title": "European LNG import terminals with live send-out and stocks",
     },
     "lng_routes": {
-        "lat": 24.0, "lon": 40.0, "alt": 14_000_000,
+        "label": "LNG routes",
+        "lat": 30.0, "lon": 38.0, "alt": 13_000_000, "pitch": -90,
         "layers": ("chokepoints", "lng_live"),
         "title": "LNG shipping lanes: maritime chokepoints between the Gulf, Asia and Europe",
     },
     "hormuz": {
-        "lat": 26.4, "lon": 56.4, "alt": 900_000,
+        "label": "Hormuz",
+        "lat": 26.2, "lon": 55.2, "alt": 1_500_000, "pitch": -62,
         "layers": ("chokepoints",),
-        "title": "Strait of Hormuz: live tanker and LNG carrier counts",
+        "title": "Strait of Hormuz: about a fifth of world oil and LNG flows pass through it (EIA)",
     },
 }
 
+DEFAULT_VIEW = "europe"
+
+
+def resolve_view(value: object) -> str:
+    """Return ``value`` when it names a curated view, otherwise the default view."""
+    if isinstance(value, (list, tuple)):
+        value = value[0] if value else None
+    text = str(value).strip() if value is not None else ""
+    return text if text in GLOBE_VIEWS else DEFAULT_VIEW
+
+
+def globe_link(view: str = DEFAULT_VIEW, label: str = "View on the 3D globe") -> None:
+    """Render a button that opens the Energy Globe page on ``view``."""
+    view = resolve_view(view)
+    st.page_link(
+        GLOBE_PAGE,
+        label=label,
+        icon=":material/public:",
+        help=GLOBE_VIEWS[view]["title"],
+        query_params={"view": view},
+    )
+
 
 def globe_base_url() -> str | None:
-    """Return the configured globe address, or None when the globe is not configured."""
+    """Return the configured stand-alone globe address, or None when it is not configured."""
     raw = os.getenv("GLOBE_URL", "").strip()
     if not raw:
         return None
@@ -64,8 +103,8 @@ def globe_base_url() -> str | None:
     return raw.split("#", 1)[0]
 
 
-def globe_view_url(view: str) -> str | None:
-    """Return a deep link that opens ``view`` (a key of GLOBE_VIEWS) on the globe."""
+def external_globe_url(view: str) -> str | None:
+    """Deep link that opens ``view`` in the stand-alone globe, or None when not configured."""
     base = globe_base_url()
     spec = GLOBE_VIEWS.get(view)
     if base is None or spec is None:
@@ -82,11 +121,3 @@ def globe_view_url(view: str) -> str | None:
         "l": ".".join(tokens),
     }
     return f"{base}#{urlencode(params, safe='.')}"
-
-
-def globe_link(view: str, label: str = "View on the 3D globe") -> None:
-    """Render a link button to a globe view; renders nothing when the globe is not configured."""
-    url = globe_view_url(view)
-    if url is None:
-        return
-    st.page_link(url, label=label, icon=":material/public:", help=GLOBE_VIEWS[view]["title"])

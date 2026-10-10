@@ -1,0 +1,785 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Energy Globe</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
+<link rel="stylesheet" href="__CESIUM_BASE__Widgets/widgets.css" integrity="__CESIUM_CSS_SRI__" crossorigin="anonymous">
+<style>
+  :root {
+    --bg: #0a0e14; --s1: #0f141c; --s2: #141b25; --s3: #1a2330;
+    --bd: rgba(148,163,184,0.14); --bd2: rgba(148,163,184,0.26);
+    --tx: #e6edf3; --tx2: #c4cdd8; --mu: #8b98a9; --fa: #5b6676;
+    --amber: #f5b301; --cyan: #38bdf8; --up: #3fb950; --down: #f85149; --rose: #fb7185;
+    --panel: rgba(12,17,24,0.88);
+    --sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+    --mono: 'JetBrains Mono', 'SFMono-Regular', Menlo, Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; background: var(--bg); color: var(--tx);
+    font: 13px/1.45 var(--sans); overflow: hidden; -webkit-font-smoothing: antialiased; }
+  #globe { position: absolute; inset: 0; }
+  .cesium-viewer, .cesium-widget, .cesium-widget canvas { width: 100%; height: 100%; }
+  .cesium-widget-credits { font: 10px/1.3 var(--sans) !important; color: var(--fa) !important;
+    left: 12px !important; right: auto !important; bottom: 4px !important; max-width: 60%; }
+  .cesium-widget-credits a { color: var(--mu) !important; }
+  .cesium-credit-logoContainer { display: none !important; }
+
+  .panel { position: absolute; z-index: 2; background: var(--panel); border: 1px solid var(--bd);
+    border-radius: 10px; box-shadow: 0 8px 24px rgba(0,0,0,0.35);
+    backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); }
+  .kicker { font: 600 10px/1.2 var(--sans); letter-spacing: .12em; text-transform: uppercase; color: var(--mu); }
+
+  #views { top: 12px; left: 12px; display: flex; gap: 4px; padding: 4px; max-width: calc(100% - 280px);
+    overflow-x: auto; scrollbar-width: none; }
+  #views::-webkit-scrollbar { display: none; }
+  #views button { all: unset; cursor: pointer; white-space: nowrap; padding: 6px 11px; border-radius: 7px;
+    font: 500 12px/1.2 var(--sans); color: var(--tx2); }
+  #views button:hover { background: rgba(148,163,184,0.10); color: var(--tx); }
+  #views button[aria-pressed="true"] { background: rgba(245,179,1,0.14); color: var(--amber);
+    box-shadow: inset 0 0 0 1px rgba(245,179,1,0.35); }
+  #views button:focus-visible, .layer input:focus-visible + span, #card-close:focus-visible,
+  #basemap button:focus-visible, #layers-toggle:focus-visible { outline: 2px solid var(--cyan); outline-offset: 2px; }
+
+  #layers { top: 12px; right: 12px; width: 252px; padding: 10px 12px 12px; }
+  #layers-toggle { display: none; }
+  .layer { display: flex; align-items: center; gap: 9px; padding: 5px 0; cursor: pointer; user-select: none; }
+  .layer input { position: absolute; opacity: 0; pointer-events: none; }
+  .layer .box { width: 15px; height: 15px; border-radius: 4px; border: 1px solid var(--bd2); flex: none;
+    display: grid; place-items: center; background: var(--s2); }
+  .layer input:checked + .box { background: var(--sw); border-color: var(--sw); }
+  .layer input:checked + .box::after { content: ""; width: 7px; height: 4px; border: 2px solid #0a0e14;
+    border-top: 0; border-right: 0; transform: rotate(-45deg) translate(1px, -1px); }
+  .layer .name { flex: 1; color: var(--tx); font-weight: 500; }
+  .layer .count { font: 500 11px/1 var(--mono); color: var(--mu); }
+  .divider { height: 1px; background: var(--bd); margin: 8px 0; }
+  #basemap { display: flex; gap: 4px; margin-top: 6px; }
+  #basemap button { all: unset; cursor: pointer; flex: 1; text-align: center; padding: 5px 0; border-radius: 6px;
+    font: 500 11.5px/1.2 var(--sans); color: var(--tx2); border: 1px solid var(--bd); }
+  #basemap button[aria-pressed="true"] { color: var(--tx); background: rgba(56,189,248,0.12); border-color: rgba(56,189,248,0.4); }
+  #live { margin-top: 10px; font-size: 11.5px; color: var(--mu); display: flex; gap: 7px; align-items: flex-start; }
+  #live .dot { width: 7px; height: 7px; border-radius: 50%; margin-top: 5px; flex: none; background: var(--fa); }
+  #live.ok .dot { background: var(--up); box-shadow: 0 0 0 3px rgba(63,185,80,0.18); }
+  #live.warn .dot { background: var(--amber); }
+
+  #legend { left: 12px; bottom: 34px; padding: 8px 12px 10px; width: 292px; font-size: 11.5px; color: var(--tx2); }
+  #legend-head { all: unset; cursor: pointer; display: flex; align-items: center; justify-content: space-between;
+    width: 100%; }
+  #legend-head .chev { color: var(--mu); font-size: 11px; transition: transform .2s ease; }
+  #legend.collapsed #legend-head .chev { transform: rotate(-90deg); }
+  #legend.collapsed #legend-body { display: none; }
+  #legend-head:focus-visible { outline: 2px solid var(--cyan); outline-offset: 2px; }
+  #legend .group { margin-top: 7px; }
+  #legend .items { display: flex; flex-wrap: wrap; gap: 3px 12px; margin-top: 3px; }
+  #legend .row { display: flex; align-items: center; gap: 6px; white-space: nowrap; }
+  #legend .dot { width: 8px; height: 8px; border-radius: 50%; flex: none; }
+  #legend .line { width: 16px; height: 3px; border-radius: 2px; flex: none; }
+  #legend .note { color: var(--mu); }
+  #legend canvas { flex: none; }
+
+  #card { right: 12px; bottom: 34px; width: 318px; max-height: calc(100% - 300px); min-height: 120px;
+    overflow: auto; padding: 12px 14px 14px; }
+  #card[hidden] { display: none; }
+  #card-close { all: unset; cursor: pointer; position: absolute; top: 8px; right: 10px; width: 24px; height: 24px;
+    display: grid; place-items: center; border-radius: 6px; color: var(--mu); font-size: 16px; }
+  #card-close:hover { background: rgba(148,163,184,0.12); color: var(--tx); }
+  #card h2 { margin: 4px 26px 2px 0; font: 600 15px/1.3 var(--sans); color: var(--tx); }
+  #card .sub { color: var(--mu); font-size: 12px; margin-bottom: 8px; }
+  #card dl { display: grid; grid-template-columns: auto 1fr; gap: 5px 12px; margin: 0; }
+  #card dt { color: var(--mu); font-size: 11.5px; white-space: nowrap; }
+  #card dd { margin: 0; font-size: 12px; color: var(--tx); text-align: right; font-variant-numeric: tabular-nums; }
+  #card dd.num { font-family: var(--mono); font-size: 11.5px; }
+  #card .bar { height: 4px; border-radius: 3px; background: rgba(148,163,184,0.16); margin-top: 3px; overflow: hidden; }
+  #card .bar > span { display: block; height: 100%; background: var(--amber); }
+  #card .note { margin-top: 9px; color: var(--mu); font-size: 11.5px; }
+  #card a { color: var(--cyan); text-decoration: none; font-size: 12px; display: inline-block; margin-top: 10px; }
+  #card a:hover { text-decoration: underline; }
+  .up { color: var(--up); } .down { color: var(--down); }
+
+  #tip { position: absolute; z-index: 3; pointer-events: none; padding: 5px 8px; border-radius: 6px;
+    background: rgba(10,14,20,0.94); border: 1px solid var(--bd2); font: 500 12px/1.3 var(--sans);
+    color: var(--tx); white-space: nowrap; transform: translate(14px, -50%); }
+  #tip[hidden] { display: none; }
+  #tip .meta { color: var(--mu); font-weight: 400; margin-left: 6px; }
+
+  #hint { position: absolute; z-index: 1; right: 12px; bottom: 6px; font-size: 10.5px; color: var(--fa); }
+  #status { position: absolute; inset: 0; z-index: 4; display: grid; place-items: center; text-align: center;
+    padding: 24px; background: radial-gradient(ellipse at center, #111a26 0%, var(--bg) 70%);
+    color: var(--mu); font-size: 13px; transition: opacity .35s ease; }
+  #status.is-hidden { opacity: 0; pointer-events: none; }
+  #status.is-error { color: var(--tx2); }
+  #status .spinner { width: 26px; height: 26px; border-radius: 50%; border: 2px solid rgba(148,163,184,0.2);
+    border-top-color: var(--amber); margin: 0 auto 12px; animation: spin .9s linear infinite; }
+  #status.is-error .spinner { display: none; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  @media (max-width: 760px) {
+    #views { max-width: calc(100% - 24px); }
+    #layers { top: 56px; width: auto; left: 12px; right: 12px; padding: 8px 10px; }
+    #layers-toggle { all: unset; display: block; cursor: pointer; font: 600 12px/1.2 var(--sans); color: var(--tx); }
+    #layers:not(.open) .body { display: none; }
+    #legend { display: none; }
+    #card { left: 12px; right: 12px; width: auto; max-height: 55%; }
+    #hint { display: none; }
+  }
+  @media (prefers-reduced-motion: reduce) { #status .spinner { animation: none; } }
+</style>
+</head>
+<body>
+<div id="globe" role="application" aria-label="Interactive 3D globe of European gas infrastructure"></div>
+
+<div id="views" class="panel" role="toolbar" aria-label="Camera views"></div>
+
+<div id="layers" class="panel" aria-label="Layers">
+  <button id="layers-toggle" type="button" aria-expanded="false">Layers</button>
+  <div class="body">
+    <div class="kicker">Layers</div>
+    <div id="layer-list" style="margin-top:6px"></div>
+    <div class="divider"></div>
+    <div class="kicker">Basemap</div>
+    <div id="basemap" role="group" aria-label="Basemap">
+      <button type="button" data-basemap="dark" aria-pressed="true">Dark</button>
+      <button type="button" data-basemap="night" aria-pressed="false">Night lights</button>
+      <button type="button" data-basemap="satellite" aria-pressed="false">Satellite</button>
+    </div>
+    <div id="live"><span class="dot"></span><span id="live-text"></span></div>
+  </div>
+</div>
+
+<div id="legend" class="panel" aria-label="Legend">
+  <button id="legend-head" type="button" aria-expanded="true" aria-controls="legend-body"><span class="kicker">Legend</span><span class="chev" aria-hidden="true">▼</span></button>
+  <div id="legend-body"></div>
+</div>
+<div id="card" class="panel" role="dialog" aria-label="Details" hidden></div>
+<div id="tip" hidden></div>
+<div id="hint">Drag to rotate · scroll to zoom · Ctrl-drag to tilt · click a marker for details</div>
+<div id="status" role="status"><div><div class="spinner"></div><div id="status-text">Loading the 3D globe…</div></div></div>
+
+<script id="payload" type="application/json">__PAYLOAD_JSON__</script>
+<script>window.CESIUM_BASE_URL = "__CESIUM_BASE__";</script>
+<script src="__CESIUM_BASE__Cesium.js" integrity="__CESIUM_JS_SRI__" crossorigin="anonymous"></script>
+<script>
+(function () {
+  "use strict";
+
+  var payload = JSON.parse(document.getElementById("payload").textContent);
+  var statusEl = document.getElementById("status");
+  var statusText = document.getElementById("status-text");
+
+  function fail(message) {
+    statusText.textContent = message;
+    statusEl.classList.add("is-error");
+    statusEl.classList.remove("is-hidden");
+  }
+
+  if (typeof Cesium === "undefined") {
+    fail("The 3D globe could not load CesiumJS from cdn.jsdelivr.net. " +
+         "The tables below the globe show the same data.");
+    return;
+  }
+
+  // ── Formatting ────────────────────────────────────────────────────────────
+  var nf1 = new Intl.NumberFormat("en-GB", { maximumFractionDigits: 1 });
+  var nf0 = new Intl.NumberFormat("en-GB", { maximumFractionDigits: 0 });
+  function isNum(v) { return typeof v === "number" && isFinite(v); }
+  function fmt(v, digits) { return isNum(v) ? (digits === 0 ? nf0 : nf1).format(v) : "–"; }
+  function signed(v) { return isNum(v) ? (v > 0 ? "+" : v < 0 ? "−" : "±") + nf1.format(Math.abs(v)) : "–"; }
+  function safeUrl(u) { return typeof u === "string" && /^https?:\/\//i.test(u) ? u : null; }
+
+  // ── Worker paths ──────────────────────────────────────────────────────────
+  // Inside Streamlit the globe runs in an about:srcdoc frame. CesiumJS chooses how to
+  // start a web worker by resolving the worker's module id against the document and
+  // comparing the result with window.location; under about:srcdoc every id looks
+  // cross-origin, and the bare id it then imports cannot be resolved, so terrain,
+  // imagery and line geometry never load. Turning each id into an absolute URL first
+  // sends every worker through CesiumJS's own cross-origin path (a module shim that
+  // imports the absolute URL), which works in any frame and in a top-level page alike.
+  (function useAbsoluteWorkerUrls(TaskProcessor) {
+    if (!TaskProcessor || !TaskProcessor.prototype) return;
+    // CesiumJS also probes transferable ArrayBuffer support with a worker started from a
+    // bare module id, which fails the same way and stalls every later task. All browsers
+    // that run this globe support transfer, so the probe is answered up front.
+    if (TaskProcessor._canTransferArrayBuffer === undefined) TaskProcessor._canTransferArrayBuffer = true;
+    var prefix = TaskProcessor._workerModulePrefix || "Workers/";
+    function absolute(processor) {
+      var path = processor._workerPath;
+      if (typeof path === "string" && path && !/^[a-z][a-z0-9+.-]*:/i.test(path)) {
+        processor._workerPath = Cesium.buildModuleUrl(prefix + path.replace(/\.js$/, "") + ".js");
+      }
+    }
+    ["scheduleTask", "initWebAssemblyModule"].forEach(function (name) {
+      var original = TaskProcessor.prototype[name];
+      if (typeof original !== "function") return;
+      TaskProcessor.prototype[name] = function () {
+        absolute(this);
+        return original.apply(this, arguments);
+      };
+    });
+  })(Cesium.TaskProcessor);
+
+  // ── Viewer ────────────────────────────────────────────────────────────────
+  var viewer;
+  try {
+    viewer = new Cesium.Viewer("globe", {
+      baseLayer: false,
+      baseLayerPicker: false, geocoder: false, homeButton: false, sceneModePicker: false,
+      navigationHelpButton: false, animation: false, timeline: false, fullscreenButton: false,
+      infoBox: false, selectionIndicator: false, skyBox: false,
+      requestRenderMode: true, maximumRenderTimeChange: Infinity,
+      useBrowserRecommendedResolution: false, msaaSamples: 4
+    });
+  } catch (err) {
+    fail("This browser could not start WebGL, which the 3D globe needs. " +
+         "The tables below the globe show the same data.");
+    return;
+  }
+
+  var scene = viewer.scene;
+  var globe = scene.globe;
+  var C = Cesium;
+  function color(css, alpha) {
+    var c = C.Color.fromCssColorString(css);
+    return alpha === undefined ? c : c.withAlpha(alpha);
+  }
+  globe.baseColor = color("#0b1017");
+  scene.backgroundColor = color("#05080d");
+  if (scene.sun) scene.sun.show = false;
+  if (scene.moon) scene.moon.show = false;
+  scene.fog.enabled = true;
+  globe.showGroundAtmosphere = true;
+  globe.enableLighting = false;
+  scene.screenSpaceCameraController.minimumZoomDistance = 3000;
+  scene.screenSpaceCameraController.maximumZoomDistance = 40000000;
+
+  // Imagery: Natural Earth II ships with CesiumJS and keeps the globe readable if the
+  // tile servers cannot be reached; the keyless basemaps sit on top of it.
+  var imagery = viewer.imageryLayers;
+  C.TileMapServiceImageryProvider.fromUrl(C.buildModuleUrl("Assets/Textures/NaturalEarthII"))
+    .then(function (provider) {
+      var base = imagery.addImageryProvider(provider, 0);
+      base.brightness = 0.42; base.saturation = 0.3; base.contrast = 1.1;
+      scene.requestRender();
+    })
+    .catch(function () { /* the basemaps still draw */ });
+
+  var BASEMAPS = {
+    dark: imagery.addImageryProvider(new C.UrlTemplateImageryProvider({
+      url: "https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}",
+      maximumLevel: 16,
+      credit: new C.Credit("Basemap: Esri, HERE, Garmin, © OpenStreetMap contributors, and the GIS user community", true)
+    })),
+    night: imagery.addImageryProvider(new C.UrlTemplateImageryProvider({
+      url: "https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/VIIRS_Black_Marble/default/2016-01-01/GoogleMapsCompatible_Level8/{z}/{y}/{x}.png",
+      maximumLevel: 8,
+      credit: new C.Credit("Night lights: NASA EOSDIS GIBS, VIIRS Black Marble 2016", true)
+    })),
+    satellite: imagery.addImageryProvider(new C.UrlTemplateImageryProvider({
+      url: "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
+      maximumLevel: 19,
+      credit: new C.Credit("Imagery: Esri, Vantor, Earthstar Geographics, and the GIS User Community", true)
+    }))
+  };
+  BASEMAPS.dark.brightness = 0.9;
+  BASEMAPS.satellite.brightness = 0.8;
+  BASEMAPS.night.show = false;
+  BASEMAPS.satellite.show = false;
+  viewer.creditDisplay.addStaticCredit && viewer.creditDisplay.addStaticCredit(new C.Credit(
+    "Data: Sodir (NLOD) · Global Energy Monitor GGIT (CC BY 4.0) · GIE ALSI · U.S. EIA", true));
+
+  // ── Marker drawing helpers ────────────────────────────────────────────────
+  var DPR = Math.min(window.devicePixelRatio || 1, 2);
+  function canvasOf(size) {
+    var c = document.createElement("canvas");
+    c.width = c.height = Math.ceil(size * DPR);
+    var ctx = c.getContext("2d");
+    ctx.scale(DPR, DPR);
+    return { canvas: c, ctx: ctx };
+  }
+  // Ring gauge: track, arc for a share (0-100) and a filled centre when live.
+  function gauge(size, share, stroke, live) {
+    var g = canvasOf(size), ctx = g.ctx, r = size / 2, w = Math.max(2.5, size * 0.14);
+    ctx.beginPath(); ctx.arc(r, r, r - 1, 0, Math.PI * 2);
+    ctx.fillStyle = "rgba(10,14,20,0.78)"; ctx.fill();
+    ctx.lineWidth = w; ctx.strokeStyle = live ? "rgba(148,163,184,0.30)" : "rgba(148,163,184,0.55)";
+    ctx.beginPath(); ctx.arc(r, r, r - w / 2 - 1, 0, Math.PI * 2); ctx.stroke();
+    if (live && isNum(share) && share > 0) {
+      ctx.strokeStyle = stroke; ctx.lineCap = "round";
+      ctx.beginPath();
+      ctx.arc(r, r, r - w / 2 - 1, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * Math.min(share, 100) / 100);
+      ctx.stroke();
+    }
+    ctx.beginPath(); ctx.arc(r, r, Math.max(1.6, size * 0.13), 0, Math.PI * 2);
+    ctx.fillStyle = live ? stroke : "rgba(148,163,184,0.7)"; ctx.fill();
+    return g.canvas;
+  }
+  function diamond(size, fill, stroke) {
+    var g = canvasOf(size), ctx = g.ctx, r = size / 2;
+    ctx.beginPath(); ctx.moveTo(r, 1); ctx.lineTo(size - 1, r); ctx.lineTo(r, size - 1); ctx.lineTo(1, r); ctx.closePath();
+    ctx.fillStyle = fill; ctx.fill(); ctx.lineWidth = 1.5; ctx.strokeStyle = stroke; ctx.stroke();
+    return g.canvas;
+  }
+  function ring(size, strokeCss, fillCss) {
+    var g = canvasOf(size), ctx = g.ctx, r = size / 2;
+    ctx.beginPath(); ctx.arc(r, r, r - 1.5, 0, Math.PI * 2);
+    ctx.fillStyle = fillCss; ctx.fill(); ctx.lineWidth = 2; ctx.strokeStyle = strokeCss; ctx.stroke();
+    ctx.beginPath(); ctx.arc(r, r, 2.2, 0, Math.PI * 2); ctx.fillStyle = strokeCss; ctx.fill();
+    return g.canvas;
+  }
+  function label(text, far, offset) {
+    return {
+      text: text,
+      font: "600 24px Inter, -apple-system, 'Segoe UI', sans-serif",
+      scale: 0.5,
+      fillColor: color("#e6edf3"),
+      outlineColor: color("#05080d"),
+      outlineWidth: 4,
+      style: C.LabelStyle.FILL_AND_OUTLINE,
+      horizontalOrigin: C.HorizontalOrigin.LEFT,
+      verticalOrigin: C.VerticalOrigin.CENTER,
+      pixelOffset: new C.Cartesian2(offset || 9, 0),
+      distanceDisplayCondition: new C.DistanceDisplayCondition(0, far)
+    };
+  }
+
+  var records = new Map();       // entity id -> { type, data }
+  var sources = {};
+
+  function addSource(key) {
+    var ds = new C.CustomDataSource(key);
+    viewer.dataSources.add(ds);
+    sources[key] = ds;
+    return ds;
+  }
+
+  // ── Layer: facilities (Norwegian shelf and offshore wind) ─────────────────
+  var CATEGORIES = {
+    offshore_platform: { label: "Offshore installation", short: "Offshore installation", color: "#38bdf8" },
+    offshore_storage:  { label: "Offshore storage", short: "Storage", color: "#a78bfa" },
+    onshore:           { label: "Onshore plant or landfall", short: "Onshore plant", color: "#f5b301" },
+    offshore_wind:     { label: "Offshore wind farm", short: "Offshore wind", color: "#3fb950" }
+  };
+  var facilities = addSource("facilities");
+  payload.facilities.forEach(function (f) {
+    var cat = CATEGORIES[f.cat] || { color: "#8b98a9" };
+    var rank = isNum(f.rank) ? f.rank : 0;
+    var e = facilities.entities.add({
+      id: "fac:" + f.id,
+      position: C.Cartesian3.fromDegrees(f.lon, f.lat, 0),
+      point: {
+        pixelSize: 5 + rank * 1.4,
+        color: color(cat.color),
+        outlineColor: color("#05080d", 0.9),
+        outlineWidth: 1.2,
+        scaleByDistance: new C.NearFarScalar(1.5e5, 1.5, 7e6, 0.75)
+      },
+      label: label(f.name, rank >= 3 ? 2.4e6 : rank === 2 ? 1.2e6 : rank === 1 ? 6e5 : 2.6e5)
+    });
+    records.set(e.id, { type: "facility", data: f });
+  });
+
+  // ── Layer: export pipelines and receiving terminals ───────────────────────
+  var MEDIA = {
+    gas: { label: "Gas", color: "#2dd4bf" },
+    oil: { label: "Oil", color: "#f0883e" },
+    condensate: { label: "Condensate", color: "#fb7185" },
+    co2: { label: "CO2", color: "#94a3b8" }
+  };
+  var pipelines = addSource("pipelines");
+  payload.pipelines.forEach(function (p) {
+    var medium = MEDIA[p.medium] || { color: "#8b98a9" };
+    var width = p.dia >= 40 ? 3.4 : p.dia >= 28 ? 2.7 : p.dia >= 16 ? 2.1 : 1.6;
+    p.parts.forEach(function (part, i) {
+      var flat = [];
+      part.forEach(function (c) { flat.push(c[0], c[1]); });
+      var e = pipelines.entities.add({
+        id: "pipe:" + p.id + ":" + i,
+        polyline: {
+          positions: C.Cartesian3.fromDegreesArray(flat),
+          width: width,
+          material: color(medium.color, 0.92),
+          arcType: C.ArcType.GEODESIC
+        }
+      });
+      records.set(e.id, { type: "pipeline", data: p });
+    });
+  });
+  var receivingIcon = diamond(14, "#e6edf3", "#2dd4bf");
+  payload.receiving.forEach(function (t) {
+    var e = pipelines.entities.add({
+      id: "recv:" + t.id,
+      position: C.Cartesian3.fromDegrees(t.lon, t.lat, 0),
+      billboard: { image: receivingIcon, width: 14, height: 14, verticalOrigin: C.VerticalOrigin.CENTER },
+      label: label(t.name, 2.6e6, 11)
+    });
+    records.set(e.id, { type: "receiving", data: t });
+  });
+
+  // ── Layer: LNG import terminals (live GIE ALSI where reported) ────────────
+  var lng = addSource("lng");
+  var liveSendOuts = payload.lng.filter(function (t) { return t.live && isNum(t.send_out_gwh_d); })
+    .map(function (t) { return t.send_out_gwh_d; });
+  var maxSend = Math.max.apply(null, [1].concat(liveSendOuts));
+  payload.lng.forEach(function (t) {
+    var live = !!t.live && isNum(t.send_out_gwh_d);
+    var size = live ? 14 + 22 * Math.sqrt(Math.max(t.send_out_gwh_d, 0) / maxSend) : 13;
+    var text = live ? t.name + "  " + fmt(t.send_out_gwh_d) + " GWh/d" : t.name;
+    var e = lng.entities.add({
+      id: "lng:" + t.id,
+      position: C.Cartesian3.fromDegrees(t.lon, t.lat, 0),
+      billboard: {
+        image: gauge(size, t.utilisation_pct, "#f5b301", live),
+        width: size, height: size, verticalOrigin: C.VerticalOrigin.CENTER
+      },
+      label: label(text, live ? 3.4e6 : 1.4e6, size / 2 + 5)
+    });
+    records.set(e.id, { type: "lng", data: t });
+  });
+
+  // ── Layer: maritime chokepoints ───────────────────────────────────────────
+  var chokepoints = addSource("chokepoints");
+  var maxOil = Math.max.apply(null, [1].concat(payload.chokepoints
+    .filter(function (c) { return isNum(c.oil); }).map(function (c) { return c.oil; })));
+  payload.chokepoints.forEach(function (c) {
+    (c.rings || []).forEach(function (ringCoords, i) {
+      var flat = [];
+      ringCoords.forEach(function (p) { flat.push(p[0], p[1]); });
+      var positions = C.Cartesian3.fromDegreesArray(flat);
+      var gate = chokepoints.entities.add({
+        id: "gate:" + c.id + ":" + i,
+        polygon: { hierarchy: new C.PolygonHierarchy(positions), material: color("#fb7185", 0.16), height: 0 },
+        polyline: { positions: positions, width: 1.6, material: color("#fb7185", 0.85) }
+      });
+      records.set(gate.id, { type: "chokepoint", data: c });
+    });
+    var size = 16 + 18 * Math.sqrt((isNum(c.oil) ? c.oil : 0) / maxOil);
+    var lines = [c.name];
+    var flows = [];
+    if (isNum(c.oil)) flows.push(fmt(c.oil) + " mb/d oil");
+    if (isNum(c.lng)) flows.push(fmt(c.lng) + " bcf/d LNG");
+    if (flows.length) lines.push(flows.join(" · "));
+    var e = chokepoints.entities.add({
+      id: "choke:" + c.id,
+      position: C.Cartesian3.fromDegrees(c.label[0], c.label[1], 0),
+      billboard: { image: ring(size, "#fb7185", "rgba(251,113,133,0.16)"), width: size, height: size,
+                   verticalOrigin: C.VerticalOrigin.CENTER },
+      label: label(lines.join("\n"), 2.2e7, size / 2 + 6)
+    });
+    records.set(e.id, { type: "chokepoint", data: c });
+  });
+
+  // ── Layer panel ───────────────────────────────────────────────────────────
+  var liveCount = payload.lng.filter(function (t) { return t.live; }).length;
+  var LAYERS = [
+    { key: "facilities", name: "Shelf facilities", count: String(payload.facilities.length), swatch: "#38bdf8" },
+    { key: "pipelines", name: "Export pipelines", count: String(payload.pipelines.length), swatch: "#2dd4bf" },
+    { key: "lng", name: "LNG terminals", count: liveCount + "/" + payload.lng.length + " live", swatch: "#f5b301" },
+    { key: "chokepoints", name: "Chokepoints", count: String(payload.chokepoints.length), swatch: "#fb7185" }
+  ];
+  var layerList = document.getElementById("layer-list");
+  LAYERS.forEach(function (layer) {
+    var row = document.createElement("label");
+    row.className = "layer";
+    row.style.setProperty("--sw", layer.swatch);
+    var input = document.createElement("input");
+    input.type = "checkbox"; input.checked = true; input.setAttribute("data-layer", layer.key);
+    var box = document.createElement("span"); box.className = "box";
+    var name = document.createElement("span"); name.className = "name"; name.textContent = layer.name;
+    var count = document.createElement("span"); count.className = "count"; count.textContent = layer.count;
+    row.append(input, box, name, count);
+    layerList.append(row);
+    input.addEventListener("change", function () {
+      sources[layer.key].show = input.checked;
+      renderLegend();
+      if (!input.checked && current && current.layer === layer.key) hideCard();
+      scene.requestRender();
+    });
+  });
+
+  document.querySelectorAll("#basemap button").forEach(function (button) {
+    button.addEventListener("click", function () {
+      var chosen = button.getAttribute("data-basemap");
+      Object.keys(BASEMAPS).forEach(function (key) { BASEMAPS[key].show = key === chosen; });
+      document.querySelectorAll("#basemap button").forEach(function (b) {
+        b.setAttribute("aria-pressed", String(b === button));
+      });
+      scene.requestRender();
+    });
+  });
+
+  var layersPanel = document.getElementById("layers");
+  var layersToggle = document.getElementById("layers-toggle");
+  layersToggle.addEventListener("click", function () {
+    var open = !layersPanel.classList.contains("open");
+    layersPanel.classList.toggle("open", open);
+    layersToggle.setAttribute("aria-expanded", String(open));
+  });
+
+  var live = document.getElementById("live");
+  var liveText = document.getElementById("live-text");
+  var meta = payload.meta || {};
+  if (meta.live_status === "ok") {
+    live.classList.add("ok");
+    liveText.textContent = "Live GIE ALSI figures" + (meta.gas_day ? " · gas day " + meta.gas_day : "");
+  } else {
+    live.classList.add("warn");
+    liveText.textContent = meta.live_message || "Live LNG figures unavailable; terminals shown with capacity.";
+  }
+
+  // ── Legend ────────────────────────────────────────────────────────────────
+  var legend = document.getElementById("legend");
+  var legendBody = document.getElementById("legend-body");
+  var legendHead = document.getElementById("legend-head");
+  legendHead.addEventListener("click", function () {
+    var collapsed = !legend.classList.contains("collapsed");
+    legend.classList.toggle("collapsed", collapsed);
+    legendHead.setAttribute("aria-expanded", String(!collapsed));
+  });
+  function legendGroup(title) {
+    var g = document.createElement("div"); g.className = "group";
+    var k = document.createElement("div"); k.className = "kicker"; k.textContent = title;
+    var items = document.createElement("div"); items.className = "items";
+    g.append(k, items); legendBody.append(g); return items;
+  }
+  function legendRow(items, swatch, text, note) {
+    var row = document.createElement("span"); row.className = "row";
+    var t = document.createElement("span"); t.textContent = text;
+    if (note) t.className = "note";
+    row.append(swatch, t); items.append(row);
+  }
+  function swatchDot(css) { var s = document.createElement("span"); s.className = "dot"; s.style.background = css; return s; }
+  function swatchLine(css) { var s = document.createElement("span"); s.className = "line"; s.style.background = css; return s; }
+  function swatchCanvas(canvas, size) { canvas.style.width = canvas.style.height = size + "px"; return canvas; }
+  function renderLegend() {
+    legendBody.replaceChildren();
+    if (sources.facilities.show) {
+      var g = legendGroup("Facilities");
+      Object.keys(CATEGORIES).forEach(function (k) { legendRow(g, swatchDot(CATEGORIES[k].color), CATEGORIES[k].short); });
+    }
+    if (sources.pipelines.show) {
+      var p = legendGroup("Export pipelines");
+      Object.keys(MEDIA).forEach(function (k) { legendRow(p, swatchLine(MEDIA[k].color), MEDIA[k].label); });
+      legendRow(p, swatchCanvas(diamond(11, "#e6edf3", "#2dd4bf"), 11), "Receiving terminal");
+    }
+    if (sources.lng.show) {
+      var l = legendGroup("LNG terminals");
+      legendRow(l, swatchCanvas(gauge(16, 65, "#f5b301", true), 16), "Size: send-out, arc: utilisation");
+      legendRow(l, swatchCanvas(gauge(12, null, "#f5b301", false), 12), "No live figure", true);
+    }
+    if (sources.chokepoints.show) {
+      var c = legendGroup("Chokepoints");
+      legendRow(c, swatchCanvas(ring(14, "#fb7185", "rgba(251,113,133,0.16)"), 14), "Size: oil flow (EIA)");
+    }
+    legend.hidden = !legendBody.childElementCount;
+  }
+  if (window.innerHeight < 560) { legend.classList.add("collapsed"); legendHead.setAttribute("aria-expanded", "false"); }
+  renderLegend();
+
+  // ── Views ─────────────────────────────────────────────────────────────────
+  var viewsBar = document.getElementById("views");
+  var viewButtons = {};
+  Object.keys(payload.views).forEach(function (key) {
+    var v = payload.views[key];
+    var b = document.createElement("button");
+    b.type = "button"; b.textContent = v.label; b.title = v.title;
+    b.setAttribute("aria-pressed", "false");
+    b.addEventListener("click", function () { flyTo(key, false); });
+    viewsBar.append(b); viewButtons[key] = b;
+  });
+  function flyTo(key, instant) {
+    var v = payload.views[key];
+    if (!v) return;
+    var target = C.Cartesian3.fromDegrees(v.lon, v.lat, 0);
+    var offset = new C.HeadingPitchRange(0, C.Math.toRadians(isNum(v.pitch) ? v.pitch : -90), v.alt);
+    if (instant) {
+      viewer.camera.lookAt(target, offset);
+      viewer.camera.lookAtTransform(C.Matrix4.IDENTITY);
+    } else {
+      viewer.camera.flyToBoundingSphere(new C.BoundingSphere(target, 1), { offset: offset, duration: 1.8 });
+    }
+    Object.keys(viewButtons).forEach(function (k) { viewButtons[k].setAttribute("aria-pressed", String(k === key)); });
+    scene.requestRender();
+  }
+  flyTo(payload.view, true);
+
+  // ── Details card and tooltip ──────────────────────────────────────────────
+  var card = document.getElementById("card");
+  var tip = document.getElementById("tip");
+  var current = null;
+  var TYPE_LABEL = { facility: "Facility", pipeline: "Export pipeline", receiving: "Receiving terminal",
+                     lng: "LNG import terminal", chokepoint: "Maritime chokepoint" };
+  var TYPE_LAYER = { facility: "facilities", pipeline: "pipelines", receiving: "pipelines",
+                     lng: "lng", chokepoint: "chokepoints" };
+
+  function el(tag, cls, text) {
+    var n = document.createElement(tag);
+    if (cls) n.className = cls;
+    if (text !== undefined && text !== null) n.textContent = text;
+    return n;
+  }
+  function row(dl, term, value, opts) {
+    if (value === undefined || value === null || value === "" || value === "–") return;
+    opts = opts || {};
+    dl.append(el("dt", null, term));
+    var dd = el("dd", opts.num ? "num" : null);
+    if (opts.cls) { var s = el("span", opts.cls, value); dd.append(s); } else dd.textContent = value;
+    if (isNum(opts.bar)) {
+      var bar = el("div", "bar"), fill = el("span");
+      fill.style.width = Math.max(0, Math.min(100, opts.bar)) + "%";
+      bar.append(fill); dd.append(bar);
+    }
+    dl.append(dd);
+  }
+  function showCard(rec) {
+    var d = rec.data, dl = el("dl");
+    card.replaceChildren();
+    var close = el("button", null, "×");
+    close.id = "card-close"; close.type = "button"; close.setAttribute("aria-label", "Close details");
+    close.addEventListener("click", hideCard);
+    card.append(close, el("div", "kicker", TYPE_LABEL[rec.type] || ""), el("h2", null, d.name || "Unnamed"));
+    var sub = [];
+    if (rec.type === "facility") {
+      sub.push((CATEGORIES[d.cat] || {}).label || d.kind);
+      row(dl, "Kind", d.kind);
+      row(dl, "Field", d.field);
+      row(dl, "Operator", d.operator);
+      row(dl, "Status", d.status === "installation" ? "Under installation" : d.status === "operating" ? "Operating" : d.status);
+      row(dl, "Start-up", d.startup);
+      row(dl, "Water depth", isNum(d.depth) ? fmt(d.depth, 0) + " m" : null, { num: true });
+      row(dl, "System", d.system);
+      row(dl, "Co-located", Array.isArray(d.colocated) ? d.colocated.join(", ") : null);
+      row(dl, "Nation", d.nation);
+    } else if (rec.type === "pipeline") {
+      sub.push(((MEDIA[d.medium] || {}).label || "Pipeline") + (d.system ? " · " + d.system : ""));
+      row(dl, "From", d.from);
+      row(dl, "To", d.to);
+      row(dl, "Diameter", isNum(d.dia) ? fmt(d.dia) + " in" : null, { num: true });
+      row(dl, "Length", isNum(d.len) ? fmt(d.len) + " km" : null, { num: true });
+      row(dl, "Max water depth", isNum(d.depth) ? fmt(d.depth, 0) + " m" : null, { num: true });
+      row(dl, "Operator", d.operator);
+      row(dl, "In service since", d.since);
+      row(dl, "Segment", d.segment);
+    } else if (rec.type === "receiving") {
+      sub.push(d.kind || "Receiving terminal");
+      row(dl, "Nation", d.nation);
+      row(dl, "Systems", Array.isArray(d.systems) ? d.systems.join(", ") : null);
+      row(dl, "Operator", d.operator);
+    } else if (rec.type === "lng") {
+      sub.push([d.nation, d.fsru ? "FSRU" : "Onshore"].filter(Boolean).join(" · "));
+      if (d.live) {
+        row(dl, "Gas day", d.gas_day ? d.gas_day + (d.mixed_days ? " (units differ)" : "") : null);
+        row(dl, "Send-out", fmt(d.send_out_gwh_d) + " GWh/d", { num: true });
+        if (isNum(d.send_out_change_gwh_d)) {
+          row(dl, "Change d/d", signed(d.send_out_change_gwh_d) + " GWh/d",
+              { num: true, cls: d.send_out_change_gwh_d > 0 ? "up" : d.send_out_change_gwh_d < 0 ? "down" : null });
+        }
+        row(dl, "Utilisation", isNum(d.utilisation_pct) ? fmt(d.utilisation_pct) + "% of DTRS" : null,
+            { num: true, bar: d.utilisation_pct });
+        row(dl, "Stock fullness", isNum(d.fullness_pct) ? fmt(d.fullness_pct) + "% of DTMI" : null,
+            { num: true, bar: d.fullness_pct });
+        row(dl, "Inventory", isNum(d.inventory_gwh) ? fmt(d.inventory_gwh, 0) + " GWh" : null, { num: true });
+        row(dl, "LNG in tanks", isNum(d.inventory_lng_m3) ? fmt(d.inventory_lng_m3, 0) + " m³" : null, { num: true });
+        row(dl, "Send-out capacity", isNum(d.dtrs_gwh_d) ? fmt(d.dtrs_gwh_d) + " GWh/d" : null, { num: true });
+        row(dl, "Data status", d.data_status);
+        if (Array.isArray(d.units)) {
+          row(dl, "Units", d.units.map(function (u) {
+            return u.name + (isNum(u.send_out_gwh_d) ? " (" + fmt(u.send_out_gwh_d) + ")" : "");
+          }).join(", "));
+        }
+      }
+      row(dl, "Operator", d.operator);
+      row(dl, "Capacity", isNum(d.capacity_bcm_y) ? fmt(d.capacity_bcm_y) + " bcm/y (GEM)" : null, { num: true });
+      row(dl, "Start-up", d.startup);
+    } else if (rec.type === "chokepoint") {
+      sub.push([d.region, d.kind].filter(Boolean).join(" · "));
+      row(dl, "Connects", d.connects);
+      row(dl, "Oil flow", isNum(d.oil) ? fmt(d.oil) + " mb/d" + (d.oil_period ? " (" + d.oil_period + ")" : "") : null, { num: true });
+      row(dl, "Of which Bosporus", isNum(d.bosporus) ? fmt(d.bosporus) + " mb/d" : null, { num: true });
+      row(dl, "LNG flow", isNum(d.lng) ? fmt(d.lng) + " bcf/d" + (d.lng_period ? " (" + d.lng_period + ")" : "")
+          : (isNum(d.lng_below) ? "below " + fmt(d.lng_below) + " bcf/d" : null), { num: true });
+      row(dl, "Gate", d.gate);
+    }
+    card.append(el("div", "sub", sub.filter(Boolean).join(" ")), dl);
+    var notes = [];
+    if (rec.type === "lng" && !d.live && d.live_note) notes.push(d.live_note + ".");
+    if (rec.type === "lng" && d.capacity_note) notes.push(d.capacity_note + ".");
+    if ((rec.type === "lng" || rec.type === "facility") && d.location_accuracy === "approximate") {
+      notes.push("Approximate position (port or town).");
+    }
+    if (rec.type === "chokepoint") {
+      if (d.notes) notes.push(d.notes);
+      if (d.flows_source) notes.push("Source: " + d.flows_source + ".");
+    }
+    if (rec.type === "lng" && d.live) notes.push("Source: GIE ALSI.");
+    notes.forEach(function (n) { card.append(el("div", "note", n)); });
+    var url = safeUrl(d.url);
+    if (url) {
+      var a = el("a", null, rec.type === "pipeline" || rec.type === "facility" ? "Open the Sodir fact page ↗" : "Open the source page ↗");
+      if (rec.type === "lng") a.textContent = "Open the GEM wiki page ↗";
+      a.href = url; a.target = "_blank"; a.rel = "noopener noreferrer";
+      card.append(a);
+    }
+    card.hidden = false;
+    current = { layer: TYPE_LAYER[rec.type], id: d.id };
+  }
+  function hideCard() { card.hidden = true; current = null; }
+  document.addEventListener("keydown", function (event) { if (event.key === "Escape") hideCard(); });
+
+  function pickRecord(position) {
+    var picked = scene.pick(position, 9, 9);
+    if (!C.defined(picked) || !picked.id) return null;
+    var entity = picked.id;
+    var id = typeof entity === "string" ? entity : entity.id;
+    var rec = records.get(id);
+    if (!rec) return null;
+    var ds = sources[TYPE_LAYER[rec.type]];
+    return ds && ds.show ? rec : null;
+  }
+
+  var handler = new C.ScreenSpaceEventHandler(scene.canvas);
+  var pendingMove = null;
+  handler.setInputAction(function (move) {
+    if (pendingMove) { pendingMove.position = move.endPosition; return; }
+    pendingMove = { position: move.endPosition };
+    window.requestAnimationFrame(function () {
+      var position = pendingMove.position;
+      pendingMove = null;
+      var rec = pickRecord(position);
+      scene.canvas.style.cursor = rec ? "pointer" : "";
+      if (!rec) { tip.hidden = true; return; }
+      tip.replaceChildren(document.createTextNode(rec.data.name || ""));
+      if (rec.type === "lng" && rec.data.live && isNum(rec.data.send_out_gwh_d)) {
+        tip.append(el("span", "meta", fmt(rec.data.send_out_gwh_d) + " GWh/d"));
+      } else if (rec.type === "chokepoint" && isNum(rec.data.oil)) {
+        tip.append(el("span", "meta", fmt(rec.data.oil) + " mb/d oil"));
+      } else if (rec.type === "pipeline" && isNum(rec.data.dia)) {
+        tip.append(el("span", "meta", fmt(rec.data.dia) + " in " + ((MEDIA[rec.data.medium] || {}).label || "").toLowerCase()));
+      }
+      tip.style.left = position.x + "px";
+      tip.style.top = position.y + "px";
+      tip.hidden = false;
+    });
+  }, C.ScreenSpaceEventType.MOUSE_MOVE);
+  handler.setInputAction(function (click) {
+    var rec = pickRecord(click.position);
+    if (rec) showCard(rec); else hideCard();
+  }, C.ScreenSpaceEventType.LEFT_CLICK);
+  scene.canvas.addEventListener("mouseleave", function () { tip.hidden = true; });
+
+  // ── Loading overlay ───────────────────────────────────────────────────────
+  var hidden = false;
+  function hideStatus() {
+    if (hidden) return;
+    hidden = true;
+    statusEl.classList.add("is-hidden");
+    window.setTimeout(function () { statusEl.hidden = true; }, 400);
+  }
+  globe.tileLoadProgressEvent.addEventListener(function (queued) { if (queued === 0) hideStatus(); });
+  window.setTimeout(hideStatus, 6000);
+  scene.requestRender();
+})();
+</script>
+</body>
+</html>
