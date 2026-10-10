@@ -15,7 +15,7 @@ pinned: false
 
 [![Live Demo](https://img.shields.io/badge/Live%20Demo-HuggingFace%20Spaces-orange)](https://huggingface.co/spaces/TobGud/power-trader-portfolio)
 [![Python](https://img.shields.io/badge/Python-3.11%2B-blue)](https://www.python.org/)
-![Pages](https://img.shields.io/badge/7%20pages-31%20analytical%20modules-lightgrey)
+![Pages](https://img.shields.io/badge/7%20pages-35%20analytical%20modules-lightgrey)
 ![Sources](https://img.shields.io/badge/9%20data%20sources-live%20feeds-green)
 
 The platform integrates live fundamental data from ENTSO-E Transparency, GIE AGSI+/ALSI, Nord Pool, and ICE/Yahoo Finance into a unified analytical environment covering storage balances, forward curve dynamics, cross-commodity price transmission, machine learning regime detection, portfolio risk simulation, and battery storage project economics. All models are implemented from scratch in Python; no third-party signal providers or data vendors are used beyond the public API layer. The architecture escalates from raw market observation in Layer 1 to actionable composite signals in Layer 5, following the analytical hierarchy a physical desk would apply before taking a position.
@@ -130,7 +130,7 @@ The visual language lives in [utils/theme.py](utils/theme.py): design tokens (da
                     │  DATA LAYER                                          │
                     │  ENTSO-E A44/A65/A69/A75/B09/B16/B19/B31            │
                     │  GIE AGSI+ · GIE ALSI · Nord Pool · ICE/Yahoo        │
-                    │  Fraunhofer ISE · FinBERT RSS                        │
+                    │  Fraunhofer ISE (incl. SMARD data) · FinBERT RSS     │
                     └───────────────────────┬─────────────────────────────┘
                                             │
           ┌─────────────────────────────────▼──────────────────────────────────┐
@@ -138,6 +138,8 @@ The visual language lives in [utils/theme.py](utils/theme.py): design tokens (da
           │  EU/DE gas storage · LNG sendout · TTF spot + forward strip        │
           │  Nord Pool day-ahead · Norwegian hydro · Cross-border flows        │
           │  German solar duck curve · Coal dispatch (fuel switching)           │
+          │  FI minus IT-North day-ahead spread (Nordic vs gas-marginal Italy) │
+          │  TTF minus JKM card on the LNG send-out tab                        │
           └─────────────────────────────────┬──────────────────────────────────┘
                                             │
           ┌─────────────────────────────────▼──────────────────────────────────┐
@@ -147,18 +149,21 @@ The visual language lives in [utils/theme.py](utils/theme.py): design tokens (da
           │  Nordic decomposition · Wind forecast error · Granger causality    │
           │  Storage-price OLS · Hydro lead/lag · Seasonal norm                │
           │  NO2/NL cointegration · Multi-pair scanner · Forward curve PCA     │
+          │  Rolling cointegration stability heatmap (180-day windows)         │
           └─────────────────────────────────┬──────────────────────────────────┘
                                             │
           ┌─────────────────────────────────▼──────────────────────────────────┐
-          │  Layer 3: Geopolitical and Macro Signals  (4 panels)               │
-          │  TTF + 19-event geopolitical timeline · EU supply mix 2020-2026   │
+          │  Layer 3: Geopolitical and Macro Signals  (5 panels)               │
+          │  TTF + 28-event geopolitical timeline · EU supply mix 2020-2026   │
           │  Gas-fertiliser-food spillover chain · 7x7 cross-commodity grid   │
+          │  TTF vs JKM inter-basin LNG spread (EUR/MWh, 1-year percentile)    │
           └─────────────────────────────────┬──────────────────────────────────┘
                                             │
           ┌─────────────────────────────────▼──────────────────────────────────┐
           │  Layer 4: Machine Learning  (3 models)                             │
           │  PyTorch LSTM forecaster (64-32 units, honest baseline check)      │
           │  4-state Gaussian HMM regime classifier                            │
+          │  Realised-volatility overlay: vol by regime, transition-spike test │
           │  FinBERT news sentiment + Granger causality vs TTF returns         │
           └─────────────────────────────────┬──────────────────────────────────┘
                                             │
@@ -188,7 +193,8 @@ The layered model reflects how a physical desk processes information: raw observ
 | Gas Storage Monitor | Layer 1 | GIE AGSI+ EU/DE fill vs 5-year seasonal band (min/mean/max/P10/P90) | [data/gas_storage.py](data/gas_storage.py) |
 | LNG Terminal Sendout | Layer 1 | GIE ALSI daily sendout aggregation across Zeebrugge, Gate, South Hook, Dunkirk; WoW change alert at -15% | [data/lng_terminals.py](data/lng_terminals.py) |
 | TTF Spot + Forward Strip | Layer 1 | ICE TTF front-month via Yahoo Finance; MA30/MA90; synthetic M+1-M+18 strip from historical seasonal index | [data/prices.py](data/prices.py), [data/forward_curve.py](data/forward_curve.py) |
-| Nordic Day-Ahead Prices | Layer 1 | Nord Pool public API; NO1/NO2/SE3/NL/FI; 365-day history; NL-NO2 spread; Norwegian zonal (NO1-NO5 vs SYS) | [data/spot_prices.py](data/spot_prices.py) |
+| Nordic Day-Ahead Prices | Layer 1 | Nord Pool public API; NO1/NO2/SE3/NL/FI; 365-day request (the public endpoint returns roughly the latest two months); NL-NO2 spread; Norwegian zonal (NO1-NO5 vs SYS) | [data/spot_prices.py](data/spot_prices.py) |
+| FI minus IT-North Spread | Layer 1 | Daily FI minus IT-North day-ahead spread per CET delivery day (15-minute and hourly prices averaged, coverage-checked, DST-aware); KPIs: latest, 30-day average, z-score vs trailing 1-year; two-panel 1-year chart; IT-North from energy-charts.info (SMARD, CC BY 4.0) with ENTSO-E A44 fallback; FI from Nord Pool, extended with ENTSO-E A44 | [data/italy_prices.py](data/italy_prices.py), [models/fi_it_spread.py](models/fi_it_spread.py) |
 | Norwegian Hydro Reservoirs | Layer 1 | ENTSO-E B31 weekly aggregate for Norway (EIC: 10YNO-0--------C); P10/P50/P90 percentile bands | [data/hydro.py](data/hydro.py) |
 | Nordic Cross-Border Flows | Layer 1 | ENTSO-E B09/B10 physical flows: NordLink (1,400 MW), NorNed (700 MW), NSN (1,400 MW), Skagerrak (1,700 MW); daily utilisation % | [data/power_flows.py](data/power_flows.py) |
 | German Solar Duck Curve | Layer 1 | ENTSO-E B16 (primary); Fraunhofer ISE energy-charts.info (fallback); hourly mean over 14-day window; cannibalisation signal | [data/solar.py](data/solar.py) |
@@ -205,14 +211,17 @@ The layered model reflects how a physical desk processes information: raw observ
 | Hydro Lead/Lag | Layer 2 | Pearson cross-correlation between hydro_pct and NO2 day-ahead at lags 0-21 days; peak predictive lag annotated | [pages/2_Quant_Analysis.py](pages/2_Quant_Analysis.py) |
 | TTF Seasonal Norm Tracker | Layer 2 | 7-year historical percentile bands (P10/P25/P50/P75/P90) per day-of-year; current position vs historical distribution | [pages/2_Quant_Analysis.py](pages/2_Quant_Analysis.py) |
 | NO2/NL Cointegration | Layer 2 | Engle-Granger two-step test; OLS hedge ratio; Ornstein-Uhlenbeck half-life via ADF on residuals; expanding-window z-score (no look-ahead); trade backtest with hit rate and average holding period | [pages/2_Quant_Analysis.py](pages/2_Quant_Analysis.py) |
-| Multi-Pair Cointegration Scanner | Layer 2 | Engle-Granger across all pairs in 6-asset universe (NO2, NL, TTF, DE, FR, NBP); ranked by p-value; OU half-life; real-time z-score signal; signal frequency and backtest hit rate | [pages/2_Quant_Analysis.py](pages/2_Quant_Analysis.py) |
+| Multi-Pair Cointegration Scanner | Layer 2 | Engle-Granger across all pairs in 6-asset universe (NO2, NL, TTF, DE, FR, NBP); ranked by p-value; OU half-life; real-time z-score signal; signal frequency and backtest hit rate; rolling-window Stability column | [pages/2_Quant_Analysis.py](pages/2_Quant_Analysis.py) |
+| Rolling Cointegration Stability | Layer 2 | Scanner's Engle-Granger test (same statsmodels settings, both directions, lower p-value) re-run on rolling 180-observation windows with ends every 21 trading days on a common date grid; pairs x window-end heatmap of p-values with a colour break at 0.05; per-pair share of cointegrated windows, current streak and last break date; Persistent / Episodic / Rare / Absent labels feed the scanner ranking and signal commentary | [models/coint_stability.py](models/coint_stability.py) |
 | Forward Curve PCA | Layer 2 | Synthetic M+1-M+18 panel via F(t,m) = spot × seasonal_m × (1 + α × storage_z × exp(-m/τ)); sklearn PCA on de-meaned panel; expanding z-score on PC1/PC2/PC3; calendar-spread (PC2) and butterfly (PC3) signals | Litterman and Scheinkman (1991); [pages/2_Quant_Analysis.py](pages/2_Quant_Analysis.py) |
-| Geopolitical Event Overlay | Layer 3 | 19 annotated supply disruptions (2022-2026): Hormuz cluster, Ras Laffan strikes, Norwegian outages, Russia cut-off, US LNG tariff threat; 5/20/60-day TTF momentum ribbon | [data/events.py](data/events.py) |
+| Geopolitical Event Overlay | Layer 3 | 28 annotated events (2022-2026): Hormuz cluster, Ras Laffan strikes, Norwegian outages, Russia cut-off, US LNG tariff threat; entries from 20 April 2026 onwards (EU ban on short-term Russian LNG, US-Iran MoU, Hormuz re-closure, June heatwave, Commission demand-curb letter) each carry a source URL; 5/20/60-day TTF momentum ribbon | [data/events.py](data/events.py), [data/events.json](data/events.json) |
 | EU Gas Supply Mix | Layer 3 | Annual supply-source breakdown 2020-2026: Russia pipeline, Norwegian pipeline, LNG (US/Qatari/other), Algerian, domestic; structural shift visualisation | [pages/3_Macro_Signals.py](pages/3_Macro_Signals.py) |
 | Cross-Commodity Spillover | Layer 3 | TTF to European fertiliser (Haber-Bosch gas intensity: 1,100 m³/tonne urea equivalent) to global wheat/corn; copper-power industrial linkage; aluminium smelter stress indicator | [pages/3_Macro_Signals.py](pages/3_Macro_Signals.py) |
 | 7x7 Correlation Grid | Layer 3 | 90-day rolling Pearson on daily log-returns across TTF, Brent, API2 coal, EUA, copper, aluminium, BDI; lead-lag sweep at τ ∈ [-10, +10] days; top 15 pairs by |ρ| | [pages/3_Macro_Signals.py](pages/3_Macro_Signals.py) |
+| TTF vs JKM LNG Spread | Layer 3 (card in Layer 1) | JKM front month (USD/MMBtu) converted to EUR/MWh as JKM / EURUSD / 0.293071 (EURUSD matched as of each settlement, at most 3 days old); TTF minus JKM on common settlement dates (no interpolation); rolling 1-year percentile (mid-rank, no look-ahead); KPI row, three-panel chart, computed commentary on cargo competition between basins | [models/lng_arbitrage.py](models/lng_arbitrage.py), [data/lng_prices.py](data/lng_prices.py) |
 | LSTM Price Forecaster | Layer 4 | 2-layer PyTorch LSTM (64 → 32 units, dropout 0.2); feature matrix: NO2/NL/TTF/spread/volatility/hydro/calendar; expanding-window train split; honest baseline check (MAE vs persistence) | [models/lstm_model.py](models/lstm_model.py) |
 | HMM Regime Classifier | Layer 4 | 4-state Gaussian HMM (hmmlearn); states: hydro-driven, gas-driven, renewables-driven, geopolitical stress; Viterbi decoding; 30-day regime history | [models/hmm_model.py](models/hmm_model.py) |
+| HMM Realised-Volatility Overlay | Layer 4 | Rolling 30-trading-day realised volatility of NO2 day-ahead (std of daily EUR/MWh changes; log variant with non-positive prices guarded) on a secondary axis over the regime timeline; mean/median volatility per regime; share of regime transitions within ±5 trading days of a volatility spike (above the 90th percentile) against a chance baseline, with an exact circular-shift p-value | [models/regime_volatility.py](models/regime_volatility.py) |
 | FinBERT Sentiment | Layer 4 | ProsusAI/finbert (HuggingFace); energy-filtered RSS headlines from BBC Business, Guardian Energy, LNG World News, Energy Monitor; daily net sentiment (positive - negative); 60-day rolling history on persistent disk | [data/sentiment.py](data/sentiment.py) |
 | Mispricing Dashboard | Layer 5 | 8-signal composite scorecard; each signal: current value, historical percentile (expanding window, 2-7 year history), Bullish/Bearish/Neutral badge, High/Medium/Low confidence; sorted by extremity from median | [pages/5_Mispricing_Dashboard.py](pages/5_Mispricing_Dashboard.py) |
 | Risk Dashboard (D4) | Page 6 | 6-signal backtestable portfolio; non-parametric 1,000-path bootstrap for 95%/99% 1-day VaR and Expected Shortfall; 4 named stress scenarios; 30-day rolling signal correlation matrix | [pages/6_Risk_Dashboard.py](pages/6_Risk_Dashboard.py) |
@@ -226,21 +235,23 @@ The layered model reflects how a physical desk processes information: raw observ
 |--------|----------|-----------------|--------------|
 | GIE AGSI+ | REST API (agsi.gie.eu) | Daily | EU and German gas storage fill %, working volume, seasonal bands |
 | GIE ALSI | REST API (alsi.gie.eu) | Daily | LNG terminal sendout: Zeebrugge, Gate, South Hook, Dunkirk; WoW alert |
-| ENTSO-E A44 | Transparency Platform (entsoe-py) | Daily | Day-ahead prices: NO2, NL, DE, FR for regression and cointegration |
+| ENTSO-E A44 | Transparency Platform (entsoe-py) | Daily | Day-ahead prices: NO2, NL, DE, FR for regression and cointegration; FI history and IT-North fallback for the FI minus IT-North spread |
 | ENTSO-E A65 | Transparency Platform (entsoe-py) | Hourly | German total load for live merit order demand input |
 | ENTSO-E A69 | Transparency Platform (entsoe-py) | Day-ahead | Wind generation forecasts for forecast error tracker |
 | ENTSO-E A75 | Transparency Platform (entsoe-py) | Daily | German actual generation by fuel: hard coal, lignite, solar |
 | ENTSO-E B09/B10 | Transparency Platform (entsoe-py) | Hourly | Physical cross-border flows: NordLink, NorNed, NSN, Skagerrak |
 | ENTSO-E B16/B18/B19 | Transparency Platform (entsoe-py) | Hourly | Actual wind and solar generation (Germany); fallback Fraunhofer ISE |
 | ENTSO-E B31 | Transparency Platform (entsoe-py) | Weekly | Norwegian hydro reservoir levels (EIC: 10YNO-0--------C) |
-| Nord Pool Data Portal | REST API (nordpoolgroup.com) | Daily | Day-ahead prices: NO1/NO2/SE3/NL/FI + Norwegian zonal NO1-NO5/SYS |
+| Nord Pool Data Portal | REST API (nordpoolgroup.com) | Daily | Day-ahead prices: NO1/NO2/SE3/NL/FI + Norwegian zonal NO1-NO5/SYS; the public endpoint serves roughly the latest two months of delivery days |
 | ICE/Yahoo Finance | yfinance (TTF=F, BZ=F, CO2.L, NBP=F) | Daily | TTF spot, Brent crude, EU carbon (EUA), NBP gas |
+| Yahoo Finance | yfinance (JKM=F, EURUSD=X) | Daily | Platts JKM LNG front month (USD/MMBtu) and EUR/USD for the TTF vs JKM spread |
 | Yahoo Finance | yfinance (HG=F, ALI=F, BDRY) | Daily | LME copper proxy, LME aluminium proxy, Baltic Dry (BDRY ETF) |
 | Fraunhofer ISE | energy-charts.info REST API | Hourly | German solar generation and DE-LU price fallback (no key required) |
+| Bundesnetzagentur SMARD (via energy-charts.info) | energy-charts.info price API (bzn=IT-North) | 15-minute (hourly before 1 Oct 2025) | IT-North day-ahead prices for the FI minus IT-North spread; CC BY 4.0, attribution: Bundesnetzagentur \| SMARD.de (no key required) |
 | ProsusAI FinBERT | HuggingFace Transformers | On-demand | Energy headline classification: positive/negative/neutral |
 | RSS News Feeds | BBC Business, Guardian Energy, LNG World News, Energy Monitor | 6-hourly cache | Raw headline text for FinBERT pipeline |
 
-**Notes on data availability.** Gas storage (GIE), ENTSO-E flows, hydro, wind, solar, and generation all require free API keys. The platform degrades gracefully without them: all Nord Pool spot and yfinance data loads without credentials, covering approximately 12 of the 31 modules. API2 Rotterdam coal futures (formerly MTF=F on Yahoo Finance) are not currently available via the free Yahoo Finance tier; the 7x7 correlation grid displays a "Coal unavailable" caption when the ticker returns no data.
+**Notes on data availability.** Gas storage (GIE), ENTSO-E flows, hydro, wind, solar, and generation all require free API keys. The platform degrades gracefully without them: all Nord Pool spot, energy-charts.info (IT-North) and yfinance data loads without credentials, covering approximately 14 of the 35 modules. The public Nord Pool endpoint only serves roughly the latest two months of delivery days (older dates return HTTP 401), so keyless histories built on it (the FI leg of the FI minus IT-North spread, and the feature matrix fallback used by Layers 2 and 4) are limited to that window until `ENTSOE_API_KEY` is set. API2 Rotterdam coal futures (formerly MTF=F on Yahoo Finance) are not currently available via the free Yahoo Finance tier; the 7x7 correlation grid displays a "Coal unavailable" caption when the ticker returns no data.
 
 ---
 
@@ -276,6 +287,14 @@ For pairs with p-value below 0.05, the model computes: (1) the OLS hedge ratio �
 
 Historical performance is evaluated via a simple signal backtest: enter at |z| > threshold, hold for a maximum of 3× the OU half-life, and exit at |z| < 0.5 or max holding period. Hit rate and average days to convergence are reported alongside the current signal. This follows the spread trading framework described in Geman (2005) and the practical OU parameterisation from Pole (2007).
 
+A full-sample p-value cannot distinguish a persistent equilibrium from one that held only in part of the sample. The Rolling Cointegration Stability panel therefore re-runs the same test on rolling 180-observation windows whose end dates are spaced 21 trading days apart and anchored on the latest observation. Each pair receives the share of windows with p < 0.05, the current streak of windows sharing the latest status, and the date of the last break (a cointegrated window followed by a non-cointegrated one). Shares of at least 75% are labelled Persistent and at least 25% Episodic; the label appears in the ranking table, and the signal commentary flags lower confidence when an actionable z-score sits on a pair whose cointegration is not persistent. Shorter windows have less test power and strongly mean-reverting power prices reject the unit-root null easily, so shares are best read comparatively across pairs.
+
+### HMM Regime Volatility Overlay
+
+The Layer 4 overlay asks whether the HMM's regime changes coincide with volatility shocks in NO2 day-ahead prices. Realised volatility is the rolling 30-trading-day standard deviation of daily price changes in EUR/MWh. Absolute rather than log changes are used because Nordic day-ahead prices can approach zero or turn negative, which makes log changes undefined or explosive, and because the HMM's own volatility input is measured in EUR/MWh. A spike is a day with realised volatility above its in-sample 90th percentile; a transition is a day whose Viterbi-decoded regime differs from the previous day's.
+
+The observed statistic is the share of transitions with a spike within ±5 trading days. The chance baseline is the share of all scored days with that property, i.e. the probability that a randomly placed transition would qualify. Significance comes from an exact one-sided circular-shift test: the transition sequence is rotated against the fixed spike sequence by every lag of at least 11 days, which preserves the clustering of both sequences, and p = (1 + rotations matching or beating the observed count) / (1 + rotations). Because the HMM observation vector already contains a 5-day volatility z-score, the test concerns timing rather than independence.
+
 ### BESS Multi-Market Revenue Stack
 
 The BESS Optimiser models Nordic battery economics as a multi-market revenue stack. DAM arbitrage revenue is estimated from the historical NO2 spread distribution: the rolling 5-day price range is computed and the top-20% mean of that distribution, scaled by configured efficiency and dispatch hours, gives an achievable round-trip spread. Only 20% of days are assumed viable for profitable dispatch, reflecting both price level requirements and grid constraints.
@@ -306,7 +325,7 @@ A full P0/P1/P2/P3 pre-deployment audit was conducted and documented in [files/A
 
 ## Running Locally
 
-The platform requires Python 3.11+ and Streamlit 1.56 or later (top navigation, horizontal containers and the theme options in `.streamlit/config.toml`). API keys for GIE AGSI+ (agsi.gie.eu) and ENTSO-E Transparency (transparency.entsoe.eu) are free to register and unlock the full feature set. Without keys, approximately 12 of the 31 modules load using public data only.
+The platform requires Python 3.11+ and Streamlit 1.56 or later (top navigation, horizontal containers and the theme options in `.streamlit/config.toml`). API keys for GIE AGSI+ (agsi.gie.eu) and ENTSO-E Transparency (transparency.entsoe.eu) are free to register and unlock the full feature set. Without keys, approximately 14 of the 35 modules load using public data only.
 
 ```bash
 git clone https://github.com/Gudbjerg/POWER-TRADER-PORTFOLIO.git
@@ -324,6 +343,16 @@ streamlit run app.py
 `app.py` is the only entry point; open the pages through the top navigation or directly by URL path (for example `http://localhost:8501/Live_Monitor`).
 
 A [Dockerfile](Dockerfile) and [render.yaml](render.yaml) are included for self-hosted or Render deployment. The image builds with CPU-only PyTorch and expects a persistent disk mounted at `/mnt/data` for the FinBERT sentiment history file.
+
+### Tests
+
+```bash
+pip install pytest
+pytest -m "not network"   # unit tests for the pure model and data helpers (offline, deterministic)
+pytest                    # adds Streamlit AppTest smoke tests for pages 1 to 4 (live data, several minutes)
+```
+
+The smoke tests assert that each changed page runs end to end without raising; missing ENTSO-E or GIE keys are treated as an expected, gracefully degraded state.
 
 ---
 
@@ -359,4 +388,4 @@ Pole, A. (2007). *Statistical Arbitrage: Algorithmic Trading Insights and Techni
 
 ## Licence
 
-MIT License. The code is shared for portfolio review purposes. Data fetched at runtime remains subject to the terms of the original providers: ENTSO-E Transparency Platform, Gas Infrastructure Europe (GIE), Nord Pool Group, and Yahoo Finance. No data is redistributed or stored beyond ephemeral runtime caching.
+MIT License. The code is shared for portfolio review purposes. Data fetched at runtime remains subject to the terms of the original providers: ENTSO-E Transparency Platform, Gas Infrastructure Europe (GIE), Nord Pool Group, Yahoo Finance, and Bundesnetzagentur | SMARD.de (IT-North prices via energy-charts.info, CC BY 4.0). No data is redistributed or stored beyond ephemeral runtime caching.

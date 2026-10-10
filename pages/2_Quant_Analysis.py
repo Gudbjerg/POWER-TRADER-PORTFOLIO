@@ -285,12 +285,12 @@ def _run_coint_scanner(price_df: pd.DataFrame) -> list[dict]:
                 _pval, _dep, _indep, _dn, _in_ = _pba, _yb, _ya, _b, _a
             _X_sc    = _sm_sc.add_constant(_indep)
             _ols_sc  = _sm_sc.OLS(_dep, _X_sc).fit()
-            _beta_sc = float(_ols_sc.params.iloc[1])
+            _beta_sc = float(np.asarray(_ols_sc.params)[1])   # params is an ndarray for ndarray inputs
             _resid_sc = np.asarray(_ols_sc.resid, dtype=float).copy()
             _rl  = _resid_sc[:-1]
             _rd  = np.diff(_resid_sc)
             _ou  = _sm_sc.OLS(_rd, _sm_sc.add_constant(_rl)).fit()
-            _lam = float(_ou.params.iloc[1])
+            _lam = float(np.asarray(_ou.params)[1])
             _hl  = (-np.log(2) / _lam) if _lam < 0 else float("inf")
             _rs  = pd.Series(_resid_sc, dtype=float)
             _em  = _rs.expanding(min_periods=30).mean()
@@ -3177,7 +3177,7 @@ with tab_coint:
                 _ci_resid_d   = np.diff(_ci_resid)
                 _ci_ou_X = _sm_ci.add_constant(_ci_resid_lag)
                 _ci_ou   = _sm_ci.OLS(_ci_resid_d, _ci_ou_X).fit()
-                _ci_lambda = float(_ci_ou.params.iloc[1])
+                _ci_lambda = float(np.asarray(_ci_ou.params)[1])   # params is an ndarray for ndarray inputs
                 _ci_halflife = (-np.log(2) / _ci_lambda) if _ci_lambda < 0 else float("inf")
 
                 # ── Spread z-score (expanding window — no look-ahead bias) ───
@@ -3505,6 +3505,55 @@ with tab_scanner:
 
             st.divider()
 
+            # ── D2_alt: rolling cointegration stability (computed before the ranked table) ──
+            # Pure functions in models/coint_stability.py; cached per price frame and settings.
+            from models.coint_stability import (
+                window_end_dates as _stab_ends_fn,
+                rolling_eg_pvalues as _stab_pvals_fn,
+                stability_summary as _stab_summary_fn,
+            )
+            from config.settings import (
+                COINT_ROLL_WINDOW as _STAB_W,
+                COINT_ROLL_STEP as _STAB_STEP,
+                COINT_ROLL_ALPHA as _STAB_ALPHA,
+                COINT_STABLE_SHARE as _STAB_HI,
+                COINT_EPISODIC_SHARE as _STAB_LO,
+            )
+
+            @st.cache_data(ttl=3600, max_entries=4, show_spinner=False)
+            def _run_coint_stability(price_df: pd.DataFrame, pairs: tuple, window: int, step: int) -> dict:
+                """Rolling Engle-Granger p-values for every scanner pair on a common window-end grid."""
+                _ends = _stab_ends_fn(price_df["date"], window=window, step=step)
+                return {
+                    _lbl: _stab_pvals_fn(price_df["date"], price_df[_a], price_df[_b], _ends, window=window)
+                    for _lbl, _a, _b in pairs
+                }
+
+            _stab_pairs = tuple((_r["pair"], _r["a"], _r["b"]) for _r in _scan_res)
+            _stab_err = None
+            _stab_t0 = _time.perf_counter()
+            try:
+                with st.spinner(f"Running rolling Engle-Granger windows ({_STAB_W} obs, every {_STAB_STEP} days)…"):
+                    _stab_pv = _run_coint_stability(_scan_px, _stab_pairs, _STAB_W, _STAB_STEP)
+            except Exception as _stab_ex:
+                _stab_pv, _stab_err = {}, f"{type(_stab_ex).__name__}: {_stab_ex}"
+            _stab_secs = _time.perf_counter() - _stab_t0
+            _stab_map = {_k: _stab_summary_fn(_v, alpha=_STAB_ALPHA) for _k, _v in _stab_pv.items()}
+            _STAB_COLORS = {
+                "Persistent": "#3fb950", "Episodic": "#d4ac3a", "Rare": "#8b949e",
+                "Absent": "#6e7681", "n/a": "#484f58",
+            }
+
+            def _stab_cell(_pair_label: str) -> str:
+                _s = _stab_map.get(_pair_label)
+                if not _s or _s["n_windows"] == 0:
+                    return "<span style='color:#484f58'>n/a</span>"
+                return (
+                    f"<span style='color:{_STAB_COLORS.get(_s['label'], '#8b949e')};font-weight:600'>"
+                    f"{_s['share']:.0%}</span> <span style='color:#8b949e'>{_s['label']}</span>"
+                )
+            # ── end D2_alt computation ────────────────────────────────────────────
+
             # ── Ranked table ──────────────────────────────────────────────────────
             st.markdown("#### All Pairs — Ranked by Cointegration Strength")
 
@@ -3531,6 +3580,7 @@ with tab_scanner:
                     f"<td style='padding:5px 10px;text-align:right;color:#8b949e'>{_hl_s}</td>"
                     f"<td style='padding:5px 10px;text-align:right;color:{_zc};font-weight:600'>{_r['z_now']:+.2f}σ</td>"
                     f"<td style='padding:5px 10px;text-align:right;color:#8b949e'>{_hr_s}</td>"
+                    f"<td style='padding:5px 10px;text-align:right'>{_stab_cell(_r['pair'])}</td>"
                     f"<td style='padding:5px 10px'>{_STATUS_BADGE.get(_r['status'], _r['status'])}</td>"
                     f"</tr>"
                 )
@@ -3544,6 +3594,7 @@ with tab_scanner:
                 "<th style='padding:6px 10px;text-align:right'>OU Half-life</th>"
                 "<th style='padding:6px 10px;text-align:right'>z now</th>"
                 "<th style='padding:6px 10px;text-align:right'>±1σ hit rate</th>"
+                "<th style='padding:6px 10px;text-align:right'>Stability</th>"
                 "<th style='padding:6px 10px'>Status</th>"
                 "</tr></thead><tbody>"
             )
@@ -3551,6 +3602,144 @@ with tab_scanner:
                 _tbl_header + "".join(_tbl_rows_html) + "</tbody></table>",
                 unsafe_allow_html=True,
             )
+
+            # ── D2_alt: stability heatmap and per-pair table ──────────────────────
+            st.caption(
+                f"Stability: share of rolling {_STAB_W}-observation windows (window ends every {_STAB_STEP} "
+                f"trading days) in which the Engle-Granger p-value is below {_STAB_ALPHA}. Persistent ≥ "
+                f"{_STAB_HI:.0%}, Episodic ≥ {_STAB_LO:.0%}, Rare above 0%, Absent at 0%."
+            )
+            st.markdown("<div style='margin-top:24px'></div>", unsafe_allow_html=True)
+            st.markdown("#### Rolling Cointegration Stability")
+            st.caption(
+                f"Engle-Granger p-values on rolling {_STAB_W}-observation windows for every scanner pair "
+                "(rows ranked as in the table above). Blue cells: cointegrated at the 5% level; red cells: "
+                "not cointegrated. The colour scale breaks at p = 0.05."
+            )
+            _stab_ok_pairs = [
+                _r["pair"] for _r in _scan_res
+                if _stab_map.get(_r["pair"], {}).get("n_windows", 0) > 0
+            ]
+            if _stab_err:
+                st.caption(f"Rolling stability unavailable: {_stab_err}")
+            elif not _stab_ok_pairs:
+                st.caption(
+                    f"Rolling stability unavailable: no pair has {_STAB_W} aligned observations "
+                    f"(longest common window: {len(_scan_px):,} days)."
+                )
+            else:
+                _stab_ends_all = sorted({
+                    _e for _p in _stab_ok_pairs for _e in _stab_pv[_p]["window_end"]
+                })
+                _stab_z, _stab_txt = [], []
+                for _p in _stab_ok_pairs:
+                    _ser = _stab_pv[_p].set_index("window_end")["p_value"].reindex(_stab_ends_all)
+                    _stab_z.append([
+                        float(np.log10(max(_v, 1e-3))) if np.isfinite(_v) else None for _v in _ser
+                    ])
+                    _stab_txt.append([f"{_v:.3f}" if np.isfinite(_v) else "n/a" for _v in _ser])
+                _stab_lo_log = -3.0
+                _stab_mid = (np.log10(_STAB_ALPHA) - _stab_lo_log) / (0.0 - _stab_lo_log)
+                _stab_ticks = [0.001, 0.01, _STAB_ALPHA, 0.2, 1.0]
+                _fig_stab = go.Figure(go.Heatmap(
+                    z=_stab_z,
+                    x=_stab_ends_all,
+                    y=_stab_ok_pairs,
+                    text=_stab_txt,
+                    zmin=_stab_lo_log, zmax=0.0,
+                    colorscale=[
+                        [0.0, "#2166ac"],
+                        [_stab_mid, "#92c5de"],
+                        [_stab_mid, "#f4a582"],
+                        [1.0, "#b2182b"],
+                    ],
+                    xgap=1, ygap=1,
+                    hoverongaps=False,
+                    colorbar=dict(
+                        title="E-G p",
+                        tickvals=[float(np.log10(_t)) for _t in _stab_ticks],
+                        ticktext=[f"{_t:g}" for _t in _stab_ticks],
+                        thickness=12, len=0.9, tickfont=dict(size=10),
+                    ),
+                    hovertemplate="%{y}<br>window ending %{x|%d %b %Y}<br>p = %{text}<extra></extra>",
+                ))
+                _fig_stab.update_layout(
+                    template="plotly_dark",
+                    paper_bgcolor="#0d1117", plot_bgcolor="#161b22",
+                    font=dict(color="#c9d1d9", size=11),
+                    margin=dict(l=10, r=10, t=10, b=30),
+                    height=max(240, 34 * len(_stab_ok_pairs) + 90),
+                    xaxis=dict(title=None, showgrid=False),
+                    yaxis=dict(title=None, autorange="reversed", tickfont=dict(size=11)),
+                )
+                st.plotly_chart(_fig_stab, use_container_width=True, key="sc_stability_heatmap")
+
+                _stab_rows = []
+                for _p in _stab_ok_pairs:
+                    _s = _stab_map[_p]
+                    _p_last = float(_stab_pv[_p]["p_value"].dropna().iloc[-1])
+                    _cur_c = "#3fb950" if _s["current_coint"] else "#f85149"
+                    _cur_t = "Cointegrated" if _s["current_coint"] else "Not cointegrated"
+                    _brk = _s["last_break"].strftime("%Y-%m-%d") if _s["last_break"] is not None else "none"
+                    _stab_rows.append(
+                        "<tr style='border-bottom:1px solid #21262d'>"
+                        f"<td style='padding:5px 10px;font-weight:600;color:#e6edf3'>{_p}</td>"
+                        f"<td style='padding:5px 10px;text-align:right;color:#8b949e'>{_s['n_windows']}</td>"
+                        f"<td style='padding:5px 10px;text-align:right;color:#8b949e'>{_s['n_coint']} ({_s['share']:.0%})</td>"
+                        f"<td style='padding:5px 10px;color:{_cur_c}'>{_cur_t} (p = {_p_last:.3f})</td>"
+                        f"<td style='padding:5px 10px;text-align:right;color:#8b949e'>{_s['current_streak']} "
+                        f"window{'s' if _s['current_streak'] != 1 else ''}</td>"
+                        f"<td style='padding:5px 10px;text-align:right;color:#8b949e'>{_brk}</td>"
+                        f"<td style='padding:5px 10px;font-weight:600;color:{_STAB_COLORS.get(_s['label'], '#8b949e')}'>{_s['label']}</td>"
+                        "</tr>"
+                    )
+                st.markdown(
+                    "<table style='width:100%;border-collapse:collapse;font-size:0.85rem;margin-top:4px'>"
+                    "<thead><tr style='border-bottom:2px solid #30363d;color:#8b949e;text-align:left'>"
+                    "<th style='padding:6px 10px'>Pair</th>"
+                    "<th style='padding:6px 10px;text-align:right'>Windows</th>"
+                    f"<th style='padding:6px 10px;text-align:right'>p &lt; {_STAB_ALPHA}</th>"
+                    "<th style='padding:6px 10px'>Latest window</th>"
+                    "<th style='padding:6px 10px;text-align:right'>Current streak</th>"
+                    "<th style='padding:6px 10px;text-align:right'>Last break</th>"
+                    "<th style='padding:6px 10px'>Stability</th>"
+                    "</tr></thead><tbody>" + "".join(_stab_rows) + "</tbody></table>",
+                    unsafe_allow_html=True,
+                )
+                st.caption(
+                    f"{len(_stab_ok_pairs)} pairs × {len(_stab_ends_all)} window ends; "
+                    f"computed in {_stab_secs:.1f}s (cached thereafter). Last break: end date of the latest "
+                    "window in which a previously cointegrated pair stopped being cointegrated."
+                )
+
+                with st.expander("Rolling stability: methodology", expanded=False):
+                    st.markdown(f"""
+                    **Why rolling windows:** a full-sample Engle-Granger test can report cointegration for a
+                    pair whose relationship held only in part of the sample (for example before a structural
+                    break in interconnector flows or the gas-power link). Re-running the test on rolling
+                    windows shows whether the equilibrium is persistent or episodic.
+
+                    **Test settings:** identical to the scanner: `statsmodels.tsa.stattools.coint` with its
+                    defaults (constant term, augmented Engle-Granger, ADF lag length chosen by AIC), run in both
+                    regression directions, keeping the lower p-value.
+
+                    **Windows:** each window holds the last {_STAB_W} observations of the pair's own aligned
+                    sample up to its end date. End dates come from the scanner's common date grid, anchored on
+                    the latest date and spaced {_STAB_STEP} trading days apart, so all pairs share one axis.
+
+                    **Statistics:** share of windows with p < {_STAB_ALPHA}; current streak = consecutive latest
+                    windows with the same status as the latest; last break = end date of the latest window that
+                    turned from cointegrated to not cointegrated. Labels: Persistent ≥ {_STAB_HI:.0%},
+                    Episodic ≥ {_STAB_LO:.0%}, Rare above 0%, Absent at 0%.
+
+                    **Caveats:** shorter windows have less test power than the full sample, so shares understate
+                    persistence and are best compared across pairs. Overlapping windows are not independent.
+                    Choosing the better of the two directions in every window, as the scanner does, makes each
+                    window's p-value somewhat optimistic. Daily day-ahead power prices mean-revert strongly; when a
+                    series is close to stationary on its own, the test rejects easily, so a high share for a power
+                    pair partly reflects that mean reversion rather than a tradable long-run equilibrium.
+                    """)
+            # ── end D2_alt heatmap and table ──────────────────────────────────────
 
             # ── Pair detail charts ────────────────────────────────────────────────
             _coint_pairs = [r for r in _scan_res if r["pval"] < 0.05]
@@ -3671,6 +3860,28 @@ with tab_scanner:
                         )
                         st.plotly_chart(_dfig_px, use_container_width=True, key=f"sc_px_{_cp_key}")
 
+                        # ── D2_alt: rolling-stability context for the signal commentary ──
+                        _cps = _stab_map.get(_cp["pair"])
+                        _stab_note = ""
+                        if _cps and _cps["n_windows"]:
+                            _stab_note = (
+                                f" Rolling stability: cointegrated in {_cps['n_coint']} of {_cps['n_windows']} "
+                                f"rolling {_STAB_W}-observation windows ({_cps['share']:.0%}, {_cps['label'].lower()}); "
+                                f"the latest window is {'cointegrated' if _cps['current_coint'] else 'not cointegrated'} "
+                                f"({_cps['current_streak']} consecutive window{'s' if _cps['current_streak'] != 1 else ''}"
+                                + (f", last break {_cps['last_break']:%d %b %Y}" if _cps["last_break"] is not None else "")
+                                + ")."
+                            )
+                            if _cp["status"] == "Actionable":
+                                _stab_note += (
+                                    " The persistent relationship supports the reversion signal."
+                                    if _cps["label"] == "Persistent" else
+                                    " Cointegration is not persistent across windows, so this high z-score "
+                                    "deserves lower confidence: the spread may be re-pricing a structural "
+                                    "shift rather than mean-reverting."
+                                )
+                        # ── end D2_alt commentary context ──
+
                         # Trade signal commentary
                         if _cp["status"] == "Actionable":
                             _dside = (f"long {_cp['a'].upper()} / short {_cp['b'].upper()}"
@@ -3685,7 +3896,7 @@ with tab_scanner:
                                 f"Historical ±{COINT_ENTRY_Z}σ reversion rate: {_dhr_s} within "
                                 f"{_cp['max_hold']}d ({_cp['n_signals']} signals in sample)."
                             )
-                            st.markdown(commentary(_dpr, "warn"), unsafe_allow_html=True)
+                            st.markdown(commentary(_dpr + _stab_note, "warn"), unsafe_allow_html=True)
                         else:
                             _dpr = (
                                 f"{_cp['pair']} is cointegrated (E-G p={_cp['pval']:.3f}), "
@@ -3693,7 +3904,7 @@ with tab_scanner:
                                 f"Current z-score = {_cp['z_now']:+.2f}σ — within the neutral band. "
                                 "No active spread entry signal."
                             )
-                            st.markdown(commentary(_dpr, "ok"), unsafe_allow_html=True)
+                            st.markdown(commentary(_dpr + _stab_note, "ok"), unsafe_allow_html=True)
 
             # ── Methodology ───────────────────────────────────────────────────────
             with st.expander("Methodology", expanded=False):
@@ -3725,8 +3936,9 @@ with tab_scanner:
                 Capped maximum hold at {min(60, max(5, 21))}–60 days for backtest integrity.
 
                 **Limitations:** All Tab 12 caveats apply. Gas-to-power pairs may show spurious
-                cointegration during structural breaks. Rolling-window cointegration (Phase D2)
-                will provide more robust entry timing signals.
+                cointegration during structural breaks. The Rolling Cointegration Stability panel
+                re-runs the test on rolling {_STAB_W}-observation windows to separate persistent
+                from episodic relationships (the Stability column in the ranked table).
 
                 **Data:** ENTSO-E A44 (power zone day-ahead prices) | ICE/Yahoo Finance (TTF, NBP).
                 History: {_SCANNER_YEARS} years requested per series.

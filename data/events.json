@@ -64,7 +64,7 @@
   },
   {
     "date": "2026-02-28",
-    "label": "Operation Epic Fury — US/Israel strikes on Iran",
+    "label": "Operation Epic Fury: US/Israel strikes on Iran",
     "description": "US and Israeli forces conduct strikes on Iranian nuclear and military infrastructure. Supreme Leader Khamenei killed. TTF surges ~40% in 72 hours. Markets immediately reprice Strait of Hormuz transit risk. Goldman Sachs and IEA begin modelling LNG supply disruption scenarios.",
     "category": "geopolitical",
     "impact": "critical"
@@ -92,7 +92,7 @@
   },
   {
     "date": "2026-03-20",
-    "label": "Ras Laffan damage — 3–5 year repair confirmed",
+    "label": "Ras Laffan damage: 3–5 year repair confirmed",
     "description": "QatarEnergy confirms structural damage to two LNG trains at Ras Laffan; repair timeline 3–5 years. Implies structural loss of ~20 Mt/yr LNG supply to Europe through 2027–2028. EU storage injection season begins with reserves at ~30%, lowest since 2022. ECB revises 2026 inflation projections upward.",
     "category": "supply",
     "impact": "critical"
@@ -106,7 +106,7 @@
   },
   {
     "date": "2026-04-08",
-    "label": "Hormuz ceasefire — first truce",
+    "label": "Hormuz ceasefire: first truce",
     "description": "Fragile ceasefire announced following US-Iran diplomatic contacts. Strait partially reopens. TTF pulls back from peak of approximately €70/MWh. Markets remain cautious; no restoration of Ras Laffan export capacity.",
     "category": "geopolitical",
     "impact": "warn"
@@ -131,5 +131,77 @@
     "description": "Iran re-closes the Strait following breakdown of truce talks. TTF re-rallies. EU energy ministers convene emergency session to assess injection-season risk. Demand-side measures and US LNG diversion programmes accelerated.",
     "category": "geopolitical",
     "impact": "critical"
+  },
+  {
+    "date": "2026-04-25",
+    "label": "EU ban on short-term Russian LNG",
+    "description": "Under Regulation (EU) 2026/261, imports of Russian LNG under short-term contracts concluded before 17 June 2025 are permitted only until 25 April 2026. Pipeline gas under such contracts follows on 17 June 2026 and long-term LNG contracts end on 31 December 2026.",
+    "category": "policy",
+    "impact": "warn",
+    "source": "https://www.acer.europa.eu/sites/default/files/documents/Publications/ACER-Report-Russian-gas-imports-2026.pdf"
+  },
+  {
+    "date": "2026-05-04",
+    "label": "US launches Project Freedom in Hormuz",
+    "description": "The US begins guiding stranded ships out of the Strait of Hormuz while maintaining its naval blockade of Iran. Iran's unified military command warns that foreign forces approaching the strait will be attacked.",
+    "category": "geopolitical",
+    "impact": "warn",
+    "source": "https://www.aljazeera.com/news/2026/5/4/iran-warns-us-to-stay-out-of-hormuz-after-trump-says-us-will-guide-ships"
+  },
+  {
+    "date": "2026-06-17",
+    "label": "US-Iran MoU: Hormuz reopens",
+    "description": "A preliminary US-Iran memorandum of understanding to end the war and restore shipping is announced and the strait reopens. PortWatch data show about 28 transits a day from 18 June to 5 July, against roughly 100 a day before the war.",
+    "category": "geopolitical",
+    "impact": "warn",
+    "source": "https://www.aljazeera.com/news/2026/7/9/strait-of-hormuz-what-has-happened-since-the-us-iran-mou-on-june-17"
+  },
+  {
+    "date": "2026-06-23",
+    "label": "Record heatwave lifts power prices",
+    "description": "Record heat across western Europe from 21 to 27 June drives evening day-ahead power prices to record highs on 23 June, when Belgian prices exceed ten times the EU average wholesale price.",
+    "category": "weather",
+    "impact": "warn",
+    "source": "https://www.euronews.com/2026/06/30/exclusive-electricity-bills-in-germany-and-france-rose-by-700-million-during-record-heatwa"
+  },
+  {
+    "date": "2026-07-07",
+    "label": "Qatari LNG carrier struck near Hormuz",
+    "description": "The loaded Qatari LNG carrier Al Rekayyat is hit by a projectile near the entrance of the Strait of Hormuz off Oman, causing an engine-room fire. The crew is evacuated and the cargo tanks are reported intact; Qatar holds Iran responsible.",
+    "category": "supply",
+    "impact": "warn",
+    "source": "https://www.arabnews.com/node/2650142/middle-east"
+  },
+  {
+    "date": "2026-07-14",
+    "label": "Blockade resumes, Hormuz traffic collapses",
+    "description": "The US resumes its blockade of Iranian ports. Strait of Hormuz transits fall to about five vessels a day from 15 July to 23 August, roughly 95% below pre-war levels, mostly tankers under naval escort or with tracking switched off.",
+    "category": "geopolitical",
+    "impact": "critical",
+    "source": "https://www.aljazeera.com/news/2026/8/27/how-a-95-percent-drop-in-hormuz-traffic-changed-global-shipping"
+  },
+  {
+    "date": "2026-07-31",
+    "label": "Asia overtakes Europe for US LNG",
+    "description": "In July, US LNG shipments to China, Japan, South Korea, Taiwan and India together exceed US deliveries to Europe for the first time, after selling US cargoes into Northeast Asia earned more than delivering to North-West Europe for much of April to July.",
+    "category": "supply",
+    "impact": "warn",
+    "source": "https://www.euronews.com/2026/08/20/europe-faces-race-to-refill-gas-storage-as-lng-cargoes-flow-to-asia"
+  },
+  {
+    "date": "2026-09-27",
+    "label": "Commission urges demand curbs",
+    "description": "A letter from Energy Commissioner Dan Jørgensen asks member states to consider measures that sustain injections or reduce gas and electricity demand, and encourages an 80% storage filling target instead of 90%. EU storage is about 70% full, some 12 percentage points below a year earlier.",
+    "category": "policy",
+    "impact": "warn",
+    "source": "https://www.euronews.com/2026/09/27/eu-tells-countries-to-curb-energy-demand-as-gas-prices-face-winter-squeeze"
+  },
+  {
+    "date": "2026-10-09",
+    "label": "IRGC strikes tanker in Hormuz",
+    "description": "The IRGC strikes the tanker MV Sun Shine in the southern Strait of Hormuz for using an unauthorised route and threatens vessels beyond the strait. At least 12 incidents against tankers and gas carriers were recorded from 28 September to 5 October, the highest weekly count since the war began; US Central Command says the main lanes are cleared of mines.",
+    "category": "geopolitical",
+    "impact": "warn",
+    "source": "https://www.euronews.com/2026/10/09/irans-irgc-strikes-tanker-and-threatens-to-target-vessels-beyond-hormuz"
   }
 ]
