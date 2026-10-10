@@ -43,6 +43,7 @@ from utils.helpers   import (
 from utils.theme     import ACCENTS, CHART, PLOTLY_TEMPLATE, page_header, page_footer
 from utils.scenarios import (
     storage_status, ttf_status, spread_status, lng_status, market_summary,
+    storage_refill_pace,
 )
 import pandas as pd
 from datetime import date as _date, timedelta as _timedelta
@@ -360,8 +361,7 @@ with tab_overview:
     with w1:
         st.markdown("**Storage refill pace**")
         if eu_pct is not None:
-            _required_pp = max(0.0, 90.0 - eu_pct)
-            _pace = "above" if _required_pp > 52 else "in line with"
+            _pace_info = storage_refill_pace(eu_pct, build_seasonal_bands(eu_df), _today)
             if ttf_price is not None and ttf_price > 35:
                 _lng_note = f"TTF at €{ttf_price:.0f}/MWh supports LNG cargo diversion to Europe over Asia."
             elif ttf_price is not None and ttf_price > 20:
@@ -370,11 +370,28 @@ with tab_overview:
                 _lng_note = f"TTF at €{ttf_price:.0f}/MWh; LNG import economics are weak at current prices."
             else:
                 _lng_note = ""
+            if _pace_info["verdict"] == "met":
+                _pace_text = (
+                    f"With EU storage at {eu_pct:.1f}%, the target is already met "
+                    f"({_pace_info['days']} days before 1 November). "
+                )
+            elif _pace_info["norm_pp"] is not None:
+                _pace_text = (
+                    f"With EU storage at {eu_pct:.1f}% and {_pace_info['days']} days remaining, "
+                    f"the required net injection is approximately {_pace_info['required_pp']:.0f}pp "
+                    f"({_pace_info['required_per_day']:.2f}pp/day), {_pace_info['verdict']} the "
+                    f"5-year average for the same window ({max(_pace_info['norm_pp'], 0.0):.0f}pp, "
+                    f"{max(_pace_info['norm_per_day'], 0.0):.2f}pp/day). "
+                )
+            else:
+                _pace_text = (
+                    f"With EU storage at {eu_pct:.1f}% and {_pace_info['days']} days remaining, "
+                    f"the required net injection is approximately {_pace_info['required_pp']:.0f}pp "
+                    f"({_pace_info['required_per_day']:.2f}pp/day); the 5-year comparison is unavailable. "
+                )
             st.caption(
-                f"EU regulation requires 90% fill by November 1. "
-                f"With EU storage at {eu_pct:.1f}% and {_days_to_nov} days remaining, "
-                f"the required net injection is approximately {_required_pp:.0f}pp, "
-                f"{_pace} the 5-year average injection pace. "
+                "EU regulation requires 90% fill by November 1. "
+                + _pace_text
                 + _lng_note
             )
         else:
