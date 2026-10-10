@@ -15,7 +15,7 @@ pinned: false
 
 [![Live Demo](https://img.shields.io/badge/Live%20Demo-HuggingFace%20Spaces-orange)](https://huggingface.co/spaces/TobGud/power-trader-portfolio)
 [![Python](https://img.shields.io/badge/Python-3.11%2B-blue)](https://www.python.org/)
-![Pages](https://img.shields.io/badge/7%20pages-34%20analytical%20modules-lightgrey)
+![Pages](https://img.shields.io/badge/7%20pages-35%20analytical%20modules-lightgrey)
 ![Sources](https://img.shields.io/badge/9%20data%20sources-live%20feeds-green)
 
 The platform integrates live fundamental data from ENTSO-E Transparency, GIE AGSI+/ALSI, Nord Pool, and ICE/Yahoo Finance into a unified analytical environment covering storage balances, forward curve dynamics, cross-commodity price transmission, machine learning regime detection, portfolio risk simulation, and battery storage project economics. All models are implemented from scratch in Python; no third-party signal providers or data vendors are used beyond the public API layer. The architecture escalates from raw market observation in Layer 1 to actionable composite signals in Layer 5, following the analytical hierarchy a physical desk would apply before taking a position.
@@ -131,6 +131,7 @@ A [Dockerfile](Dockerfile) and [render.yaml](render.yaml) are included for self-
           │  Nordic decomposition · Wind forecast error · Granger causality    │
           │  Storage-price OLS · Hydro lead/lag · Seasonal norm                │
           │  NO2/NL cointegration · Multi-pair scanner · Forward curve PCA     │
+          │  Rolling cointegration stability heatmap (180-day windows)         │
           └─────────────────────────────────┬──────────────────────────────────┘
                                             │
           ┌─────────────────────────────────▼──────────────────────────────────┐
@@ -192,7 +193,8 @@ The layered model reflects how a physical desk processes information: raw observ
 | Hydro Lead/Lag | Layer 2 | Pearson cross-correlation between hydro_pct and NO2 day-ahead at lags 0-21 days; peak predictive lag annotated | [pages/2_Quant_Analysis.py](pages/2_Quant_Analysis.py) |
 | TTF Seasonal Norm Tracker | Layer 2 | 7-year historical percentile bands (P10/P25/P50/P75/P90) per day-of-year; current position vs historical distribution | [pages/2_Quant_Analysis.py](pages/2_Quant_Analysis.py) |
 | NO2/NL Cointegration | Layer 2 | Engle-Granger two-step test; OLS hedge ratio; Ornstein-Uhlenbeck half-life via ADF on residuals; expanding-window z-score (no look-ahead); trade backtest with hit rate and average holding period | [pages/2_Quant_Analysis.py](pages/2_Quant_Analysis.py) |
-| Multi-Pair Cointegration Scanner | Layer 2 | Engle-Granger across all pairs in 6-asset universe (NO2, NL, TTF, DE, FR, NBP); ranked by p-value; OU half-life; real-time z-score signal; signal frequency and backtest hit rate | [pages/2_Quant_Analysis.py](pages/2_Quant_Analysis.py) |
+| Multi-Pair Cointegration Scanner | Layer 2 | Engle-Granger across all pairs in 6-asset universe (NO2, NL, TTF, DE, FR, NBP); ranked by p-value; OU half-life; real-time z-score signal; signal frequency and backtest hit rate; rolling-window Stability column | [pages/2_Quant_Analysis.py](pages/2_Quant_Analysis.py) |
+| Rolling Cointegration Stability | Layer 2 | Scanner's Engle-Granger test (same statsmodels settings, both directions, lower p-value) re-run on rolling 180-observation windows with ends every 21 trading days on a common date grid; pairs x window-end heatmap of p-values with a colour break at 0.05; per-pair share of cointegrated windows, current streak and last break date; Persistent / Episodic / Rare / Absent labels feed the scanner ranking and signal commentary | [models/coint_stability.py](models/coint_stability.py) |
 | Forward Curve PCA | Layer 2 | Synthetic M+1-M+18 panel via F(t,m) = spot × seasonal_m × (1 + α × storage_z × exp(-m/τ)); sklearn PCA on de-meaned panel; expanding z-score on PC1/PC2/PC3; calendar-spread (PC2) and butterfly (PC3) signals | Litterman and Scheinkman (1991); [pages/2_Quant_Analysis.py](pages/2_Quant_Analysis.py) |
 | Geopolitical Event Overlay | Layer 3 | 19 annotated supply disruptions (2022-2026): Hormuz cluster, Ras Laffan strikes, Norwegian outages, Russia cut-off, US LNG tariff threat; 5/20/60-day TTF momentum ribbon | [data/events.py](data/events.py) |
 | EU Gas Supply Mix | Layer 3 | Annual supply-source breakdown 2020-2026: Russia pipeline, Norwegian pipeline, LNG (US/Qatari/other), Algerian, domestic; structural shift visualisation | [pages/3_Macro_Signals.py](pages/3_Macro_Signals.py) |
@@ -231,7 +233,7 @@ The layered model reflects how a physical desk processes information: raw observ
 | ProsusAI FinBERT | HuggingFace Transformers | On-demand | Energy headline classification: positive/negative/neutral |
 | RSS News Feeds | BBC Business, Guardian Energy, LNG World News, Energy Monitor | 6-hourly cache | Raw headline text for FinBERT pipeline |
 
-**Notes on data availability.** Gas storage (GIE), ENTSO-E flows, hydro, wind, solar, and generation all require free API keys. The platform degrades gracefully without them: all Nord Pool spot, energy-charts.info (IT-North) and yfinance data loads without credentials, covering approximately 14 of the 34 modules. The public Nord Pool endpoint only serves roughly the latest two months of delivery days (older dates return HTTP 401), so keyless histories built on it (the FI leg of the FI minus IT-North spread, and the feature matrix fallback used by Layers 2 and 4) are limited to that window until `ENTSOE_API_KEY` is set. API2 Rotterdam coal futures (formerly MTF=F on Yahoo Finance) are not currently available via the free Yahoo Finance tier; the 7x7 correlation grid displays a "Coal unavailable" caption when the ticker returns no data.
+**Notes on data availability.** Gas storage (GIE), ENTSO-E flows, hydro, wind, solar, and generation all require free API keys. The platform degrades gracefully without them: all Nord Pool spot, energy-charts.info (IT-North) and yfinance data loads without credentials, covering approximately 14 of the 35 modules. The public Nord Pool endpoint only serves roughly the latest two months of delivery days (older dates return HTTP 401), so keyless histories built on it (the FI leg of the FI minus IT-North spread, and the feature matrix fallback used by Layers 2 and 4) are limited to that window until `ENTSOE_API_KEY` is set. API2 Rotterdam coal futures (formerly MTF=F on Yahoo Finance) are not currently available via the free Yahoo Finance tier; the 7x7 correlation grid displays a "Coal unavailable" caption when the ticker returns no data.
 
 ---
 
@@ -266,6 +268,8 @@ The scanner applies Engle-Granger two-step cointegration to all pairs in the 6-a
 For pairs with p-value below 0.05, the model computes: (1) the OLS hedge ratio β, (2) the OU mean-reversion speed λ and half-life h = -ln(2)/λ via OLS of Δε on ε_{t-1}, and (3) an expanding-window z-score of the spread residual, ensuring no future data is used in the normalisation at any historical date. The trade signal fires when |z| exceeds the configured threshold (default ±1.5σ) and the pair passes the 5% significance criterion.
 
 Historical performance is evaluated via a simple signal backtest: enter at |z| > threshold, hold for a maximum of 3× the OU half-life, and exit at |z| < 0.5 or max holding period. Hit rate and average days to convergence are reported alongside the current signal. This follows the spread trading framework described in Geman (2005) and the practical OU parameterisation from Pole (2007).
+
+A full-sample p-value cannot distinguish a persistent equilibrium from one that held only in part of the sample. The Rolling Cointegration Stability panel therefore re-runs the same test on rolling 180-observation windows whose end dates are spaced 21 trading days apart and anchored on the latest observation. Each pair receives the share of windows with p < 0.05, the current streak of windows sharing the latest status, and the date of the last break (a cointegrated window followed by a non-cointegrated one). Shares of at least 75% are labelled Persistent and at least 25% Episodic; the label appears in the ranking table, and the signal commentary flags lower confidence when an actionable z-score sits on a pair whose cointegration is not persistent. Shorter windows have less test power and strongly mean-reverting power prices reject the unit-root null easily, so shares are best read comparatively across pairs.
 
 ### HMM Regime Volatility Overlay
 
@@ -303,7 +307,7 @@ A full P0/P1/P2/P3 pre-deployment audit was conducted and documented in [files/A
 
 ## Running Locally
 
-The platform requires Python 3.11+. API keys for GIE AGSI+ (agsi.gie.eu) and ENTSO-E Transparency (transparency.entsoe.eu) are free to register and unlock the full feature set. Without keys, approximately 14 of the 34 modules load using public data only.
+The platform requires Python 3.11+. API keys for GIE AGSI+ (agsi.gie.eu) and ENTSO-E Transparency (transparency.entsoe.eu) are free to register and unlock the full feature set. Without keys, approximately 14 of the 35 modules load using public data only.
 
 ```bash
 git clone https://github.com/Gudbjerg/POWER-TRADER-PORTFOLIO.git

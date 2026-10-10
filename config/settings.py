@@ -136,3 +136,11 @@ REGIME_VOL_SPIKE_PCTL     = 90.0   # in-sample percentile of realised volatility
 REGIME_VOL_PROXIMITY_DAYS = 5      # +/- trading days around a regime transition
 REGIME_VOL_MIN_DAYS       = 60     # minimum aligned days before overlay statistics are reported
 # ── end HMM regime volatility overlay ────────────────────────────────────────
+
+# ── Rolling cointegration stability (deferred item D2_alt, Layer 2 scanner) ──
+COINT_ROLL_WINDOW    = 180    # observations (trading days) per rolling Engle-Granger window
+COINT_ROLL_STEP      = 21     # trading days between consecutive window end dates
+COINT_ROLL_ALPHA     = 0.05   # significance level for a cointegrated window
+COINT_STABLE_SHARE   = 0.75   # share of cointegrated windows labelled "Persistent"
+COINT_EPISODIC_SHARE = 0.25   # share labelled "Episodic" (below it "Rare", zero "Absent")
+# ── end rolling cointegration stability ──────────────────────────────────────

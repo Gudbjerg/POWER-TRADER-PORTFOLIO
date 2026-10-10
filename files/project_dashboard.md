@@ -103,7 +103,7 @@ Platform at outreach cut: 5 pages · 14 Layer 2 tabs · 4 Layer 3 tabs · Mispri
 
 ## Shipped features
 
-Everything confirmed live on HuggingFace Space and `origin/main`, except rows labelled **Q4** below, which are committed on branch `feat/roadmap-q4` and pending merge and deploy.
+Everything confirmed live on HuggingFace Space and `origin/main`, with two exceptions: rows labelled **Q4** are committed on branch `feat/roadmap-q4` and pending merge and deploy, and the D4 and Phase E rows were moved here from the deferred table because both pages are on `origin/main` (their live status on the Space was not re-checked).
 
 | Phase / Item | Layer | Description |
 |---|---|---|
@@ -121,9 +121,12 @@ Everything confirmed live on HuggingFace Space and `origin/main`, except rows la
 | Norwegian zonal | Layer 1 | "Norgespris debate" sub-panel: NO1/NO2/NO3/NO4/NO5 vs system price (SYS) day-ahead, zone spread KPIs |
 | NEW1 | Layer 3 | Copper–power grid investment linkage panel: LME copper vs German baseload proxy, rolling 90-day correlation, 6-month copper change as forward indicator |
 | NEW2 | Layer 3 | Aluminium smelter stress indicator: power-cost-as-%-of-smelter-revenue time series, NORMAL / ELEVATED / CRITICAL gauge |
+| D4 | Page 6 | Risk Dashboard: 6-signal backtestable portfolio, 1,000-path bootstrap 95%/99% 1-day VaR and Expected Shortfall, 4 named stress scenarios, 30-day rolling signal correlation matrix (commit `8b0fda1`; previously listed as deferred) |
+| Phase E | Page 7 | BESS Optimiser: DAM arbitrage plus FCR-N/FCR-D revenue stack, NPV / IRR / payback, ±20% sensitivity table (commit `bf80c8e`; previously listed as deferred) |
 | Q4 · 3A | Layer 1 | FI minus IT-North day-ahead spread (Prices tab): KPIs for latest spread, 30-day average and z-score vs 1-year; two-panel 1-year chart; computed commentary; methodology expander. IT-North from energy-charts.info (SMARD, CC BY 4.0) with ENTSO-E A44 fallback; FI from Nord Pool, extended with ENTSO-E A44 when a key is set (`data/italy_prices.py`, `models/fi_it_spread.py`) |
 | Q4 · 3B | Layer 3 / Layer 1 | TTF vs JKM tab (Layer 3): JKM=F converted from USD/MMBtu to EUR/MWh with EURUSD=X, spread TTF minus JKM, rolling 1-year percentile, KPI row, three-panel chart, interpretation and data caveats; compact TTF minus JKM KPI card on the Layer 1 LNG Terminals tab (`models/lng_arbitrage.py`, `data/lng_prices.py`) |
 | Q4 · 3D | Layer 4 | Realised-volatility overlay in the HMM section: rolling 30-trading-day NO2 volatility on a secondary axis over the regime timeline, per-regime mean/median volatility table, share of transitions within ±5 trading days of a volatility spike against a chance baseline with a circular-shift p-value; HMM inference now degrades cleanly when trained features are missing (`models/regime_volatility.py`) |
+| Q4 · D2_alt | Layer 2 | Rolling cointegration stability in the Cointegration Scanner tab: Engle-Granger (scanner settings) on rolling 180-observation windows every 21 trading days, pairs x window-end p-value heatmap with a colour break at 0.05, per-pair stability table (share of cointegrated windows, current streak, last break), Stability column in the ranking table and stability context in the signal commentary; also fixes the scanner and NO2/NL tab OU estimates, which indexed numpy statsmodels params with `.iloc` (`models/coint_stability.py`) |
 
 ---
 
@@ -132,7 +135,4 @@ Everything confirmed live on HuggingFace Space and `origin/main`, except rows la
 | Item | Description |
 |------|-------------|
 | Phase C-arch | **Render migration: deferred indefinitely** — artifacts in repo (`Dockerfile`, `render.yaml`) for future self-host or paid migration. Current production: HF Spaces. 15-min MTU granularity and DataSourceRegistry abstraction also deferred. |
-| D2_alt | Rolling cointegration stability heatmap — which pairs consistently cointegrated vs episodic; feeds D3 confidence scores |
-| D4 | Scope TBD |
 | D5 | Scope TBD |
-| Phase E (BESS) | Battery storage arbitrage optimiser — multi-session build, high positioning value for storage-focused roles |
