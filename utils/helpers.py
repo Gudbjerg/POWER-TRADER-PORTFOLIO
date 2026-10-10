@@ -47,9 +47,13 @@ def has_torch() -> bool:
 def apply_dark_theme():
     """Apply the platform design system. Call once per page, after set_page_config.
 
-    Delegates to ``utils.theme.inject_theme``, which injects the stylesheet once per run.
+    The router in ``app.py`` injects the stylesheet once per run for every page, so this
+    is normally a no-op. It also routes a legacy pages-directory run (a deep link opened
+    before the router has run on a fresh server) back through ``app.py``; see
+    ``utils.theme.ensure_router``.
     """
-    from utils.theme import inject_theme
+    from utils.theme import ensure_router, inject_theme
+    ensure_router()
     inject_theme()
 
 

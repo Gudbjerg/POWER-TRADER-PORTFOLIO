@@ -657,6 +657,94 @@ section[data-testid="stSidebar"] h3, section[data-testid="stSidebar"] h4 {
 .ptp-footer__note { margin-top: 0.3rem; }
 .ptp-footer__disclaimer { margin-top: 0.3rem; color: var(--ptp-muted); }
 
+/* ══ Landing page ════════════════════════════════════════════════════════ */
+.st-key-ptp_hero {
+  position: relative; overflow: hidden;
+  background:
+    radial-gradient(720px 320px at 0% 0%, rgba(245,179,1,0.085), transparent 70%),
+    radial-gradient(640px 320px at 100% 100%, rgba(56,189,248,0.065), transparent 70%),
+    linear-gradient(180deg, var(--ptp-surface-1), rgba(15,20,28,0.55));
+  border: 1px solid var(--ptp-border);
+  border-radius: 18px;
+  padding: 2.2rem 2.3rem 2rem;
+  box-shadow: var(--ptp-shadow), var(--ptp-highlight);
+}
+.ptp-hero__title {
+  margin-top: 0.8rem; font-size: 2.55rem; line-height: 1.08; font-weight: 700;
+  letter-spacing: -0.035em; color: var(--ptp-text);
+}
+.ptp-hero__title span { display: block; color: var(--ptp-muted); font-weight: 600; }
+.ptp-hero__lead { margin-top: 1.05rem; font-size: 1.06rem; line-height: 1.6; color: var(--ptp-text-2); max-width: 62ch; }
+.ptp-hero__body { margin-top: 0.45rem; font-size: 0.9rem; line-height: 1.65; color: var(--ptp-muted); max-width: 74ch; }
+.st-key-ptp_cta { margin-top: 0.85rem; }
+.st-key-ptp_cta_primary [data-testid="stPageLink-NavLink"] {
+  background: var(--ptp-accent); border-color: var(--ptp-accent);
+  box-shadow: 0 6px 22px -10px rgba(245,179,1,0.7);
+}
+.st-key-ptp_cta_primary [data-testid="stPageLink-NavLink"]:hover { background: #ffc21f; border-color: #ffc21f; }
+.st-key-ptp_cta_primary [data-testid="stPageLink-NavLink"] p { color: #14100a !important; font-weight: 600; }
+.st-key-ptp_cta_primary [data-testid="stPageLink-NavLink"] [data-testid="stIconMaterial"] { color: #14100a; }
+.ptp-hero-stats {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 1px;
+  background: var(--ptp-border); border: 1px solid var(--ptp-border);
+  border-radius: 14px; overflow: hidden;
+}
+.ptp-hero-stat { background: rgba(10,14,20,0.6); padding: 1.05rem 1.15rem 1rem; }
+.ptp-hero-stat__value {
+  font-family: var(--ptp-mono); font-size: 1.95rem; font-weight: 600; line-height: 1.1;
+  letter-spacing: -0.04em; color: var(--ptp-text);
+}
+.ptp-hero-stat__label {
+  margin-top: 0.35rem; font-size: 0.66rem; font-weight: 600; letter-spacing: 0.12em;
+  text-transform: uppercase; color: var(--ptp-muted);
+}
+.ptp-strip-head {
+  display: flex; align-items: baseline; justify-content: space-between; flex-wrap: wrap;
+  gap: 0.25rem 1rem; margin: 0.9rem 0 0;
+}
+.ptp-strip-head__title { font-size: 0.7rem; font-weight: 600; letter-spacing: 0.14em; text-transform: uppercase; color: var(--ptp-muted); }
+.ptp-strip-head__meta { font-size: 0.74rem; color: var(--ptp-muted); }
+.ptp-status-row { display: flex; flex-wrap: wrap; align-items: center; gap: 0.45rem; margin-top: 0.4rem; }
+.ptp-status-row__label {
+  font-size: 0.66rem; font-weight: 600; letter-spacing: 0.12em; text-transform: uppercase;
+  color: var(--ptp-faint); margin-right: 0.3rem;
+}
+[class*="st-key-ptp_layer_"] {
+  position: relative; height: 100%;
+  background: linear-gradient(180deg, rgba(255,255,255,0.022), rgba(255,255,255,0) 42%), var(--ptp-surface-1);
+  border: 1px solid var(--ptp-border);
+  border-radius: 14px;
+  padding: 1.1rem 1.15rem 0.85rem;
+  box-shadow: var(--ptp-highlight);
+  transition: border-color .2s ease, transform .2s ease, box-shadow .2s ease;
+}
+[class*="st-key-ptp_layer_"]:hover {
+  border-color: rgba(148,163,184,0.30); transform: translateY(-2px);
+  box-shadow: var(--ptp-shadow), var(--ptp-highlight);
+}
+[data-testid="stLayoutWrapper"]:has(> [class*="st-key-ptp_layer_"]) { height: 100%; }
+[class*="st-key-ptp_layer_"] > [data-testid="stElementContainer"]:has([data-testid="stPageLink"]) { margin-top: auto; }
+[class*="st-key-ptp_layer_"] [data-testid="stPageLink-NavLink"] {
+  background: transparent; border: none; box-shadow: none; padding: 0.15rem 0;
+}
+[class*="st-key-ptp_layer_"] [data-testid="stPageLink-NavLink"]::after {
+  content: ""; position: absolute; inset: 0; border-radius: 14px;
+}
+[class*="st-key-ptp_layer_"] [data-testid="stPageLink-NavLink"] p { color: var(--ptp-text-2) !important; font-size: 0.82rem; }
+[class*="st-key-ptp_layer_"]:hover [data-testid="stPageLink-NavLink"] p,
+[class*="st-key-ptp_layer_"]:hover [data-testid="stPageLink-NavLink"] [data-testid="stIconMaterial"] { color: var(--ptp-accent) !important; }
+.ptp-about { color: var(--ptp-text-2); font-size: 0.9rem; line-height: 1.85; max-width: 820px; }
+.ptp-about-stack { color: var(--ptp-muted); font-size: 0.82rem; line-height: 1.9; margin-top: 0.5rem; }
+.ptp-about-stack__title {
+  color: var(--ptp-text-2); font-size: 0.68rem; font-weight: 600; letter-spacing: 0.12em;
+  text-transform: uppercase; margin-bottom: 0.15rem;
+}
+@media (max-width: 640px) {
+  .st-key-ptp_hero { padding: 1.4rem 1.15rem 1.25rem; border-radius: 14px; }
+  .ptp-hero__title { font-size: 1.85rem; }
+  .ptp-hero__lead { font-size: 0.98rem; }
+  .ptp-hero-stat__value { font-size: 1.55rem; }
+}
 """
 
 
@@ -667,6 +755,28 @@ _THEME_KEY = "_ptp_theme_token"
 def begin_run() -> None:
     """Mark the start of a script run. Called once by the router before rendering."""
     st.session_state[_RUN_KEY] = st.session_state.get(_RUN_KEY, 0) + 1
+
+
+def ensure_router() -> None:
+    """Make sure the run goes through the ``app.py`` router.
+
+    Streamlit treats an app that has a ``pages/`` folder as a legacy (v1) multipage app
+    until the entry point has executed ``st.navigation`` once in the server process. On
+    a fresh server, a first visitor who opens a deep link such as ``/Live_Monitor``
+    would get that page without the router: no stylesheet and no top navigation. Page
+    modules call this early (via ``utils.helpers.apply_dark_theme``). In that legacy
+    state it switches Streamlit to ``st.navigation`` mode and reruns, so ``app.py``
+    renders the requested page; URL paths match, so the same page is shown. In normal
+    operation, and when a single page file runs on its own (for example in AppTest),
+    it does nothing.
+    """
+    try:
+        from streamlit.runtime.pages_manager import PagesManager
+    except ImportError:  # internal module moved in a future release: keep default behaviour
+        return
+    if getattr(PagesManager, "uses_pages_directory", False):
+        PagesManager.uses_pages_directory = False
+        st.rerun()
 
 
 def _minify(css: str) -> str:
