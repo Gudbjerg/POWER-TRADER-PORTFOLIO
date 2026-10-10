@@ -5,14 +5,15 @@ Average intraday day-ahead price versus average solar generation by hour of day.
 import plotly.graph_objects as go
 import streamlit as st
 import pandas as pd
+from utils.theme import CHART, PLOTLY_TEMPLATE
 
 COLORS = {
     "price":    "#c0392b",
     "solar":    "#d4ac3a",
-    "grid":     "rgba(255,255,255,0.06)",
-    "text":     "#c9d1d9",
-    "bg":       "#0d1117",
-    "panel_bg": "#161b22",
+    "grid":     CHART["grid"],
+    "text":     CHART["text"],
+    "bg":       CHART["bg"],
+    "panel_bg": CHART["panel_bg"],
 }
 
 
@@ -67,7 +68,7 @@ def render_solar_chart(solar_data: dict):
     ))
 
     fig.update_layout(
-        template="plotly_dark",
+        template=PLOTLY_TEMPLATE,
         paper_bgcolor=COLORS["bg"],
         plot_bgcolor=COLORS["panel_bg"],
         font=dict(color=COLORS["text"], size=12),
@@ -94,7 +95,7 @@ def render_solar_chart(solar_data: dict):
         hovermode="x unified",
     )
 
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig, width="stretch")
 
     # Duck curve insight
     if not df.empty and "price" in df.columns and "solar_mw" in df.columns:

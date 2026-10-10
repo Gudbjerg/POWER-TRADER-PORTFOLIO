@@ -10,6 +10,8 @@ One module owns the visual language of the app:
   ``chip``, ``kpi_card``, ``sparkline``, ``callout``, ``ticker_strip``, ``layer_card``.
 * Page-structure renderers that write to the app directly: ``page_header``,
   ``section_header``, ``page_footer``.
+* A registered Plotly template (``PLOTLY_TEMPLATE``) plus ``CHART`` tokens for the
+  chart chrome (backgrounds, grid, axis text). Series colours stay with each chart.
 
 Text arguments documented as plain text are HTML-escaped. Arguments whose name ends
 in ``_html`` (and ``callout`` text, which mirrors the legacy ``commentary`` helper)
@@ -22,6 +24,8 @@ import math
 import re
 from typing import Iterable, Sequence
 
+import plotly.graph_objects as go
+import plotly.io as pio
 import streamlit as st
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -89,6 +93,31 @@ GOOGLE_FONTS_URL = (
 RADII: dict[str, str] = {"sm": "6px", "md": "10px", "lg": "14px", "pill": "999px"}
 SPACE: dict[str, str] = {"xs": "0.25rem", "sm": "0.5rem", "md": "1rem", "lg": "1.5rem", "xl": "2.5rem"}
 
+# Categorical palette for charts that do not set explicit series colours.
+COLORWAY: list[str] = [
+    "#38bdf8", "#f5b301", "#3fb950", "#a78bfa", "#fb7185",
+    "#2dd4bf", "#d4ac3a", "#58a6ff", "#f0883e", "#8b98a9",
+]
+
+# Chart chrome. Every Plotly chart sits on a surface_1 panel (see the stPlotlyChart
+# rule in the stylesheet): the paper is transparent and the plot area uses the same
+# opaque surface, which also keeps Plotly's hover spike lines dark instead of white.
+CHART: dict[str, str] = {
+    "bg":                "rgba(0,0,0,0)",
+    "panel_bg":          COLORS["surface_1"],
+    "grid":              "rgba(148,163,184,0.09)",
+    "zero":              "rgba(148,163,184,0.30)",
+    "axis":              "rgba(148,163,184,0.22)",
+    "text":              COLORS["text_2"],
+    "muted":             COLORS["muted"],
+    "faint":             COLORS["faint"],
+    "annotation_bg":     COLORS["surface_2"],
+    "annotation_border": COLORS["border_strong"],
+    "edge":              COLORS["surface_1"],   # separator stroke between adjacent bars
+}
+
+PLOTLY_TEMPLATE = "ptp"
+
 STANDARD_DISCLAIMER = "For informational purposes only. Not financial advice."
 AUTHOR = "Tobias Gudbjerg"
 
@@ -114,6 +143,51 @@ def _rgba(hex_color: str, alpha: float) -> str:
 
 def _tone(tone: str | None) -> str:
     return TONES.get(tone or "neutral", tone if (tone or "").startswith("#") else COLORS["muted"])
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# Plotly template
+# ══════════════════════════════════════════════════════════════════════════════
+
+def _register_plotly_template() -> None:
+    """Register the 'ptp' template (plotly_dark base + tokens) and make it the default."""
+    template = go.layout.Template(pio.templates["plotly_dark"])
+    axis = dict(
+        gridcolor=CHART["grid"],
+        zerolinecolor=CHART["zero"],
+        linecolor=CHART["axis"],
+        tickcolor=CHART["axis"],
+        tickfont=dict(color=CHART["muted"], size=11),
+        title=dict(font=dict(color=CHART["muted"], size=11)),
+        showline=False,
+        ticks="",
+        automargin=True,
+        spikecolor="rgba(148,163,184,0.55)",
+        spikethickness=1,
+        spikedash="solid",
+    )
+    template.layout.update(
+        font=dict(family=FONT_SANS, size=12, color=CHART["text"]),
+        paper_bgcolor=CHART["bg"],
+        plot_bgcolor=CHART["panel_bg"],
+        colorway=COLORWAY,
+        title=dict(font=dict(size=13, color=COLORS["text"]), x=0, xanchor="left"),
+        xaxis=axis,
+        yaxis=axis,
+        legend=dict(bgcolor="rgba(0,0,0,0)", font=dict(size=11, color=CHART["text"])),
+        hoverlabel=dict(
+            bgcolor=COLORS["surface_2"],
+            bordercolor=COLORS["border_strong"],
+            font=dict(family=FONT_SANS, size=12, color=COLORS["text"]),
+        ),
+        modebar=dict(bgcolor="rgba(0,0,0,0)", color=COLORS["faint"], activecolor=COLORS["accent"]),
+        margin=dict(l=48, r=16, t=36, b=40),
+    )
+    pio.templates[PLOTLY_TEMPLATE] = template
+    pio.templates.default = PLOTLY_TEMPLATE
+
+
+_register_plotly_template()
 
 
 # ══════════════════════════════════════════════════════════════════════════════

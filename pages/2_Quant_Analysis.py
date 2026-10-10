@@ -22,6 +22,7 @@ st.set_page_config(
 )
 
 from utils.helpers import apply_dark_theme, kpi_card, delta_span, commentary
+from utils.theme import CHART, PLOTLY_TEMPLATE
 from config.settings import (
     SCORE_RISK_PREMIUM_EUR, SCORE_SEASONAL_HI_PCT, SCORE_SEASONAL_LO_PCT,
     COINT_ENTRY_Z, COINT_MIN_OBS, COINT_MIN_MATCH, HYDRO_MAX_LAG,
@@ -759,8 +760,8 @@ with tab_mc:
 
         # Fan chart
         C = {
-            "bg": "#0d1117", "panel_bg": "#161b22",
-            "grid": "rgba(255,255,255,0.06)", "text": "#c9d1d9",
+            "bg": CHART["bg"], "panel_bg": CHART["panel_bg"],
+            "grid": CHART["grid"], "text": CHART["text"],
             "band_out": "rgba(88,166,255,0.12)", "band_in": "rgba(88,166,255,0.27)",
             "median": "#58a6ff", "hist": "#8b949e",
             "mandate": "#d4ac3a", "target": "#3fb950",
@@ -797,7 +798,7 @@ with tab_mc:
                       annotation_text="80% (2022 original)", annotation_position="right",
                       annotation_font=dict(color=C["mandate"], size=10))
         fig.update_layout(
-            template="plotly_dark", paper_bgcolor=C["bg"], plot_bgcolor=C["panel_bg"],
+            template=PLOTLY_TEMPLATE, paper_bgcolor=C["bg"], plot_bgcolor=C["panel_bg"],
             font=dict(color=C["text"], size=12),
             margin=dict(l=10, r=90, t=10, b=10),
             legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
@@ -917,12 +918,12 @@ with tab_reg:
             )
 
         C = {
-            "bg": "#0d1117", "panel_bg": "#161b22",
-            "grid": "rgba(255,255,255,0.06)", "text": "#c9d1d9",
+            "bg": CHART["bg"], "panel_bg": CHART["panel_bg"],
+            "grid": CHART["grid"], "text": CHART["text"],
             "scatter": "#58a6ff", "regline": "#d4ac3a",
             "actual": "#c9d1d9", "fitted": "#58a6ff",
             "resid_pos": "#f85149", "resid_neg": "#3fb950",
-            "zero": "rgba(255,255,255,0.3)",
+            "zero": CHART["zero"],
         }
 
         # Two-column layout: scatter (left), residuals time series (right)
@@ -961,7 +962,7 @@ with tab_reg:
             ))
             fig_sc.update_layout(
                 title=dict(text="NL Power vs. TTF Gas Price (EUR/MWh)", font=dict(size=12)),
-                template="plotly_dark", paper_bgcolor=C["bg"], plot_bgcolor=C["panel_bg"],
+                template=PLOTLY_TEMPLATE, paper_bgcolor=C["bg"], plot_bgcolor=C["panel_bg"],
                 font=dict(color=C["text"], size=11),
                 margin=dict(l=10, r=10, t=40, b=10),
                 legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
@@ -991,7 +992,7 @@ with tab_reg:
                               line_color=C["zero"], line_width=0.8)
             fig_res.update_layout(
                 title=dict(text="Standardised Residual (z-score)", font=dict(size=12)),
-                template="plotly_dark", paper_bgcolor=C["bg"], plot_bgcolor=C["panel_bg"],
+                template=PLOTLY_TEMPLATE, paper_bgcolor=C["bg"], plot_bgcolor=C["panel_bg"],
                 font=dict(color=C["text"], size=11),
                 margin=dict(l=10, r=10, t=40, b=10),
                 xaxis=dict(showgrid=True, gridcolor=C["grid"], title=None),
@@ -1146,8 +1147,8 @@ with tab_spike:
 
         # Z-score time series chart
         C = {
-            "bg": "#0d1117", "panel_bg": "#161b22",
-            "grid": "rgba(255,255,255,0.06)", "text": "#c9d1d9",
+            "bg": CHART["bg"], "panel_bg": CHART["panel_bg"],
+            "grid": CHART["grid"], "text": CHART["text"],
         }
         ZONE_COLORS = {
             "NO1": "#4caf8f", "NO2": "#2980b9", "SE3": "#7ec8e3",
@@ -1172,12 +1173,12 @@ with tab_spike:
             (-ALERT_Z, "rgba(248,81,73,0.7)",  "dash"),
             (WARNING_Z, "rgba(210,153,34,0.5)", "dot"),
             (-WARNING_Z,"rgba(210,153,34,0.5)", "dot"),
-            (0,         "rgba(255,255,255,0.2)", "solid"),
+            (0,         CHART["zero"], "solid"),
         ]:
             fig_z.add_hline(y=level, line_dash=dash, line_color=color, line_width=1)
 
         fig_z.update_layout(
-            template="plotly_dark",
+            template=PLOTLY_TEMPLATE,
             paper_bgcolor=C["bg"], plot_bgcolor=C["panel_bg"],
             font=dict(color=C["text"], size=12),
             margin=dict(l=10, r=10, t=10, b=10),
@@ -1293,10 +1294,10 @@ with tab_bt:
             )
 
         C = {
-            "bg": "#0d1117", "panel_bg": "#161b22",
-            "grid": "rgba(255,255,255,0.06)", "text": "#c9d1d9",
+            "bg": CHART["bg"], "panel_bg": CHART["panel_bg"],
+            "grid": CHART["grid"], "text": CHART["text"],
             "pos": "#3fb950", "neg": "#f85149",
-            "cum": "#58a6ff", "zero": "rgba(255,255,255,0.25)",
+            "cum": "#58a6ff", "zero": CHART["zero"],
             "cost": "rgba(210,180,40,0.55)",
         }
 
@@ -1323,7 +1324,7 @@ with tab_bt:
         )
         fig_bt.update_layout(
             title=dict(text="Annual P&L per MWh (net of storage cost)", font=dict(size=12)),
-            template="plotly_dark",
+            template=PLOTLY_TEMPLATE,
             paper_bgcolor=C["bg"], plot_bgcolor=C["panel_bg"],
             font=dict(color=C["text"], size=12),
             margin=dict(l=10, r=10, t=40, b=10),
@@ -1349,7 +1350,7 @@ with tab_bt:
         fig_cum.add_hline(y=0, line_dash="solid", line_color=C["zero"], line_width=0.8)
         fig_cum.update_layout(
             title=dict(text="Cumulative P&L per MWh", font=dict(size=12)),
-            template="plotly_dark",
+            template=PLOTLY_TEMPLATE,
             paper_bgcolor=C["bg"], plot_bgcolor=C["panel_bg"],
             font=dict(color=C["text"], size=12),
             margin=dict(l=10, r=10, t=40, b=10),
@@ -2203,14 +2204,14 @@ with tab_granger:
                         annotation_position="bottom right",
                     )
                     _fig_gc.update_layout(
-                        template="plotly_dark",
-                        paper_bgcolor="#0d1117",
-                        plot_bgcolor="#161b22",
-                        xaxis=dict(title="Lag", gridcolor="rgba(255,255,255,0.06)"),
+                        template=PLOTLY_TEMPLATE,
+                        paper_bgcolor=CHART["bg"],
+                        plot_bgcolor=CHART["panel_bg"],
+                        xaxis=dict(title="Lag", gridcolor=CHART["grid"]),
                         yaxis=dict(
                             title="p-value (SSR F-test)",
                             range=[0, min(1.05, max(_pvals) * 1.2)],
-                            gridcolor="rgba(255,255,255,0.06)",
+                            gridcolor=CHART["grid"],
                         ),
                         margin=dict(l=60, r=20, t=30, b=50),
                         height=360,
@@ -2239,13 +2240,13 @@ with tab_granger:
                         hovertemplate="TTF return: %{y:.2f}%<extra></extra>",
                     ))
                     _fig_ts.update_layout(
-                        template="plotly_dark",
-                        paper_bgcolor="#0d1117",
-                        plot_bgcolor="#161b22",
-                        xaxis=dict(gridcolor="rgba(255,255,255,0.06)"),
+                        template=PLOTLY_TEMPLATE,
+                        paper_bgcolor=CHART["bg"],
+                        plot_bgcolor=CHART["panel_bg"],
+                        xaxis=dict(gridcolor=CHART["grid"]),
                         yaxis=dict(
                             title="Net sentiment",
-                            gridcolor="rgba(255,255,255,0.06)",
+                            gridcolor=CHART["grid"],
                             side="left",
                         ),
                         yaxis2=dict(
@@ -2486,13 +2487,13 @@ with tab_storage_reg:
                 ))
 
                 _fig_scatter.update_layout(
-                    template="plotly_dark",
-                    paper_bgcolor="#0d1117",
-                    plot_bgcolor="#161b22",
+                    template=PLOTLY_TEMPLATE,
+                    paper_bgcolor=CHART["bg"],
+                    plot_bgcolor=CHART["panel_bg"],
                     xaxis=dict(title="EU storage fill level (%)",
-                               gridcolor="rgba(255,255,255,0.06)"),
+                               gridcolor=CHART["grid"]),
                     yaxis=dict(title="TTF front-month (EUR/MWh)",
-                               gridcolor="rgba(255,255,255,0.06)"),
+                               gridcolor=CHART["grid"]),
                     legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="left", x=0,
                                 font=dict(size=10)),
                     margin=dict(l=60, r=20, t=30, b=50),
@@ -2519,7 +2520,7 @@ with tab_storage_reg:
                     marker_color=_resid_color,
                     hovertemplate="Date: %{x|%Y-%m-%d}<br>Premium: %{y:+.1f} EUR/MWh<extra></extra>",
                 ))
-                _fig_resid.add_hline(y=0, line=dict(color="rgba(255,255,255,0.3)", width=1))
+                _fig_resid.add_hline(y=0, line=dict(color=CHART["zero"], width=1))
                 _fig_resid.add_hline(
                     y=10, line=dict(color="rgba(248,81,73,0.4)", width=1, dash="dot"),
                     annotation_text="+10 EUR/MWh",
@@ -2533,12 +2534,12 @@ with tab_storage_reg:
                     annotation_position="bottom right",
                 )
                 _fig_resid.update_layout(
-                    template="plotly_dark",
-                    paper_bgcolor="#0d1117",
-                    plot_bgcolor="#161b22",
-                    xaxis=dict(title=None, gridcolor="rgba(255,255,255,0.06)"),
+                    template=PLOTLY_TEMPLATE,
+                    paper_bgcolor=CHART["bg"],
+                    plot_bgcolor=CHART["panel_bg"],
+                    xaxis=dict(title=None, gridcolor=CHART["grid"]),
                     yaxis=dict(title="Residual (EUR/MWh)",
-                               gridcolor="rgba(255,255,255,0.06)"),
+                               gridcolor=CHART["grid"]),
                     margin=dict(l=60, r=20, t=20, b=50),
                     height=320,
                     showlegend=False,
@@ -2734,15 +2735,15 @@ with tab_hydro_lag:
                 annotation_font=dict(color="#f0e040", size=10),
                 annotation_position="top right",
             )
-            _fig_cc.add_hline(y=0, line=dict(color="rgba(255,255,255,0.2)", width=1))
+            _fig_cc.add_hline(y=0, line=dict(color=CHART["zero"], width=1))
             _fig_cc.update_layout(
-                template="plotly_dark",
-                paper_bgcolor="#0d1117",
-                plot_bgcolor="#161b22",
+                template=PLOTLY_TEMPLATE,
+                paper_bgcolor=CHART["bg"],
+                plot_bgcolor=CHART["panel_bg"],
                 xaxis=dict(title="Lag (days)", dtick=1,
-                           gridcolor="rgba(255,255,255,0.06)"),
+                           gridcolor=CHART["grid"]),
                 yaxis=dict(title="Pearson correlation ρ",
-                           gridcolor="rgba(255,255,255,0.06)",
+                           gridcolor=CHART["grid"],
                            range=[min(_corrs) * 1.2 - 0.05, max(_corrs) * 1.2 + 0.05]),
                 margin=dict(l=60, r=20, t=30, b=50),
                 height=380,
@@ -2776,7 +2777,7 @@ with tab_hydro_lag:
                 line=dict(color="#58a6ff", width=1.5),
                 hovertemplate="%{x|%Y-%m-%d}: ρ=%{y:.3f}<extra></extra>",
             ))
-            _fig_roll.add_hline(y=0, line=dict(color="rgba(255,255,255,0.2)", width=1))
+            _fig_roll.add_hline(y=0, line=dict(color=CHART["zero"], width=1))
             _fig_roll.add_hline(
                 y=-0.4, line=dict(color="rgba(248,81,73,0.3)", width=1, dash="dot"),
                 annotation_text="ρ=−0.4",
@@ -2784,12 +2785,12 @@ with tab_hydro_lag:
                 annotation_position="bottom right",
             )
             _fig_roll.update_layout(
-                template="plotly_dark",
-                paper_bgcolor="#0d1117",
-                plot_bgcolor="#161b22",
-                xaxis=dict(title=None, gridcolor="rgba(255,255,255,0.06)"),
+                template=PLOTLY_TEMPLATE,
+                paper_bgcolor=CHART["bg"],
+                plot_bgcolor=CHART["panel_bg"],
+                xaxis=dict(title=None, gridcolor=CHART["grid"]),
                 yaxis=dict(title="Rolling Pearson ρ",
-                           gridcolor="rgba(255,255,255,0.06)"),
+                           gridcolor=CHART["grid"]),
                 margin=dict(l=60, r=20, t=20, b=50),
                 height=300,
                 showlegend=False,
@@ -3038,18 +3039,18 @@ with tab_ttf_norm:
                 ))
 
             _fig_norm.update_layout(
-                template="plotly_dark",
-                paper_bgcolor="#0d1117",
-                plot_bgcolor="#161b22",
+                template=PLOTLY_TEMPLATE,
+                paper_bgcolor=CHART["bg"],
+                plot_bgcolor=CHART["panel_bg"],
                 xaxis=dict(
                     title="Calendar month",
                     tickformat="%b",
                     dtick="M1",
-                    gridcolor="rgba(255,255,255,0.06)",
+                    gridcolor=CHART["grid"],
                 ),
                 yaxis=dict(
                     title="TTF front-month (EUR/MWh)",
-                    gridcolor="rgba(255,255,255,0.06)",
+                    gridcolor=CHART["grid"],
                     rangemode="tozero",
                 ),
                 legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="left", x=0,
@@ -3273,7 +3274,7 @@ with tab_coint:
                     (1.0,  "rgba(224,123,57,0.5)",   "±1σ (base entry)"),
                     (-1.0, "rgba(224,123,57,0.5)",   ""),
                     (-2.0, "rgba(248,81,73,0.5)",    ""),
-                    (0.0,  "rgba(255,255,255,0.2)",  "Mean"),
+                    (0.0,  CHART["zero"],  "Mean"),
                 ]:
                     _fig_z_ci.add_hline(
                         y=_lv, line=dict(color=_col, width=1, dash="dot"),
@@ -3291,10 +3292,10 @@ with tab_coint:
                     hovertemplate=f"Now: z={_ci_z_now:+.2f}<extra></extra>",
                 ))
                 _fig_z_ci.update_layout(
-                    template="plotly_dark",
-                    paper_bgcolor="#0d1117", plot_bgcolor="#161b22",
-                    xaxis=dict(title=None, gridcolor="rgba(255,255,255,0.06)"),
-                    yaxis=dict(title="Z-score (σ)", gridcolor="rgba(255,255,255,0.06)"),
+                    template=PLOTLY_TEMPLATE,
+                    paper_bgcolor=CHART["bg"], plot_bgcolor=CHART["panel_bg"],
+                    xaxis=dict(title=None, gridcolor=CHART["grid"]),
+                    yaxis=dict(title="Z-score (σ)", gridcolor=CHART["grid"]),
                     legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="left", x=0),
                     margin=dict(l=60, r=20, t=30, b=50),
                     height=360,
@@ -3320,10 +3321,10 @@ with tab_coint:
                     hovertemplate="NL: €%{y:.1f}/MWh<extra></extra>",
                 ))
                 _fig_px.update_layout(
-                    template="plotly_dark",
-                    paper_bgcolor="#0d1117", plot_bgcolor="#161b22",
-                    xaxis=dict(title=None, gridcolor="rgba(255,255,255,0.06)"),
-                    yaxis=dict(title="EUR/MWh", gridcolor="rgba(255,255,255,0.06)"),
+                    template=PLOTLY_TEMPLATE,
+                    paper_bgcolor=CHART["bg"], plot_bgcolor=CHART["panel_bg"],
+                    xaxis=dict(title=None, gridcolor=CHART["grid"]),
+                    yaxis=dict(title="EUR/MWh", gridcolor=CHART["grid"]),
                     legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="left", x=0),
                     margin=dict(l=60, r=20, t=30, b=50),
                     height=300,
@@ -3613,7 +3614,7 @@ with tab_scanner:
                             ( 1.0, "rgba(224,123,57,0.5)",  "±1σ"),
                             (-1.0, "rgba(224,123,57,0.5)",  ""),
                             (-2.0, "rgba(248,81,73,0.5)",   ""),
-                            ( 0.0, "rgba(255,255,255,0.2)", "Mean"),
+                            ( 0.0, CHART["zero"], "Mean"),
                         ]:
                             _dfig_z.add_hline(
                                 y=_dlv,
@@ -3630,10 +3631,10 @@ with tab_scanner:
                             hovertemplate=f"Now: z={_cp['z_now']:+.2f}<extra></extra>",
                         ))
                         _dfig_z.update_layout(
-                            template="plotly_dark",
-                            paper_bgcolor="#0d1117", plot_bgcolor="#161b22",
-                            xaxis=dict(title=None, gridcolor="rgba(255,255,255,0.06)"),
-                            yaxis=dict(title="Z-score (σ)", gridcolor="rgba(255,255,255,0.06)"),
+                            template=PLOTLY_TEMPLATE,
+                            paper_bgcolor=CHART["bg"], plot_bgcolor=CHART["panel_bg"],
+                            xaxis=dict(title=None, gridcolor=CHART["grid"]),
+                            yaxis=dict(title="Z-score (σ)", gridcolor=CHART["grid"]),
                             legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="left", x=0),
                             margin=dict(l=60, r=20, t=30, b=50),
                             height=300,
@@ -3657,10 +3658,10 @@ with tab_scanner:
                             hovertemplate=f"{_cp['b'].upper()}: €%{{y:.1f}}/MWh<extra></extra>",
                         ))
                         _dfig_px.update_layout(
-                            template="plotly_dark",
-                            paper_bgcolor="#0d1117", plot_bgcolor="#161b22",
-                            xaxis=dict(title=None, gridcolor="rgba(255,255,255,0.06)"),
-                            yaxis=dict(title="EUR/MWh", gridcolor="rgba(255,255,255,0.06)"),
+                            template=PLOTLY_TEMPLATE,
+                            paper_bgcolor=CHART["bg"], plot_bgcolor=CHART["panel_bg"],
+                            xaxis=dict(title=None, gridcolor=CHART["grid"]),
+                            yaxis=dict(title="EUR/MWh", gridcolor=CHART["grid"]),
                             legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="left", x=0),
                             margin=dict(l=60, r=20, t=20, b=50),
                             height=260,
@@ -3807,13 +3808,13 @@ with tab_pca:
             textposition="outside",
         ))
         _fig_ev.update_layout(
-            template="plotly_dark",
-            paper_bgcolor="#0d1117", plot_bgcolor="#161b22",
-            font=dict(color="#c9d1d9", size=11),
+            template=PLOTLY_TEMPLATE,
+            paper_bgcolor=CHART["bg"], plot_bgcolor=CHART["panel_bg"],
+            font=dict(color=CHART["text"], size=11),
             margin=dict(l=10, r=10, t=10, b=10), height=220,
             yaxis=dict(title="Variance explained (%)", range=[0, 115],
-                       gridcolor="rgba(255,255,255,0.06)"),
-            xaxis=dict(gridcolor="rgba(255,255,255,0.06)"),
+                       gridcolor=CHART["grid"]),
+            xaxis=dict(gridcolor=CHART["grid"]),
             showlegend=False,
         )
         st.plotly_chart(_fig_ev, use_container_width=True)
@@ -3832,14 +3833,14 @@ with tab_pca:
                 name=_pc, line=dict(color=_col, width=2),
                 hovertemplate=f"{_pc}: %{{y:.4f}}<extra></extra>",
             ))
-        _fig_ld.add_hline(y=0, line=dict(color="rgba(255,255,255,0.2)", width=1))
+        _fig_ld.add_hline(y=0, line=dict(color=CHART["zero"], width=1))
         _fig_ld.update_layout(
-            template="plotly_dark",
-            paper_bgcolor="#0d1117", plot_bgcolor="#161b22",
-            font=dict(color="#c9d1d9", size=11),
+            template=PLOTLY_TEMPLATE,
+            paper_bgcolor=CHART["bg"], plot_bgcolor=CHART["panel_bg"],
+            font=dict(color=CHART["text"], size=11),
             margin=dict(l=10, r=10, t=10, b=50), height=280,
-            yaxis=dict(title="Loading", gridcolor="rgba(255,255,255,0.06)", zeroline=False),
-            xaxis=dict(title="Tenor", gridcolor="rgba(255,255,255,0.06)",
+            yaxis=dict(title="Loading", gridcolor=CHART["grid"], zeroline=False),
+            xaxis=dict(title="Tenor", gridcolor=CHART["grid"],
                        tickangle=45, tickfont=dict(size=9)),
             legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="left", x=0),
             hovermode="x unified",
@@ -3859,14 +3860,14 @@ with tab_pca:
                 name=_lbl, line=dict(color=_col, width=1.5),
                 hovertemplate=f"{_lbl}: %{{y:.2f}}<extra></extra>",
             ))
-        _fig_sc.add_hline(y=0, line=dict(color="rgba(255,255,255,0.2)", width=1))
+        _fig_sc.add_hline(y=0, line=dict(color=CHART["zero"], width=1))
         _fig_sc.update_layout(
-            template="plotly_dark",
-            paper_bgcolor="#0d1117", plot_bgcolor="#161b22",
-            font=dict(color="#c9d1d9", size=11),
+            template=PLOTLY_TEMPLATE,
+            paper_bgcolor=CHART["bg"], plot_bgcolor=CHART["panel_bg"],
+            font=dict(color=CHART["text"], size=11),
             margin=dict(l=10, r=10, t=10, b=10), height=300,
-            yaxis=dict(title="Score", gridcolor="rgba(255,255,255,0.06)", zeroline=False),
-            xaxis=dict(title=None, gridcolor="rgba(255,255,255,0.06)"),
+            yaxis=dict(title="Score", gridcolor=CHART["grid"], zeroline=False),
+            xaxis=dict(title=None, gridcolor=CHART["grid"]),
             legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="left", x=0),
             hovermode="x unified",
         )
@@ -3898,16 +3899,16 @@ with tab_pca:
                 y=_lvl,
                 line=dict(color=_ann_c, width=1, dash="dot"),
                 annotation_text=f"{_lvl:+.0f}σ",
-                annotation_font=dict(size=9, color="#8b949e"),
+                annotation_font=dict(size=9, color=CHART["muted"]),
             )
-        _fig_sig.add_hline(y=0, line=dict(color="rgba(255,255,255,0.2)", width=1))
+        _fig_sig.add_hline(y=0, line=dict(color=CHART["zero"], width=1))
         _fig_sig.update_layout(
-            template="plotly_dark",
-            paper_bgcolor="#0d1117", plot_bgcolor="#161b22",
-            font=dict(color="#c9d1d9", size=11),
+            template=PLOTLY_TEMPLATE,
+            paper_bgcolor=CHART["bg"], plot_bgcolor=CHART["panel_bg"],
+            font=dict(color=CHART["text"], size=11),
             margin=dict(l=10, r=10, t=10, b=10), height=280,
-            yaxis=dict(title="Z-score (σ)", gridcolor="rgba(255,255,255,0.06)", zeroline=False),
-            xaxis=dict(title=None, gridcolor="rgba(255,255,255,0.06)"),
+            yaxis=dict(title="Z-score (σ)", gridcolor=CHART["grid"], zeroline=False),
+            xaxis=dict(title=None, gridcolor=CHART["grid"]),
             legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="left", x=0),
             hovermode="x unified",
         )

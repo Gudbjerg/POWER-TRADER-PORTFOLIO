@@ -39,6 +39,7 @@ from utils.helpers   import (
     has_entsoe_key, has_agsi_key, apply_dark_theme,
     pill, commentary, kpi_card, delta_span,
 )
+from utils.theme     import CHART, PLOTLY_TEMPLATE
 from utils.scenarios import (
     storage_status, ttf_status, spread_status, lng_status, market_summary,
 )
@@ -581,7 +582,7 @@ with tab_prices:
                 fillcolor="rgba(88,166,255,0.08)",
                 hovertemplate="NL−NO2: €%{y:.1f}/MWh<extra></extra>",
             ))
-            _fig_sp.add_hline(y=0, line=dict(color="rgba(255,255,255,0.25)", width=1))
+            _fig_sp.add_hline(y=0, line=dict(color=CHART["zero"], width=1))
             _fig_sp.add_hline(
                 y=SPREAD_CHART_REF_EUR, line=dict(color="#d4ac3a", width=1, dash="dot"),
                 annotation_text=f"  +€{SPREAD_CHART_REF_EUR:.0f} (NordLink historically >90% utilised)",
@@ -595,16 +596,16 @@ with tab_prices:
                 annotation_position="right",
             )
             _fig_sp.update_layout(
-                template="plotly_dark",
-                paper_bgcolor="#0d1117",
-                plot_bgcolor="#161b22",
+                template=PLOTLY_TEMPLATE,
+                paper_bgcolor=CHART["bg"],
+                plot_bgcolor=CHART["panel_bg"],
                 height=220,
                 margin=dict(l=50, r=140, t=10, b=35),
-                xaxis=dict(gridcolor="rgba(255,255,255,0.06)", tickfont=dict(size=10, color="#8b949e")),
+                xaxis=dict(gridcolor=CHART["grid"], tickfont=dict(size=10, color=CHART["muted"])),
                 yaxis=dict(
                     title="EUR/MWh",
-                    gridcolor="rgba(255,255,255,0.06)",
-                    tickfont=dict(size=10, color="#8b949e"),
+                    gridcolor=CHART["grid"],
+                    tickfont=dict(size=10, color=CHART["muted"]),
                     zeroline=False,
                 ),
                 showlegend=False,
@@ -701,16 +702,16 @@ with tab_prices:
             ))
 
         _fig_no.update_layout(
-            template="plotly_dark",
-            paper_bgcolor="#0d1117",
-            plot_bgcolor="#161b22",
+            template=PLOTLY_TEMPLATE,
+            paper_bgcolor=CHART["bg"],
+            plot_bgcolor=CHART["panel_bg"],
             height=260,
             margin=dict(l=50, r=20, t=10, b=35),
-            xaxis=dict(gridcolor="rgba(255,255,255,0.06)", tickfont=dict(size=10, color="#8b949e")),
+            xaxis=dict(gridcolor=CHART["grid"], tickfont=dict(size=10, color=CHART["muted"])),
             yaxis=dict(
                 title="EUR/MWh",
-                gridcolor="rgba(255,255,255,0.06)",
-                tickfont=dict(size=10, color="#8b949e"),
+                gridcolor=CHART["grid"],
+                tickfont=dict(size=10, color=CHART["muted"]),
                 zeroline=False,
             ),
             legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1,

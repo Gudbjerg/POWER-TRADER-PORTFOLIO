@@ -17,6 +17,7 @@ st.set_page_config(
 )
 
 from utils.helpers import apply_dark_theme, kpi_card, delta_span, commentary
+from utils.theme import CHART, PLOTLY_TEMPLATE
 from data.prices import get_ttf_data
 from data.events import load_events, events_in_range, CATEGORY_COLORS
 from data.commodities import get_commodity_data
@@ -208,17 +209,17 @@ with tab_geo:
                 line=dict(color=_col, width=1.5),
                 hovertemplate=f"{_lbl}: %{{y:+.1f}}%<extra></extra>",
             ))
-        _fig_mom.add_hline(y=0, line=dict(color="rgba(255,255,255,0.25)", width=1))
+        _fig_mom.add_hline(y=0, line=dict(color=CHART["zero"], width=1))
         for _band, _opacity in [(5, 0.08), (10, 0.05)]:
             _fig_mom.add_hrect(y0=_band, y1=50, fillcolor="rgba(248,81,73,{})".format(_opacity),
                                line_width=0)
             _fig_mom.add_hrect(y0=-50, y1=-_band, fillcolor="rgba(63,185,80,{})".format(_opacity),
                                line_width=0)
         _fig_mom.update_layout(
-            template="plotly_dark",
-            paper_bgcolor="#0d1117", plot_bgcolor="#161b22",
-            xaxis=dict(title=None, gridcolor="rgba(255,255,255,0.06)"),
-            yaxis=dict(title="Return (%)", gridcolor="rgba(255,255,255,0.06)",
+            template=PLOTLY_TEMPLATE,
+            paper_bgcolor=CHART["bg"], plot_bgcolor=CHART["panel_bg"],
+            xaxis=dict(title=None, gridcolor=CHART["grid"]),
+            yaxis=dict(title="Return (%)", gridcolor=CHART["grid"],
                        zeroline=False),
             legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="left", x=0,
                         font=dict(size=10)),
@@ -304,8 +305,8 @@ with tab_mix:
         "Other":   "#8b949e",
     }
     C = {
-        "bg": "#0d1117", "panel_bg": "#161b22",
-        "grid": "rgba(255,255,255,0.06)", "text": "#c9d1d9",
+        "bg": CHART["bg"], "panel_bg": CHART["panel_bg"],
+        "grid": CHART["grid"], "text": CHART["text"],
     }
 
     fig_mix = go.Figure()
@@ -328,7 +329,7 @@ with tab_mix:
         annotation_font=dict(size=9, color="#0d1117"), annotation_textangle=-90,
     )
     fig_mix.update_layout(
-        template="plotly_dark",
+        template=PLOTLY_TEMPLATE,
         paper_bgcolor=C["bg"], plot_bgcolor=C["panel_bg"],
         font=dict(color=C["text"], size=12),
         margin=dict(l=10, r=10, t=10, b=10),
@@ -385,8 +386,8 @@ with tab_spill:
     else:
         COMM_COLORS = {"TTF": "#e07b39", "Wheat": "#d4ac3a", "Corn": "#3fb950"}
         C = {
-            "bg": "#0d1117", "panel_bg": "#161b22",
-            "grid": "rgba(255,255,255,0.06)", "text": "#c9d1d9",
+            "bg": CHART["bg"], "panel_bg": CHART["panel_bg"],
+            "grid": CHART["grid"], "text": CHART["text"],
         }
 
         # Normalised price index chart
@@ -404,7 +405,7 @@ with tab_spill:
 
         fig_comm.update_layout(
             title=dict(text="Normalised Price Index (base = 100 at start date)", font=dict(size=12)),
-            template="plotly_dark",
+            template=PLOTLY_TEMPLATE,
             paper_bgcolor=C["bg"], plot_bgcolor=C["panel_bg"],
             font=dict(color=C["text"], size=12),
             margin=dict(l=10, r=10, t=40, b=10),
@@ -437,12 +438,12 @@ with tab_spill:
                     hovertemplate=f"{label}: %{{y:.2f}}<extra></extra>",
                 ))
             fig_corr.add_hline(y=0, line_dash="solid",
-                               line_color="rgba(255,255,255,0.2)", line_width=0.8)
+                               line_color=CHART["zero"], line_width=0.8)
             fig_corr.add_hline(y=0.5, line_dash="dot",
-                               line_color="rgba(255,255,255,0.15)", line_width=0.8,
+                               line_color=CHART["axis"], line_width=0.8,
                                annotation_text="0.5", annotation_font=dict(size=9))
             fig_corr.update_layout(
-                template="plotly_dark",
+                template=PLOTLY_TEMPLATE,
                 paper_bgcolor=C["bg"], plot_bgcolor=C["panel_bg"],
                 font=dict(color=C["text"], size=12),
                 margin=dict(l=10, r=10, t=10, b=10),
@@ -536,15 +537,15 @@ with tab_spill:
                 hovertemplate="Copper index: %{y:.1f}<extra></extra>",
             ))
             _fig_cu.update_layout(
-                template="plotly_dark",
-                paper_bgcolor="#0d1117", plot_bgcolor="#161b22",
+                template=PLOTLY_TEMPLATE,
+                paper_bgcolor=CHART["bg"], plot_bgcolor=CHART["panel_bg"],
                 height=220,
                 margin=dict(l=50, r=20, t=10, b=35),
                 legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1,
                             font=dict(size=10)),
-                xaxis=dict(gridcolor="rgba(255,255,255,0.06)", tickfont=dict(size=10, color="#8b949e")),
-                yaxis=dict(title="Index (100 = start)", gridcolor="rgba(255,255,255,0.06)",
-                           tickfont=dict(size=10, color="#8b949e"), zeroline=False),
+                xaxis=dict(gridcolor=CHART["grid"], tickfont=dict(size=10, color=CHART["muted"])),
+                yaxis=dict(title="Index (100 = start)", gridcolor=CHART["grid"],
+                           tickfont=dict(size=10, color=CHART["muted"]), zeroline=False),
                 hovermode="x unified",
             )
             st.plotly_chart(_fig_cu, use_container_width=True)
@@ -561,19 +562,19 @@ with tab_spill:
                 fill="tozeroy", fillcolor="rgba(142,107,191,0.07)",
                 hovertemplate="ρ(TTF,Copper): %{y:.2f}<extra></extra>",
             ))
-            _fig_cu_corr.add_hline(y=0, line=dict(color="rgba(255,255,255,0.2)", width=1))
+            _fig_cu_corr.add_hline(y=0, line=dict(color=CHART["zero"], width=1))
             _fig_cu_corr.add_hline(y=0.5, line=dict(color="#3fb950", width=1, dash="dot"),
                                    annotation_text="  0.5", annotation_font=dict(color="#3fb950", size=9))
             _fig_cu_corr.add_hline(y=-0.5, line=dict(color="#f85149", width=1, dash="dot"),
                                    annotation_text="  −0.5", annotation_font=dict(color="#f85149", size=9))
             _fig_cu_corr.update_layout(
-                template="plotly_dark",
-                paper_bgcolor="#0d1117", plot_bgcolor="#161b22",
+                template=PLOTLY_TEMPLATE,
+                paper_bgcolor=CHART["bg"], plot_bgcolor=CHART["panel_bg"],
                 height=160,
                 margin=dict(l=50, r=60, t=5, b=35),
-                xaxis=dict(gridcolor="rgba(255,255,255,0.06)", tickfont=dict(size=10, color="#8b949e")),
-                yaxis=dict(title="Pearson ρ", gridcolor="rgba(255,255,255,0.06)",
-                           tickfont=dict(size=10, color="#8b949e"), range=[-1, 1]),
+                xaxis=dict(gridcolor=CHART["grid"], tickfont=dict(size=10, color=CHART["muted"])),
+                yaxis=dict(title="Pearson ρ", gridcolor=CHART["grid"],
+                           tickfont=dict(size=10, color=CHART["muted"]), range=[-1, 1]),
                 showlegend=False, hovermode="x unified",
             )
             st.plotly_chart(_fig_cu_corr, use_container_width=True)
@@ -698,13 +699,13 @@ with tab_spill:
                 annotation_position="right",
             )
             _fig_al.update_layout(
-                template="plotly_dark",
-                paper_bgcolor="#0d1117", plot_bgcolor="#161b22",
+                template=PLOTLY_TEMPLATE,
+                paper_bgcolor=CHART["bg"], plot_bgcolor=CHART["panel_bg"],
                 height=230,
                 margin=dict(l=50, r=100, t=10, b=35),
-                xaxis=dict(gridcolor="rgba(255,255,255,0.06)", tickfont=dict(size=10, color="#8b949e")),
-                yaxis=dict(title="Power cost %", gridcolor="rgba(255,255,255,0.06)",
-                           tickfont=dict(size=10, color="#8b949e"), zeroline=False),
+                xaxis=dict(gridcolor=CHART["grid"], tickfont=dict(size=10, color=CHART["muted"])),
+                yaxis=dict(title="Power cost %", gridcolor=CHART["grid"],
+                           tickfont=dict(size=10, color=CHART["muted"]), zeroline=False),
                 showlegend=False, hovermode="x unified",
             )
             st.plotly_chart(_fig_al, use_container_width=True)
@@ -881,10 +882,10 @@ with tab_grid:
             hovertemplate="%{y} / %{x}: %{z:.3f}<extra></extra>",
         ))
         _fig_hm.update_layout(
-            template="plotly_dark",
-            paper_bgcolor="#0d1117",
-            plot_bgcolor="#161b22",
-            font=dict(color="#c9d1d9", size=11),
+            template=PLOTLY_TEMPLATE,
+            paper_bgcolor=CHART["bg"],
+            plot_bgcolor=CHART["panel_bg"],
+            font=dict(color=CHART["text"], size=11),
             margin=dict(l=10, r=10, t=10, b=10),
             height=420,
             xaxis=dict(side="bottom", tickfont=dict(size=11)),

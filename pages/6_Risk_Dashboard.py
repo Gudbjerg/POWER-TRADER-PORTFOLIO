@@ -20,6 +20,7 @@ st.set_page_config(
 )
 
 from utils.helpers import apply_dark_theme, kpi_card, delta_span
+from utils.theme import CHART, PLOTLY_TEMPLATE
 from models.feature_assembly import assemble_features
 
 apply_dark_theme()
@@ -444,17 +445,17 @@ else:
         line=dict(color="#ffffff", width=2.5),
         hovertemplate="Combined: €%{y:,.0f}<extra></extra>",
     ))
-    _fig_eq.add_hline(y=0, line=dict(color="rgba(255,255,255,0.2)", width=1))
+    _fig_eq.add_hline(y=0, line=dict(color=CHART["zero"], width=1))
     _fig_eq.update_layout(
-        template="plotly_dark",
-        paper_bgcolor="#0d1117", plot_bgcolor="#161b22",
+        template=PLOTLY_TEMPLATE,
+        paper_bgcolor=CHART["bg"], plot_bgcolor=CHART["panel_bg"],
         height=320,
         margin=dict(l=60, r=20, t=10, b=35),
         legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1,
                     font=dict(size=10)),
-        xaxis=dict(gridcolor="rgba(255,255,255,0.06)", tickfont=dict(size=10, color="#8b949e")),
-        yaxis=dict(title="Cum. P&L (EUR)", gridcolor="rgba(255,255,255,0.06)",
-                   tickfont=dict(size=10, color="#8b949e"), zeroline=False),
+        xaxis=dict(gridcolor=CHART["grid"], tickfont=dict(size=10, color=CHART["muted"])),
+        yaxis=dict(title="Cum. P&L (EUR)", gridcolor=CHART["grid"],
+                   tickfont=dict(size=10, color=CHART["muted"]), zeroline=False),
         hovermode="x unified",
     )
     st.plotly_chart(_fig_eq, use_container_width=True)
@@ -518,7 +519,7 @@ else:
     _fig_dist = go.Figure()
     _fig_dist.add_trace(go.Histogram(
         x=_arr, nbinsx=60,
-        marker_color="#58a6ff", marker_line_color="#0d1117", marker_line_width=0.4,
+        marker_color="#58a6ff", marker_line_color=CHART["edge"], marker_line_width=0.4,
         opacity=0.75,
         hovertemplate="Range: %{x:.0f}<br>Count: %{y}<extra></extra>",
     ))
@@ -531,14 +532,14 @@ else:
                         annotation_font=dict(color="#d4ac3a", size=9),
                         annotation_position="top right")
     _fig_dist.update_layout(
-        template="plotly_dark",
-        paper_bgcolor="#0d1117", plot_bgcolor="#161b22",
+        template=PLOTLY_TEMPLATE,
+        paper_bgcolor=CHART["bg"], plot_bgcolor=CHART["panel_bg"],
         height=200,
         margin=dict(l=50, r=20, t=10, b=35),
-        xaxis=dict(title="Daily P&L (EUR)", gridcolor="rgba(255,255,255,0.06)",
-                   tickfont=dict(size=10, color="#8b949e")),
-        yaxis=dict(title="Count", gridcolor="rgba(255,255,255,0.06)",
-                   tickfont=dict(size=10, color="#8b949e")),
+        xaxis=dict(title="Daily P&L (EUR)", gridcolor=CHART["grid"],
+                   tickfont=dict(size=10, color=CHART["muted"])),
+        yaxis=dict(title="Count", gridcolor=CHART["grid"],
+                   tickfont=dict(size=10, color=CHART["muted"])),
         showlegend=False, bargap=0.02,
     )
     st.plotly_chart(_fig_dist, use_container_width=True)
@@ -654,18 +655,18 @@ else:
         hovertemplate="%{x} / %{y}: %{z:.2f}<extra></extra>",
         showscale=True,
         colorbar=dict(
-            title=dict(text="Pearson ρ", font=dict(size=10, color="#8b949e")),
-            tickfont=dict(size=9, color="#8b949e"),
+            title=dict(text="Pearson ρ", font=dict(size=10, color=CHART["muted"])),
+            tickfont=dict(size=9, color=CHART["muted"]),
             thickness=12,
         ),
     ))
     _fig_hm.update_layout(
-        template="plotly_dark",
-        paper_bgcolor="#0d1117", plot_bgcolor="#161b22",
+        template=PLOTLY_TEMPLATE,
+        paper_bgcolor=CHART["bg"], plot_bgcolor=CHART["panel_bg"],
         height=max(260, 65 * len(_labels)),
         margin=dict(l=10, r=10, t=10, b=10),
-        xaxis=dict(tickfont=dict(size=9, color="#8b949e"), tickangle=-30),
-        yaxis=dict(tickfont=dict(size=9, color="#8b949e"), autorange="reversed"),
+        xaxis=dict(tickfont=dict(size=9, color=CHART["muted"]), tickangle=-30),
+        yaxis=dict(tickfont=dict(size=9, color=CHART["muted"]), autorange="reversed"),
     )
     st.plotly_chart(_fig_hm, use_container_width=True)
 

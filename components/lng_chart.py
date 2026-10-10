@@ -5,6 +5,7 @@ Data source: GIE ALSI (same API key as AGSI).
 import plotly.graph_objects as go
 import streamlit as st
 import pandas as pd
+from utils.theme import CHART, PLOTLY_TEMPLATE
 
 COUNTRY_COLORS = {
     "BE": "#e07b39",
@@ -15,10 +16,10 @@ COUNTRY_COLORS = {
 
 COLORS = {
     "ma_line":  "#c0392b",
-    "grid":     "rgba(255,255,255,0.06)",
-    "text":     "#c9d1d9",
-    "bg":       "#0d1117",
-    "panel_bg": "#161b22",
+    "grid":     CHART["grid"],
+    "text":     CHART["text"],
+    "bg":       CHART["bg"],
+    "panel_bg": CHART["panel_bg"],
 }
 
 
@@ -82,7 +83,7 @@ def render_lng_chart(lng_data: dict):
 
     fig.update_layout(
         barmode="stack",
-        template="plotly_dark",
+        template=PLOTLY_TEMPLATE,
         paper_bgcolor=COLORS["bg"],
         plot_bgcolor=COLORS["panel_bg"],
         font=dict(color=COLORS["text"], size=12),
@@ -93,7 +94,7 @@ def render_lng_chart(lng_data: dict):
         hovermode="x unified",
     )
 
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig, width="stretch")
 
     if missing_countries:
         _gb_missing = any("Great Britain" in c or c == "GB" for c in missing_countries)
