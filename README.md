@@ -15,7 +15,7 @@ pinned: false
 
 [![Live Demo](https://img.shields.io/badge/Live%20Demo-HuggingFace%20Spaces-orange)](https://huggingface.co/spaces/TobGud/power-trader-portfolio)
 [![Python](https://img.shields.io/badge/Python-3.11%2B-blue)](https://www.python.org/)
-![Pages](https://img.shields.io/badge/7%20pages-33%20analytical%20modules-lightgrey)
+![Pages](https://img.shields.io/badge/7%20pages-34%20analytical%20modules-lightgrey)
 ![Sources](https://img.shields.io/badge/9%20data%20sources-live%20feeds-green)
 
 The platform integrates live fundamental data from ENTSO-E Transparency, GIE AGSI+/ALSI, Nord Pool, and ICE/Yahoo Finance into a unified analytical environment covering storage balances, forward curve dynamics, cross-commodity price transmission, machine learning regime detection, portfolio risk simulation, and battery storage project economics. All models are implemented from scratch in Python; no third-party signal providers or data vendors are used beyond the public API layer. The architecture escalates from raw market observation in Layer 1 to actionable composite signals in Layer 5, following the analytical hierarchy a physical desk would apply before taking a position.
@@ -144,6 +144,7 @@ A [Dockerfile](Dockerfile) and [render.yaml](render.yaml) are included for self-
           │  Layer 4: Machine Learning  (3 models)                             │
           │  PyTorch LSTM forecaster (64-32 units, honest baseline check)      │
           │  4-state Gaussian HMM regime classifier                            │
+          │  Realised-volatility overlay: vol by regime, transition-spike test │
           │  FinBERT news sentiment + Granger causality vs TTF returns         │
           └─────────────────────────────────┬──────────────────────────────────┘
                                             │
@@ -200,6 +201,7 @@ The layered model reflects how a physical desk processes information: raw observ
 | TTF vs JKM LNG Spread | Layer 3 (card in Layer 1) | JKM front month (USD/MMBtu) converted to EUR/MWh as JKM / EURUSD / 0.293071 (EURUSD matched as of each settlement, at most 3 days old); TTF minus JKM on common settlement dates (no interpolation); rolling 1-year percentile (mid-rank, no look-ahead); KPI row, three-panel chart, computed commentary on cargo competition between basins | [models/lng_arbitrage.py](models/lng_arbitrage.py), [data/lng_prices.py](data/lng_prices.py) |
 | LSTM Price Forecaster | Layer 4 | 2-layer PyTorch LSTM (64 → 32 units, dropout 0.2); feature matrix: NO2/NL/TTF/spread/volatility/hydro/calendar; expanding-window train split; honest baseline check (MAE vs persistence) | [models/lstm_model.py](models/lstm_model.py) |
 | HMM Regime Classifier | Layer 4 | 4-state Gaussian HMM (hmmlearn); states: hydro-driven, gas-driven, renewables-driven, geopolitical stress; Viterbi decoding; 30-day regime history | [models/hmm_model.py](models/hmm_model.py) |
+| HMM Realised-Volatility Overlay | Layer 4 | Rolling 30-trading-day realised volatility of NO2 day-ahead (std of daily EUR/MWh changes; log variant with non-positive prices guarded) on a secondary axis over the regime timeline; mean/median volatility per regime; share of regime transitions within ±5 trading days of a volatility spike (above the 90th percentile) against a chance baseline, with an exact circular-shift p-value | [models/regime_volatility.py](models/regime_volatility.py) |
 | FinBERT Sentiment | Layer 4 | ProsusAI/finbert (HuggingFace); energy-filtered RSS headlines from BBC Business, Guardian Energy, LNG World News, Energy Monitor; daily net sentiment (positive - negative); 60-day rolling history on persistent disk | [data/sentiment.py](data/sentiment.py) |
 | Mispricing Dashboard | Layer 5 | 8-signal composite scorecard; each signal: current value, historical percentile (expanding window, 2-7 year history), Bullish/Bearish/Neutral badge, High/Medium/Low confidence; sorted by extremity from median | [pages/5_Mispricing_Dashboard.py](pages/5_Mispricing_Dashboard.py) |
 | Risk Dashboard (D4) | Page 6 | 6-signal backtestable portfolio; non-parametric 1,000-path bootstrap for 95%/99% 1-day VaR and Expected Shortfall; 4 named stress scenarios; 30-day rolling signal correlation matrix | [pages/6_Risk_Dashboard.py](pages/6_Risk_Dashboard.py) |
@@ -229,7 +231,7 @@ The layered model reflects how a physical desk processes information: raw observ
 | ProsusAI FinBERT | HuggingFace Transformers | On-demand | Energy headline classification: positive/negative/neutral |
 | RSS News Feeds | BBC Business, Guardian Energy, LNG World News, Energy Monitor | 6-hourly cache | Raw headline text for FinBERT pipeline |
 
-**Notes on data availability.** Gas storage (GIE), ENTSO-E flows, hydro, wind, solar, and generation all require free API keys. The platform degrades gracefully without them: all Nord Pool spot, energy-charts.info (IT-North) and yfinance data loads without credentials, covering approximately 14 of the 33 modules. The public Nord Pool endpoint only serves roughly the latest two months of delivery days (older dates return HTTP 401), so keyless histories built on it (the FI leg of the FI minus IT-North spread, and the feature matrix fallback used by Layers 2 and 4) are limited to that window until `ENTSOE_API_KEY` is set. API2 Rotterdam coal futures (formerly MTF=F on Yahoo Finance) are not currently available via the free Yahoo Finance tier; the 7x7 correlation grid displays a "Coal unavailable" caption when the ticker returns no data.
+**Notes on data availability.** Gas storage (GIE), ENTSO-E flows, hydro, wind, solar, and generation all require free API keys. The platform degrades gracefully without them: all Nord Pool spot, energy-charts.info (IT-North) and yfinance data loads without credentials, covering approximately 14 of the 34 modules. The public Nord Pool endpoint only serves roughly the latest two months of delivery days (older dates return HTTP 401), so keyless histories built on it (the FI leg of the FI minus IT-North spread, and the feature matrix fallback used by Layers 2 and 4) are limited to that window until `ENTSOE_API_KEY` is set. API2 Rotterdam coal futures (formerly MTF=F on Yahoo Finance) are not currently available via the free Yahoo Finance tier; the 7x7 correlation grid displays a "Coal unavailable" caption when the ticker returns no data.
 
 ---
 
@@ -265,6 +267,12 @@ For pairs with p-value below 0.05, the model computes: (1) the OLS hedge ratio �
 
 Historical performance is evaluated via a simple signal backtest: enter at |z| > threshold, hold for a maximum of 3× the OU half-life, and exit at |z| < 0.5 or max holding period. Hit rate and average days to convergence are reported alongside the current signal. This follows the spread trading framework described in Geman (2005) and the practical OU parameterisation from Pole (2007).
 
+### HMM Regime Volatility Overlay
+
+The Layer 4 overlay asks whether the HMM's regime changes coincide with volatility shocks in NO2 day-ahead prices. Realised volatility is the rolling 30-trading-day standard deviation of daily price changes in EUR/MWh. Absolute rather than log changes are used because Nordic day-ahead prices can approach zero or turn negative, which makes log changes undefined or explosive, and because the HMM's own volatility input is measured in EUR/MWh. A spike is a day with realised volatility above its in-sample 90th percentile; a transition is a day whose Viterbi-decoded regime differs from the previous day's.
+
+The observed statistic is the share of transitions with a spike within ±5 trading days. The chance baseline is the share of all scored days with that property, i.e. the probability that a randomly placed transition would qualify. Significance comes from an exact one-sided circular-shift test: the transition sequence is rotated against the fixed spike sequence by every lag of at least 11 days, which preserves the clustering of both sequences, and p = (1 + rotations matching or beating the observed count) / (1 + rotations). Because the HMM observation vector already contains a 5-day volatility z-score, the test concerns timing rather than independence.
+
 ### BESS Multi-Market Revenue Stack
 
 The BESS Optimiser models Nordic battery economics as a multi-market revenue stack. DAM arbitrage revenue is estimated from the historical NO2 spread distribution: the rolling 5-day price range is computed and the top-20% mean of that distribution, scaled by configured efficiency and dispatch hours, gives an achievable round-trip spread. Only 20% of days are assumed viable for profitable dispatch, reflecting both price level requirements and grid constraints.
@@ -295,7 +303,7 @@ A full P0/P1/P2/P3 pre-deployment audit was conducted and documented in [files/A
 
 ## Running Locally
 
-The platform requires Python 3.11+. API keys for GIE AGSI+ (agsi.gie.eu) and ENTSO-E Transparency (transparency.entsoe.eu) are free to register and unlock the full feature set. Without keys, approximately 14 of the 33 modules load using public data only.
+The platform requires Python 3.11+. API keys for GIE AGSI+ (agsi.gie.eu) and ENTSO-E Transparency (transparency.entsoe.eu) are free to register and unlock the full feature set. Without keys, approximately 14 of the 34 modules load using public data only.
 
 ```bash
 git clone https://github.com/Gudbjerg/POWER-TRADER-PORTFOLIO.git

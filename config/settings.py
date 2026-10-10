@@ -129,3 +129,10 @@ LNG_PCTL_WINDOW_DAYS  = 365    # trailing calendar-day window for the rolling pe
 LNG_PCTL_MIN_OBS      = 120    # minimum settlements in the window before a percentile is reported
 LNG_FX_MAX_AGE_DAYS   = 3      # maximum age (calendar days) of the EURUSD close used for conversion
 # ── end TTF vs JKM ───────────────────────────────────────────────────────────
+
+# ── HMM regime volatility overlay (roadmap 3D, Layer 4) ──────────────────────
+REGIME_VOL_WINDOW         = 30     # trading days in the rolling realised-volatility window
+REGIME_VOL_SPIKE_PCTL     = 90.0   # in-sample percentile of realised volatility defining a spike
+REGIME_VOL_PROXIMITY_DAYS = 5      # +/- trading days around a regime transition
+REGIME_VOL_MIN_DAYS       = 60     # minimum aligned days before overlay statistics are reported
+# ── end HMM regime volatility overlay ────────────────────────────────────────
