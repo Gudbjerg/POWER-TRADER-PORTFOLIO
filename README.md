@@ -136,7 +136,7 @@ A [Dockerfile](Dockerfile) and [render.yaml](render.yaml) are included for self-
                                             │
           ┌─────────────────────────────────▼──────────────────────────────────┐
           │  Layer 3: Geopolitical and Macro Signals  (5 panels)               │
-          │  TTF + 19-event geopolitical timeline · EU supply mix 2020-2026   │
+          │  TTF + 28-event geopolitical timeline · EU supply mix 2020-2026   │
           │  Gas-fertiliser-food spillover chain · 7x7 cross-commodity grid   │
           │  TTF vs JKM inter-basin LNG spread (EUR/MWh, 1-year percentile)    │
           └─────────────────────────────────┬──────────────────────────────────┘
@@ -196,7 +196,7 @@ The layered model reflects how a physical desk processes information: raw observ
 | Multi-Pair Cointegration Scanner | Layer 2 | Engle-Granger across all pairs in 6-asset universe (NO2, NL, TTF, DE, FR, NBP); ranked by p-value; OU half-life; real-time z-score signal; signal frequency and backtest hit rate; rolling-window Stability column | [pages/2_Quant_Analysis.py](pages/2_Quant_Analysis.py) |
 | Rolling Cointegration Stability | Layer 2 | Scanner's Engle-Granger test (same statsmodels settings, both directions, lower p-value) re-run on rolling 180-observation windows with ends every 21 trading days on a common date grid; pairs x window-end heatmap of p-values with a colour break at 0.05; per-pair share of cointegrated windows, current streak and last break date; Persistent / Episodic / Rare / Absent labels feed the scanner ranking and signal commentary | [models/coint_stability.py](models/coint_stability.py) |
 | Forward Curve PCA | Layer 2 | Synthetic M+1-M+18 panel via F(t,m) = spot × seasonal_m × (1 + α × storage_z × exp(-m/τ)); sklearn PCA on de-meaned panel; expanding z-score on PC1/PC2/PC3; calendar-spread (PC2) and butterfly (PC3) signals | Litterman and Scheinkman (1991); [pages/2_Quant_Analysis.py](pages/2_Quant_Analysis.py) |
-| Geopolitical Event Overlay | Layer 3 | 19 annotated supply disruptions (2022-2026): Hormuz cluster, Ras Laffan strikes, Norwegian outages, Russia cut-off, US LNG tariff threat; 5/20/60-day TTF momentum ribbon | [data/events.py](data/events.py) |
+| Geopolitical Event Overlay | Layer 3 | 28 annotated events (2022-2026): Hormuz cluster, Ras Laffan strikes, Norwegian outages, Russia cut-off, US LNG tariff threat; entries from 20 April 2026 onwards (EU ban on short-term Russian LNG, US-Iran MoU, Hormuz re-closure, June heatwave, Commission demand-curb letter) each carry a source URL; 5/20/60-day TTF momentum ribbon | [data/events.py](data/events.py), [data/events.json](data/events.json) |
 | EU Gas Supply Mix | Layer 3 | Annual supply-source breakdown 2020-2026: Russia pipeline, Norwegian pipeline, LNG (US/Qatari/other), Algerian, domestic; structural shift visualisation | [pages/3_Macro_Signals.py](pages/3_Macro_Signals.py) |
 | Cross-Commodity Spillover | Layer 3 | TTF to European fertiliser (Haber-Bosch gas intensity: 1,100 m³/tonne urea equivalent) to global wheat/corn; copper-power industrial linkage; aluminium smelter stress indicator | [pages/3_Macro_Signals.py](pages/3_Macro_Signals.py) |
 | 7x7 Correlation Grid | Layer 3 | 90-day rolling Pearson on daily log-returns across TTF, Brent, API2 coal, EUA, copper, aluminium, BDI; lead-lag sweep at τ ∈ [-10, +10] days; top 15 pairs by |ρ| | [pages/3_Macro_Signals.py](pages/3_Macro_Signals.py) |
