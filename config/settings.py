@@ -111,3 +111,13 @@ LNG_COUNTRIES = {
     "GB": "Great Britain (S. Hook/Dragon)",
     "FR": "France (Dunkirk/Montoir)",
 }
+
+# ── FI minus IT-North spread (roadmap 3A, Layer 1 Prices tab) ────────────────
+IT_NORTH_EIC                 = "10Y1001A1001A73I"   # ENTSO-E EIC for the IT-North bidding zone
+FI_IT_HISTORY_DAYS           = 365    # delivery days of history requested for FI and IT-North
+FI_IT_AVG_WINDOW_DAYS        = 30     # trailing calendar-day window for the average-spread KPI
+FI_IT_Z_WINDOW_DAYS          = 365    # trailing calendar-day window for the spread z-score
+FI_IT_Z_MIN_OBS              = 60     # minimum daily observations before a z-score is reported
+FI_IT_MIN_DAY_COVERAGE       = 0.90   # minimum share of a delivery day's intervals for a valid daily mean
+ENERGY_CHARTS_MAX_CHUNK_DAYS = 90     # maximum delivery days per energy-charts.info request
+# ── end FI minus IT-North spread ─────────────────────────────────────────────

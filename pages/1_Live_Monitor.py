@@ -743,6 +743,243 @@ with tab_prices:
             transmission investment and demand flexibility. The debate is active in the Storting (Norwegian parliament).
             """)
 
+    # ── 3A: FI minus IT-North spread (roadmap 3A) ────────────────────────────
+    # Self-contained block: data (data/italy_prices.py), statistics
+    # (models/fi_it_spread.py), KPI row, two-panel chart, commentary, methodology.
+    import math as _fiit_math
+    import plotly.graph_objects as _fiit_go
+    from plotly.subplots import make_subplots as _fiit_subplots
+    from data.italy_prices import fetch_it_north_daily as _fiit_fetch_it, fetch_fi_daily as _fiit_fetch_fi
+    from models.fi_it_spread import (
+        build_spread_frame as _fiit_build,
+        add_rolling_mean as _fiit_add_ma,
+        spread_statistics as _fiit_statistics,
+    )
+    from config.settings import (
+        FI_IT_HISTORY_DAYS as _FIIT_HIST_D,
+        FI_IT_AVG_WINDOW_DAYS as _FIIT_AVG_D,
+        FI_IT_Z_WINDOW_DAYS as _FIIT_Z_D,
+        FI_IT_Z_MIN_OBS as _FIIT_Z_MIN,
+        FI_IT_MIN_DAY_COVERAGE as _FIIT_COV,
+    )
+
+    st.divider()
+    st.markdown("#### FI minus IT-North Day-Ahead Spread")
+    st.caption(
+        "Finland (FI) minus northern Italy (IT-North) day-ahead price, daily averages per CET "
+        "delivery day (EUR/MWh). Contrasts a Nordic system clearing on low-marginal-cost supply "
+        "with a Continental zone where gas-fired plants usually set the price."
+    )
+
+    with st.spinner("Loading FI and IT-North day-ahead prices…"):
+        _fiit_it = _fiit_fetch_it(days=_FIIT_HIST_D)
+        _fiit_fi = _fiit_fetch_fi(days=_FIIT_HIST_D)
+
+    _fiit_it_df = _fiit_it.get("daily", pd.DataFrame())
+    _fiit_fi_df = _fiit_fi.get("daily", pd.DataFrame())
+    _fiit_df = _fiit_build(_fiit_fi_df, _fiit_it_df)
+
+    if _fiit_it_df.empty or _fiit_fi_df.empty:
+        _fiit_missing = []
+        if _fiit_fi_df.empty:
+            _fiit_missing.append("FI (Nord Pool Data Portal unreachable)")
+        if _fiit_it_df.empty:
+            _fiit_missing.append(
+                "IT-North (energy-charts.info unreachable; the ENTSO-E fallback requires ENTSOE_API_KEY)"
+            )
+        st.caption("FI minus IT-North spread unavailable. Missing: " + "; ".join(_fiit_missing) + ".")
+    elif len(_fiit_df) < 5:
+        st.caption(
+            f"FI minus IT-North spread unavailable: only {len(_fiit_df)} overlapping delivery days "
+            "between the FI and IT-North series."
+        )
+    else:
+        _fiit_df = _fiit_add_ma(_fiit_df, window_days=_FIIT_AVG_D)
+        _fs = _fiit_statistics(
+            _fiit_df, avg_window_days=_FIIT_AVG_D, z_window_days=_FIIT_Z_D, min_z_obs=_FIIT_Z_MIN,
+        )
+        _fiit_z = _fs["z"]
+        _fiit_z_ok = _fiit_math.isfinite(_fiit_z)
+        _fiit_win_lbl = "1-year" if _fs["z_full_window"] else f"{_fs['n_z']}-day"
+        _fiit_date_s = _fs["latest_date"].strftime("%d %b %Y")
+
+        _fk1, _fk2, _fk3, _fk4 = st.columns(4)
+        with _fk1:
+            st.markdown(
+                kpi_card(
+                    "FI minus IT-North (latest)",
+                    f"€{_fs['latest_spread']:+.1f}/MWh",
+                    delta_span(
+                        f"{_fiit_date_s}: FI €{_fs['latest_fi']:.1f}, IT-North €{_fs['latest_it_north']:.1f}",
+                        "blue",
+                    ),
+                ),
+                unsafe_allow_html=True,
+            )
+        with _fk2:
+            st.markdown(
+                kpi_card(
+                    f"{_FIIT_AVG_D}-day average spread",
+                    f"€{_fs['avg']:+.1f}/MWh",
+                    delta_span(f"FI below IT-North on {_fs['n_fi_below']} of {_fs['n_avg']} days", "blue"),
+                ),
+                unsafe_allow_html=True,
+            )
+        with _fk3:
+            if _fiit_z_ok:
+                _fiit_z_col = "red" if abs(_fiit_z) >= 2 else ("amber" if abs(_fiit_z) >= 1 else "green")
+                _fiit_z_note = f"vs {_fiit_win_lbl} mean €{_fs['z_mean']:+.1f}, σ €{_fs['z_std']:.1f}"
+                if not _fs["z_full_window"]:
+                    _fiit_z_note += " (partial year)"
+                st.markdown(
+                    kpi_card("Z-score vs 1-year", f"{_fiit_z:+.2f}σ", delta_span(_fiit_z_note, _fiit_z_col)),
+                    unsafe_allow_html=True,
+                )
+            else:
+                st.markdown(
+                    kpi_card(
+                        "Z-score vs 1-year", "n/a",
+                        delta_span(f"needs ≥{_FIIT_Z_MIN} days, have {_fs['n_z']}", "amber"),
+                    ),
+                    unsafe_allow_html=True,
+                )
+        with _fk4:
+            st.markdown(
+                kpi_card(
+                    f"{_fiit_win_lbl.capitalize()} spread range",
+                    f"€{_fs['window_min']:+.0f} to €{_fs['window_max']:+.0f}",
+                    delta_span(f"{_fs['n_z']} delivery days", "blue"),
+                ),
+                unsafe_allow_html=True,
+            )
+
+        # Two-panel chart: price levels (top), spread with rolling mean (bottom)
+        _fiit_fig = _fiit_subplots(
+            rows=2, cols=1, shared_xaxes=True, vertical_spacing=0.06, row_heights=[0.55, 0.45],
+        )
+        _fiit_it_plot = _fiit_it_df.copy()
+        _fiit_it_plot["date"] = pd.to_datetime(_fiit_it_plot["date"])
+        _fiit_fi_plot = _fiit_fi_df.copy()
+        _fiit_fi_plot["date"] = pd.to_datetime(_fiit_fi_plot["date"])
+        _fiit_fig.add_trace(_fiit_go.Scatter(
+            x=_fiit_it_plot["date"], y=_fiit_it_plot["it_north"], name="IT-North",
+            line=dict(color="#e07b39", width=1.5),
+            hovertemplate="IT-North: €%{y:.1f}/MWh<extra></extra>",
+        ), row=1, col=1)
+        _fiit_fig.add_trace(_fiit_go.Scatter(
+            x=_fiit_fi_plot["date"], y=_fiit_fi_plot["fi"], name="FI (Finland)",
+            line=dict(color="#8e6bbf", width=1.5),
+            hovertemplate="FI: €%{y:.1f}/MWh<extra></extra>",
+        ), row=1, col=1)
+        _fiit_fig.add_trace(_fiit_go.Scatter(
+            x=_fiit_df["date"], y=_fiit_df["spread"], name="FI minus IT-North",
+            line=dict(color="#58a6ff", width=1.3),
+            fill="tozeroy", fillcolor="rgba(88,166,255,0.08)",
+            hovertemplate="FI minus IT-North: €%{y:.1f}/MWh<extra></extra>",
+        ), row=2, col=1)
+        _fiit_fig.add_trace(_fiit_go.Scatter(
+            x=_fiit_df["date"], y=_fiit_df["spread_ma"], name=f"{_FIIT_AVG_D}-day mean",
+            line=dict(color="#d29922", width=1.6, dash="dot"),
+            hovertemplate=f"{_FIIT_AVG_D}-day mean: €%{{y:.1f}}/MWh<extra></extra>",
+        ), row=2, col=1)
+        _fiit_fig.add_hline(y=0, line=dict(color="rgba(255,255,255,0.25)", width=1), row=2, col=1)
+        _fiit_fig.update_layout(
+            template="plotly_dark",
+            paper_bgcolor="#0d1117",
+            plot_bgcolor="#161b22",
+            height=440,
+            margin=dict(l=50, r=20, t=10, b=35),
+            legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1,
+                        font=dict(size=10)),
+            hovermode="x unified",
+        )
+        _fiit_fig.update_xaxes(gridcolor="rgba(255,255,255,0.06)", tickfont=dict(size=10, color="#8b949e"))
+        _fiit_fig.update_yaxes(gridcolor="rgba(255,255,255,0.06)", tickfont=dict(size=10, color="#8b949e"),
+                               zeroline=False)
+        _fiit_fig.update_yaxes(title_text="EUR/MWh", row=1, col=1)
+        _fiit_fig.update_yaxes(title_text="Spread (EUR/MWh)", row=2, col=1)
+        st.plotly_chart(_fiit_fig, use_container_width=True)
+
+        _fiit_span_note = (
+            f"Spread shown for {len(_fiit_df)} overlapping delivery days "
+            f"({_fiit_df['date'].iloc[0]:%d %b %Y} to {_fiit_df['date'].iloc[-1]:%d %b %Y}). "
+            f"FI history: {_fiit_fi.get('source') or 'n/a'}, {len(_fiit_fi_df)} days"
+        )
+        if _fiit_fi.get("entsoe_days", 0) == 0 and len(_fiit_fi_df) < _FIIT_Z_D * 0.9:
+            _fiit_span_note += (
+                " (the public Nord Pool endpoint serves about two months; "
+                "set ENTSOE_API_KEY to extend FI to one year)"
+            )
+        st.caption(_fiit_span_note + ".")
+
+        # Commentary: every figure below is computed from the series above
+        _fiit_text = (
+            f"On {_fiit_date_s}, Finland cleared at €{_fs['latest_fi']:.1f}/MWh against "
+            f"€{_fs['latest_it_north']:.1f}/MWh in IT-North, a spread of €{_fs['latest_spread']:+.1f}/MWh. "
+            f"Across the {_fs['n_avg']} delivery days in the trailing {_FIIT_AVG_D}-day window the spread "
+            f"averaged €{_fs['avg']:+.1f}/MWh, with Finland pricing below IT-North on "
+            f"{_fs['n_fi_below']} of {_fs['n_avg']} days. "
+        )
+        if _fiit_z_ok:
+            _fiit_text += (
+                f"The latest reading is {_fiit_z:+.2f}σ from its {_fiit_win_lbl} mean of "
+                f"€{_fs['z_mean']:+.1f}/MWh. "
+            )
+        _fiit_text += (
+            "A deeply negative FI minus IT-North spread is the expected configuration when Italian "
+            "prices are set by gas-fired plants at the margin while Finland clears on low-marginal-cost "
+            "supply (hydro, nuclear including Olkiluoto 3, and wind). The spread narrows when Finnish "
+            "supply tightens (nuclear outages, low-wind spells, cold snaps) or when gas costs fall."
+        )
+        st.markdown(
+            commentary(_fiit_text, "warn" if (_fiit_z_ok and abs(_fiit_z) >= 2) else "ok"),
+            unsafe_allow_html=True,
+        )
+
+        with st.expander("FI minus IT-North spread: methodology and sources", expanded=False):
+            st.markdown(f"""
+            **Definition:** spread = FI day-ahead price minus IT-North day-ahead price (EUR/MWh),
+            using daily averages per CET/CEST delivery day. No unit or currency conversion is required.
+
+            **FI data:** Nord Pool Data Portal daily area averages (no key required). The public
+            endpoint only serves roughly the latest two months of delivery days; older dates return
+            HTTP 401. When `ENTSOE_API_KEY` is set, ENTSO-E A44 day-ahead prices for FI
+            (EIC 10YFI-1--------U) extend the history to {_FIIT_HIST_D} days; Nord Pool values are kept
+            on overlapping days because both publish the same coupled (SDAC) clearing prices.
+
+            **IT-North data:** energy-charts.info price API (Fraunhofer ISE), bidding zone IT-North,
+            requested in chunks of at most 90 days. Data from Bundesnetzagentur | SMARD.de, licensed
+            under CC BY 4.0 (creativecommons.org/licenses/by/4.0). Fallback: ENTSO-E A44 for IT-North
+            (EIC 10Y1001A1001A73I) when `ENTSOE_API_KEY` is set. energy-charts.info also publishes FI
+            prices, but under a licence restricted to private and internal use, so that series is not used.
+
+            **Daily aggregation:** quarter-hourly prices (from delivery day 1 October 2025) or hourly
+            prices (before) are averaged arithmetically per delivery day in Europe/Rome time
+            (23, 24 or 25 hours around daylight-saving changes). Days with less than
+            {_FIIT_COV:.0%} of the expected intervals are excluded.
+
+            **Statistics:** the {_FIIT_AVG_D}-day average covers the trailing {_FIIT_AVG_D} calendar days
+            ending on the latest common delivery day. The z-score is (latest spread minus mean) divided
+            by the sample standard deviation over the trailing {_FIIT_Z_D} calendar days, reported only
+            with at least {_FIIT_Z_MIN} daily observations and flagged as partial when the history is
+            shorter than a full year.
+
+            **Interpretation and limitations:** Finland and Italy are not directly interconnected,
+            so the spread is not a tradable arbitrage. It is a structural comparison of the marginal
+            technology in each zone: low-marginal-cost Nordic supply against gas-fired generation in
+            Italy. IT-North is one of several Italian bidding zones and hosts Italy's interconnections
+            with France, Switzerland, Austria and Slovenia.
+            """)
+
+    _fiit_src_bits = ["FI: " + (_fiit_fi.get("source") or "unavailable")]
+    _fiit_src_bits.append("IT-North: " + (_fiit_it.get("source") or "unavailable"))
+    if _fiit_it.get("licence"):
+        _fiit_src_bits.append("Licence: " + _fiit_it["licence"])
+    st.caption("Sources: " + " | ".join(_fiit_src_bits))
+    if _fiit_it.get("error"):
+        st.caption(f"IT-North chunks not loaded: {_fiit_it['error']}")
+    # ── end 3A: FI minus IT-North spread ─────────────────────────────────────
+
 
 # ═══════════════════════════════════════════════════════════════════════════
 # TAB 5: POWER FLOWS

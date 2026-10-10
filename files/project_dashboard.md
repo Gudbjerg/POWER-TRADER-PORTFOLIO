@@ -103,7 +103,7 @@ Platform at outreach cut: 5 pages · 14 Layer 2 tabs · 4 Layer 3 tabs · Mispri
 
 ## Shipped features
 
-Everything confirmed live on HuggingFace Space and `origin/main`.
+Everything confirmed live on HuggingFace Space and `origin/main`, except rows labelled **Q4** below, which are committed on branch `feat/roadmap-q4` and pending merge and deploy.
 
 | Phase / Item | Layer | Description |
 |---|---|---|
@@ -121,6 +121,7 @@ Everything confirmed live on HuggingFace Space and `origin/main`.
 | Norwegian zonal | Layer 1 | "Norgespris debate" sub-panel: NO1/NO2/NO3/NO4/NO5 vs system price (SYS) day-ahead, zone spread KPIs |
 | NEW1 | Layer 3 | Copper–power grid investment linkage panel: LME copper vs German baseload proxy, rolling 90-day correlation, 6-month copper change as forward indicator |
 | NEW2 | Layer 3 | Aluminium smelter stress indicator: power-cost-as-%-of-smelter-revenue time series, NORMAL / ELEVATED / CRITICAL gauge |
+| Q4 · 3A | Layer 1 | FI minus IT-North day-ahead spread (Prices tab): KPIs for latest spread, 30-day average and z-score vs 1-year; two-panel 1-year chart; computed commentary; methodology expander. IT-North from energy-charts.info (SMARD, CC BY 4.0) with ENTSO-E A44 fallback; FI from Nord Pool, extended with ENTSO-E A44 when a key is set (`data/italy_prices.py`, `models/fi_it_spread.py`) |
 
 ---
 
