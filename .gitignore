@@ -17,8 +17,9 @@ env/
 .vscode/
 .idea/
 
-# Runtime state — excluded from main, but committed on hf-deploy for cold-start performance
-# (see hf-deploy branch which removes these exclusions)
+# Runtime state. main ignores these caches; hf-deploy commits them so a fresh Space starts
+# warm (.sentiment_history.csv, models/data/features_*, data/generation_cache_v2.csv).
+# Version 1 of the coal cache overstated generation fourfold and is never shipped.
 data/generation_cache.csv
 # model weights excluded on hf-deploy: HF rejects binary files (Xet policy)
 # weights are committed on main for Streamlit Cloud live inference

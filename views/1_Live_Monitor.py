@@ -1148,9 +1148,10 @@ with tab_generation:
               and carbon (EUA) costs. More responsive to the gas-coal switching dynamic.
 
             **What the 2021-2022 energy crisis showed:**
-            When TTF exceeded EUR 100/MWh in August 2022, German coal generation surged to levels
-            not seen since the mid-2010s. Both hard coal and lignite output reached approximately
-            40 TWh per quarter. As gas prices normalised in 2023-2024, coal dispatch fell sharply.
+            When TTF exceeded EUR 100/MWh in August 2022, gas-to-coal switching pushed German coal
+            generation to the highest annual total in the series above, about 166 TWh in 2022.
+            Hard coal and lignite together ran at roughly 37 to 46 TWh per quarter from late 2021
+            to early 2023. As gas prices normalised in 2023-2024, coal dispatch fell sharply.
             Renewed gas price pressure in 2025-2026 is now causing a partial reversal.
 
             **Relevance for Norwegian hydro:**
