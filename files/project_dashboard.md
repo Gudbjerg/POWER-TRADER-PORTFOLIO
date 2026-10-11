@@ -103,7 +103,7 @@ Platform at outreach cut: 5 pages · 14 Layer 2 tabs · 4 Layer 3 tabs · Mispri
 
 ## Shipped features
 
-Everything confirmed live on HuggingFace Space and `origin/main`, with two exceptions: rows labelled **Q4** are committed on branch `feat/roadmap-q4` and pending merge and deploy, and the D4 and Phase E rows were moved here from the deferred table because both pages are on `origin/main` (their live status on the Space was not re-checked).
+Everything confirmed live on HuggingFace Space and `origin/main`, with these exceptions: rows labelled **Q4** and **v2** were merged into `origin/main` on 2026-10-11 from branch `feat/platform-v2` (the HF Space follows with the next close-of-session deploy), and the D4 and Phase E rows were moved here from the deferred table because both pages are on `origin/main` (their live status on the Space was not re-checked).
 
 | Phase / Item | Layer | Description |
 |---|---|---|
@@ -128,6 +128,9 @@ Everything confirmed live on HuggingFace Space and `origin/main`, with two excep
 | Q4 · 3D | Layer 4 | Realised-volatility overlay in the HMM section: rolling 30-trading-day NO2 volatility on a secondary axis over the regime timeline, per-regime mean/median volatility table, share of transitions within ±5 trading days of a volatility spike against a chance baseline with a circular-shift p-value; HMM inference now degrades cleanly when trained features are missing (`models/regime_volatility.py`) |
 | Q4 · D2_alt | Layer 2 | Rolling cointegration stability in the Cointegration Scanner tab: Engle-Granger (scanner settings) on rolling 180-observation windows every 21 trading days, pairs x window-end p-value heatmap with a colour break at 0.05, per-pair stability table (share of cointegrated windows, current streak, last break), Stability column in the ranking table and stability context in the signal commentary; also fixes the scanner and NO2/NL tab OU estimates, which indexed numpy statsmodels params with `.iloc` (`models/coint_stability.py`) |
 | Q4 · 3E | Layer 3 | Event timeline extended from 19 to 28 entries for 20 April to 10 October 2026 (Hormuz MoU, re-closure and attacks, Qatari LNG carrier strike, EU short-term Russian LNG ban, June heatwave, US LNG shift to Asia, Commission demand-curb letter); every new entry carries a `source` URL from a news agency, EU body or major outlet; no verifiable 2026 Norwegian outage was found for the window, so none was added |
+| v2 · Interface | All pages | `app.py` router with grouped top navigation (`st.navigation`), page modules in `views/` with fixed URL paths, design system in `utils/theme.py` (tokens, global stylesheet, page header, KPI card, callout, chip, ticker strip, layer card, footer, Plotly template `ptp`), redesigned overview page with a delayed market snapshot strip and data-source status |
+| v2 · Data fixes | Layers 1 to 5 | ENTSO-E clients time out after 30 s instead of hanging; DE-LU bidding zone for German day-ahead prices; no disk-persisted caches for market data; ALSI send-out labelled GWh/d; season-aware storage commentary and refill pace against the 5-year norm; NaN-safe ordinals and EUA handling in the Mispricing Dashboard |
+| v2 · Energy Globe | Page 8 | CesiumJS 3D globe embedded in the platform (`views/8_Energy_Globe.py`): Norwegian shelf facilities and export pipelines (Sodir, NLOD), 38 European LNG import terminals (GEM, CC BY 4.0) with live GIE ALSI send-out, utilisation and tank stocks per gas day, 10 maritime chokepoints with EIA flows; curated views linked from the overview, Layer 1, Layer 3 and the Risk Dashboard (`data/energy_globe.py`, `components/energy_globe.py`, `data/globe/`) |
 
 ---
 

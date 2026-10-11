@@ -62,23 +62,23 @@ A [Dockerfile](Dockerfile) and [render.yaml](render.yaml) are included for self-
 </details>
 
 <details>
-<summary>Layer 2: Quantitative Analysis</summary>
+<summary>Layer 2: Quantitative Analysis (cointegration scanner and rolling stability)</summary>
 
-![Layer 2 quantitative analysis](files/screenshots/layer2_cointegration_scanner.png)
-
-</details>
-
-<details>
-<summary>Layer 2: Forward Curve PCA</summary>
-
-![Forward curve PCA](files/screenshots/layer2_pca.png)
+![Layer 2 cointegration scanner](files/screenshots/layer2_cointegration_scanner.png)
 
 </details>
 
 <details>
-<summary>Layer 3: Geopolitical and Macro Signals</summary>
+<summary>Layer 3: Geopolitical and Macro Signals (TTF vs JKM)</summary>
 
-![Layer 3 macro signals](files/screenshots/layer3_correlation_grid.png)
+![Layer 3 TTF vs JKM spread](files/screenshots/layer3_ttf_jkm.png)
+
+</details>
+
+<details>
+<summary>Layer 4: ML Models (HMM regimes with realised-volatility overlay)</summary>
+
+![Layer 4 HMM regimes and realised volatility](files/screenshots/layer4_hmm_volatility.png)
 
 </details>
 
@@ -103,11 +103,18 @@ A [Dockerfile](Dockerfile) and [render.yaml](render.yaml) are included for self-
 
 </details>
 
+<details>
+<summary>Page 8: Energy Globe</summary>
+
+![Energy Globe with live LNG send-out](files/screenshots/energy_globe.png)
+
+</details>
+
 ---
 
 ## Interface
 
-`app.py` is the router: it applies the design system once per run and declares a grouped top navigation with `st.navigation` (on narrow screens Streamlit moves the menu into the sidebar). Page modules live in `views/` (deliberately not `pages/`: Streamlit treats a `pages/` folder as a legacy multipage app until the router has run once, which would let a cold deep link bypass the navigation and theme), and URL paths are fixed so direct links keep working.
+`app.py` is the router: it applies the design system once per run and declares a grouped top navigation with `st.navigation` (on narrow screens Streamlit moves the menu into the sidebar). Page modules live in `views/` (deliberately not `pages/`: Streamlit treats a `pages/` folder as a legacy multipage app until the router has run once, which would let a cold deep link bypass the navigation and theme), and URL paths are fixed so direct links keep working. A leftover `pages/` folder next to `app.py`, even one holding only `__pycache__`, has the same effect on the first request after a server start (a deep link shows "Page not found" before the router takes over); `tests/test_app_layout.py` fails while one exists.
 
 | Menu | Pages | URL path |
 |------|-------|----------|
