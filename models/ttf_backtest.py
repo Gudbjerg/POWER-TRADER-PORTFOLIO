@@ -27,7 +27,7 @@ except ImportError:
 TTF_TICKER = "TTF=F"
 
 
-@st.cache_data(ttl=3600, persist="disk")
+@st.cache_data(ttl=3600)
 def fetch_ttf_history(years: int = 7) -> pd.DataFrame:
     """
     Fetch TTF front-month daily close prices for the last `years` calendar years.

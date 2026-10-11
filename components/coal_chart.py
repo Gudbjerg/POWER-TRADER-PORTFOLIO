@@ -5,14 +5,15 @@ Replicates and automates the fuel switching indicator posted by Marius Slette.
 import plotly.graph_objects as go
 import streamlit as st
 import pandas as pd
+from utils.theme import CHART, PLOTLY_TEMPLATE
 
 COLORS = {
-    "hard_coal": "#2c2c3e",   # near-black (sort kull)
+    "hard_coal": "#4b5563",   # dark slate (sort kull); near-black reads as empty on the dark panel
     "lignite":   "#c0754a",   # amber-brown (brunkull)
-    "grid":      "rgba(255,255,255,0.06)",
-    "text":      "#c9d1d9",
-    "bg":        "#0d1117",
-    "panel_bg":  "#161b22",
+    "grid":      CHART["grid"],
+    "text":      CHART["text"],
+    "bg":        CHART["bg"],
+    "panel_bg":  CHART["panel_bg"],
     "ttf_line":  "#e8c547",
 }
 
@@ -60,7 +61,7 @@ def render_coal_chart(gen_data: dict, ttf_price: float | None = None):
 
     fig.update_layout(
         barmode="stack",
-        template="plotly_dark",
+        template=PLOTLY_TEMPLATE,
         paper_bgcolor=COLORS["bg"],
         plot_bgcolor=COLORS["panel_bg"],
         font=dict(color=COLORS["text"], size=12),
@@ -71,7 +72,7 @@ def render_coal_chart(gen_data: dict, ttf_price: float | None = None):
         hovermode="x unified",
     )
 
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig, width="stretch")
 
     # ── Fuel switching insight ───────────────────────────────────────────────
     if not quarterly.empty and len(quarterly) >= 4:
@@ -133,7 +134,7 @@ def render_coal_chart(gen_data: dict, ttf_price: float | None = None):
         ))
         fig2.update_layout(
             barmode="stack",
-            template="plotly_dark",
+            template=PLOTLY_TEMPLATE,
             paper_bgcolor=COLORS["bg"],
             plot_bgcolor=COLORS["panel_bg"],
             font=dict(color=COLORS["text"], size=12),
@@ -143,7 +144,7 @@ def render_coal_chart(gen_data: dict, ttf_price: float | None = None):
             yaxis=dict(title="GWh/day", showgrid=True, gridcolor=COLORS["grid"]),
             hovermode="x unified",
         )
-        st.plotly_chart(fig2, use_container_width=True)
+        st.plotly_chart(fig2, width="stretch")
 
     if fetched_at:
         st.caption(f"Last updated: {fetched_at.strftime('%Y-%m-%d %H:%M UTC')}")

@@ -1,0 +1,628 @@
+{
+  "id": "local-energy-pipelines",
+  "name": "Energy Pipelines",
+  "output": "pipelines.geojsonl",
+  "output_sha256": "852f13169d00fdad9aa6e7e370cd27a9f4321ea052c6ffa06b18a7c43d82df5d",
+  "feature_count": 74,
+  "counts_by_kind": {
+    "pipeline": 66,
+    "receiving terminal": 8
+  },
+  "counts_by_medium": {
+    "co2": 2,
+    "condensate": 5,
+    "gas": 47,
+    "oil": 12
+  },
+  "counts_by_status": {
+    "operating": 66
+  },
+  "total_length_km": 12210.3,
+  "approximate_locations": [
+    "Dunkerque",
+    "Teesside"
+  ],
+  "schematic_routes": [
+    {
+      "id": "sodir-pipeline-789409",
+      "name": "Baltic Pipe",
+      "note": "Schematic route published by Sodir: vertices on a 0.01 degree grid, drawn straight across Denmark rather than along the onshore and Baltic sections"
+    }
+  ],
+  "inputs": [
+    {
+      "key": "sodir-pipelines-page-00",
+      "url": "https://factmaps.sodir.no/api/rest/services/Factmaps/FactMapsWGS84/MapServer/311/query?where=1%3D1&outFields=%2A&returnGeometry=true&outSR=4326&orderByFields=pplNpdidPipeline&resultOffset=0&resultRecordCount=1000&f=geojson",
+      "retrieved_at": "2026-10-10T15:38:45+00:00",
+      "bytes": 235573,
+      "sha256": "1fbf36d707fd8f7d65835a4410c9ab26b1ea1958670ee62d524a13ccbb6e3d95",
+      "features": 83
+    },
+    {
+      "key": "sodir-facilities-page-00",
+      "url": "https://factmaps.sodir.no/api/rest/services/Factmaps/FactMapsWGS84/MapServer/307/query?where=1%3D1&outFields=%2A&returnGeometry=true&outSR=4326&orderByFields=fclNpdidFacility&resultOffset=0&resultRecordCount=1000&f=geojson",
+      "retrieved_at": "2026-10-10T15:38:45+00:00",
+      "bytes": 1324450,
+      "sha256": "adb74def586812461f2ac36be1e12b2fa514060c7b1f4e49be7d5a7c429f6fc5",
+      "features": 1000
+    },
+    {
+      "key": "sodir-facilities-page-01",
+      "url": "https://factmaps.sodir.no/api/rest/services/Factmaps/FactMapsWGS84/MapServer/307/query?where=1%3D1&outFields=%2A&returnGeometry=true&outSR=4326&orderByFields=fclNpdidFacility&resultOffset=1000&resultRecordCount=1000&f=geojson",
+      "retrieved_at": "2026-10-10T15:38:45+00:00",
+      "bytes": 298440,
+      "sha256": "fc50f3137258c0876dd57b6dd7a36140010a8c0bc37aceeebbd3320a5ea65b5b",
+      "features": 229
+    },
+    {
+      "key": "gem",
+      "url": "https://data.pypsa.org/workflows/eur/gem_europe_gas_tracker/may-2024/Europe-Gas-Tracker-2024-05.xlsx",
+      "original_url": "https://globalenergymonitor.org/wp-content/uploads/2024/05/Europe-Gas-Tracker-2024-05.xlsx",
+      "retrieved_at": "2026-10-10T15:38:45+00:00",
+      "bytes": 1765290,
+      "sha256": "7ea7f3e96a2fce9b7c343220b6a007b8049e8ba3fdccbf7b8394461f29bec46e"
+    }
+  ],
+  "licences": {
+    "Sodir FactMaps": "Norwegian Licence for Open Government Data (NLOD), https://data.norge.no/nlod/en",
+    "GEM GGIT": "CC BY 4.0. Global Energy Monitor, Global Gas Infrastructure Tracker, Gas Pipelines, December 2023 release (Europe Gas Tracker 2024-05). Used only to cross-check landfalls; no GEM geometry or attributes are redistributed.",
+    "Reference sites": "Published site coordinates cited per terminal; used only to measure distances."
+  },
+  "rules": {
+    "pipelines": "Sodir layer 311 transportation pipelines in phase IN SERVICE or INSTALLATION with published geometry; DECOMMISSIONED and ABANDONED IN PLACE excluded.",
+    "geometry": "WGS84 as published by Sodir; coordinates rounded to 5 decimals, consecutive duplicate vertices dropped, parts with fewer than two distinct vertices dropped; orientation as published.",
+    "length_km": "Sum of WGS84 ellipsoidal (Vincenty) segment lengths of the published track, 1 decimal. Sodir omits track within 500 m of facilities and publishes some routes schematically, so lengths can differ slightly from nominal pipeline lengths.",
+    "status_since": "pplCurrentPhaseFromDate as a calendar date in Europe/Oslo.",
+    "display_rank": "3 for named trunk lines of at least 16 in and receiving terminals, 2 for other lines of at least 28 in, 1 for at least 16 in, else 0.",
+    "receiving_terminals": "End vertex of each line whose Sodir destination is a delivery point outside Norway, assigned to the nearest RECEIVING_TERMINALS point (within 20 km); approximate when the Sodir point or an independent check is more than 5 km away.",
+    "reference_sites_retrieved": "2026-10-10"
+  },
+  "receiving_terminals": [
+    {
+      "terminal": "Dornum",
+      "position": [
+        7.32514,
+        53.67899
+      ],
+      "lines": [
+        "sodir-pipeline-323212",
+        "sodir-pipeline-327394"
+      ],
+      "systems": [
+        "Europipe I",
+        "Europipe II"
+      ],
+      "sodir_point": {
+        "id": "sodir-416479",
+        "name": "DORNUM",
+        "nation": "Germany",
+        "lat": 53.647175,
+        "lon": 7.325992,
+        "distance_km": 3.54
+      },
+      "destinations_named_by_sodir": [
+        "EMDEN"
+      ],
+      "gem_routes": [
+        {
+          "line": "Europipe I",
+          "project": "P0689",
+          "gem_name": "Europipe I Gas Pipeline",
+          "distance_km": 0.12
+        },
+        {
+          "line": "Europipe II",
+          "project": "P0690",
+          "gem_name": "Europipe II Gas Pipeline",
+          "distance_km": 0.12
+        }
+      ],
+      "reference_sites": [],
+      "max_disagreement_km": 3.54,
+      "location_accuracy": "surveyed",
+      "note": "Europipe Receiving Facilities. Sodir names EMDEN as the destination of Europipe I and II; the published tracks end at the Dornum landfall, and Europipe I gas continues 48 km onshore to the Emden metering station (Wikipedia: Europipe I; SNL: Dornum gassterminal)."
+    },
+    {
+      "terminal": "Dunkerque",
+      "position": [
+        2.25138,
+        51.04556
+      ],
+      "lines": [
+        "sodir-pipeline-326374"
+      ],
+      "systems": [
+        "Franpipe"
+      ],
+      "sodir_point": {
+        "id": "sodir-286757",
+        "name": "DUNKERQUE",
+        "nation": "France",
+        "lat": 51.043593,
+        "lon": 2.460617,
+        "distance_km": 14.63
+      },
+      "destinations_named_by_sodir": [
+        "DUNKERQUE"
+      ],
+      "gem_routes": [
+        {
+          "line": "Franpipe",
+          "project": "P0692",
+          "gem_name": "Franpipe Gas Pipeline",
+          "distance_km": 0.13
+        }
+      ],
+      "reference_sites": [],
+      "max_disagreement_km": 14.63,
+      "location_accuracy": "approximate",
+      "note": "Gassco gives the Dunkerque terminal address as Route de la Warlande, ZIP de Mardyck, Loon-Plage, west of Dunkirk, beside the pipeline end. The Sodir layer 307 point lies east of Dunkirk and is likely in error."
+    },
+    {
+      "terminal": "Easington",
+      "position": [
+        0.11457,
+        53.65844
+      ],
+      "lines": [
+        "sodir-pipeline-369498"
+      ],
+      "systems": [
+        "Langeled"
+      ],
+      "sodir_point": {
+        "id": "sodir-369424",
+        "name": "EASINGTON",
+        "nation": "United Kingdom",
+        "lat": 53.640876,
+        "lon": 0.154098,
+        "distance_km": 3.26
+      },
+      "destinations_named_by_sodir": [
+        "EASINGTON"
+      ],
+      "gem_routes": [
+        {
+          "line": "Langeled",
+          "project": "P0704",
+          "gem_name": "Langeled Gas Pipeline",
+          "distance_km": 0.13
+        }
+      ],
+      "reference_sites": [
+        {
+          "site": "Easington Gas Terminal",
+          "lat": 53.6548,
+          "lon": 0.11978,
+          "printed": "53°39′17″N 0°07′11″E",
+          "source": "Wikipedia: Easington Gas Terminal",
+          "url": "https://en.wikipedia.org/wiki/Easington_Gas_Terminal",
+          "distance_km": 0.53
+        }
+      ],
+      "max_disagreement_km": 3.26,
+      "location_accuracy": "surveyed"
+    },
+    {
+      "terminal": "Emden",
+      "position": [
+        7.18802,
+        53.34548
+      ],
+      "lines": [
+        "sodir-pipeline-321784"
+      ],
+      "systems": [
+        "Norpipe Gassledning"
+      ],
+      "sodir_point": {
+        "id": "sodir-286141",
+        "name": "EMDEN",
+        "nation": "Germany",
+        "lat": 53.37622,
+        "lon": 7.217614,
+        "distance_km": 3.94
+      },
+      "destinations_named_by_sodir": [
+        "EMDEN"
+      ],
+      "gem_routes": [
+        {
+          "line": "Norpipe Gassledning",
+          "project": "P0712",
+          "gem_name": "Norpipe Gas Pipeline",
+          "distance_km": 0.09
+        }
+      ],
+      "reference_sites": [],
+      "max_disagreement_km": 3.94,
+      "location_accuracy": "surveyed"
+    },
+    {
+      "terminal": "Niechorze-Pogorzelica",
+      "position": [
+        15.07753,
+        54.10405
+      ],
+      "lines": [
+        "sodir-pipeline-789409"
+      ],
+      "systems": [
+        "Baltic Pipe"
+      ],
+      "sodir_point": {
+        "id": "sodir-789353",
+        "name": "Niechorze-Pogorzelica, Polen",
+        "nation": "Poland",
+        "lat": 54.099933,
+        "lon": 15.080595,
+        "distance_km": 0.5
+      },
+      "destinations_named_by_sodir": [
+        "Niechorze-Pogorzelica, Polen"
+      ],
+      "gem_routes": [
+        {
+          "line": "Baltic Pipe",
+          "project": "P0684",
+          "gem_name": "Baltic Pipe Project",
+          "distance_km": 0.56
+        }
+      ],
+      "reference_sites": [],
+      "max_disagreement_km": 0.56,
+      "location_accuracy": "surveyed"
+    },
+    {
+      "terminal": "St Fergus",
+      "position": [
+        -1.82698,
+        57.57802
+      ],
+      "lines": [
+        "sodir-pipeline-322532"
+      ],
+      "systems": [
+        "Vesterled"
+      ],
+      "sodir_point": {
+        "id": "sodir-286225",
+        "name": "ST.FERGUS",
+        "nation": "United Kingdom",
+        "lat": 57.552648,
+        "lon": -1.851658,
+        "distance_km": 3.18
+      },
+      "destinations_named_by_sodir": [
+        "ST.FERGUS"
+      ],
+      "gem_routes": [
+        {
+          "line": "Vesterled",
+          "project": "P0729",
+          "gem_name": "Vesterled Gas Pipeline",
+          "distance_km": 0.12
+        }
+      ],
+      "reference_sites": [
+        {
+          "site": "St Fergus Gas Terminal",
+          "lat": 57.57062,
+          "lon": -1.83803,
+          "printed": "57°34′14″N 1°50′17″W",
+          "source": "Wikipedia: St Fergus Gas Terminal",
+          "url": "https://en.wikipedia.org/wiki/St_Fergus_Gas_Terminal",
+          "distance_km": 1.05
+        }
+      ],
+      "max_disagreement_km": 3.18,
+      "location_accuracy": "surveyed"
+    },
+    {
+      "terminal": "Teesside",
+      "position": [
+        -1.29039,
+        54.62731
+      ],
+      "lines": [
+        "sodir-pipeline-306280"
+      ],
+      "systems": [
+        "Norpipe Oljeledning"
+      ],
+      "sodir_point": {
+        "id": "sodir-286113",
+        "name": "TEESSIDE",
+        "nation": "Norway",
+        "lat": 54.625057,
+        "lon": -1.297082,
+        "distance_km": 0.5
+      },
+      "destinations_named_by_sodir": [
+        "TEESSIDE"
+      ],
+      "gem_routes": [],
+      "reference_sites": [
+        {
+          "site": "Teesside oil terminal, Seal Sands",
+          "lat": 54.61806,
+          "lon": -1.17694,
+          "printed": "54°37′05″N 1°10′37″W",
+          "source": "Wikipedia: Teesside oil terminal",
+          "url": "https://en.wikipedia.org/wiki/Teesside_oil_terminal",
+          "distance_km": 7.38
+        }
+      ],
+      "max_disagreement_km": 7.38,
+      "location_accuracy": "approximate",
+      "note": "The Sodir track and layer 307 point both lie west of the Seal Sands oil terminal; Sodir also records the nation of this point as Norway."
+    },
+    {
+      "terminal": "Zeebrugge",
+      "position": [
+        3.22848,
+        51.34968
+      ],
+      "lines": [
+        "sodir-pipeline-310326"
+      ],
+      "systems": [
+        "Zeepipe I"
+      ],
+      "sodir_point": {
+        "id": "sodir-286281",
+        "name": "ZEEBRUGGE",
+        "nation": "Belgium",
+        "lat": 51.339448,
+        "lon": 3.176184,
+        "distance_km": 3.81
+      },
+      "destinations_named_by_sodir": [
+        "ZEEBRUGGE"
+      ],
+      "gem_routes": [
+        {
+          "line": "Zeepipe I",
+          "project": "P1770",
+          "gem_name": "Zeepipe Gas Pipeline",
+          "distance_km": 0.13
+        }
+      ],
+      "reference_sites": [],
+      "max_disagreement_km": 3.81,
+      "location_accuracy": "surveyed",
+      "note": "Gassco places the Zeepipe Terminal in the Zeebrugge port area, about 5 km from the landing site. Sodir also lists ZEEPIPE TERMINAL 20 m from its ZEEBRUGGE point."
+    }
+  ],
+  "exclusions": [
+    {
+      "id": "sodir-pipeline-313828",
+      "name": "20\" Gas TOGI, OSEBERG B",
+      "reason": "Abandoned in place"
+    },
+    {
+      "id": "sodir-pipeline-433795",
+      "name": "6\" Gas PETROJARL VARG, 15/12-C Rev",
+      "reason": "Abandoned in place"
+    },
+    {
+      "id": "sodir-pipeline-322668",
+      "name": "8\" Condensate HULDRA, VESLEFRIKK A",
+      "reason": "Abandoned in place"
+    },
+    {
+      "id": "sodir-pipeline-433996",
+      "name": "12\" Gas PETROJARL KNARR , FLAGS TCS",
+      "reason": "Decommissioned"
+    },
+    {
+      "id": "sodir-pipeline-327938",
+      "name": "16\" Condensate FRIGG TCP2, OSEBERG A",
+      "reason": "Decommissioned"
+    },
+    {
+      "id": "sodir-pipeline-321750",
+      "name": "20\" Oil GYDA, ULA-Y",
+      "reason": "Decommissioned"
+    },
+    {
+      "id": "sodir-pipeline-322634",
+      "name": "22\" Gas HULDRA, HEIMDAL HRP",
+      "reason": "Decommissioned"
+    },
+    {
+      "id": "sodir-pipeline-434432",
+      "name": "22\" Gas VALEMON, HULDRA",
+      "reason": "Decommissioned"
+    },
+    {
+      "id": "sodir-pipeline-327836",
+      "name": "32\" Gas FRIGG TCP2, VESTERLED T",
+      "reason": "Decommissioned"
+    },
+    {
+      "id": "sodir-pipeline-303866",
+      "name": "36\" Gas Disconnected, EKOFISK S",
+      "reason": "Decommissioned"
+    },
+    {
+      "id": "sodir-pipeline-309000",
+      "name": "9.3\" Gas VESLEFRIKK A, STT-IN",
+      "reason": "Decommissioned"
+    },
+    {
+      "id": "sodir-pipeline-763747",
+      "name": "10.75\" Oil GINA KROG, SLEIPNER A",
+      "reason": "No geometry published by Sodir"
+    },
+    {
+      "id": "sodir-pipeline-456933",
+      "name": "12\" Gas JOHAN SVERDRUP STATPIPE PLEM, JOHAN SVERDRUP STATPIPE HOT TAP",
+      "reason": "No geometry published by Sodir"
+    },
+    {
+      "id": "sodir-pipeline-444861",
+      "name": "16\" Gas GINA KROG T, GINA KROG",
+      "reason": "No geometry published by Sodir"
+    },
+    {
+      "id": "sodir-pipeline-444651",
+      "name": "20\" Gas GINA KROG, SLEIPNER A",
+      "reason": "No geometry published by Sodir"
+    },
+    {
+      "id": "sodir-pipeline-783480",
+      "name": "24\" Oil HUGIN A, YOP-Y",
+      "reason": "No geometry published by Sodir"
+    },
+    {
+      "id": "sodir-pipeline-783373",
+      "name": "28\" Gas HUGIN A, STATPIPE HTT",
+      "reason": "No geometry published by Sodir"
+    }
+  ],
+  "names_assigned": [
+    {
+      "id": "sodir-pipeline-364645",
+      "name": "Visund gas line",
+      "reason": "No Sodir map label; named from the origin facility and medium"
+    },
+    {
+      "id": "sodir-pipeline-370578",
+      "name": "Melkøya CO2 line",
+      "reason": "No Sodir map label; named from the origin facility and medium"
+    },
+    {
+      "id": "sodir-pipeline-762593",
+      "name": "Øygarden Energipark CO2 line",
+      "reason": "No Sodir map label; named from the origin facility and medium"
+    },
+    {
+      "id": "sodir-pipeline-789409",
+      "name": "Baltic Pipe",
+      "reason": "No Sodir map label; route, diameter and landfall match GEM GGIT P0684 \"Baltic Pipe Project\""
+    }
+  ],
+  "operators_withheld": [
+    {
+      "id": "sodir-pipeline-762593",
+      "name": "Øygarden Energipark CO2 line",
+      "published": "ingen oper",
+      "reason": "Sodir publishes \"no operator\" (ingen operatør)"
+    },
+    {
+      "id": "sodir-pipeline-789409",
+      "name": "Baltic Pipe",
+      "published": "ingen oper",
+      "reason": "Sodir publishes \"no operator\" (ingen operatør)"
+    }
+  ],
+  "degenerate_parts_dropped": [
+    {
+      "id": "sodir-pipeline-438653",
+      "name": "24\" Gas MARTIN LINGE A, FRIGG TP1-Y",
+      "parts": 2
+    }
+  ],
+  "deferred_delivery_points_abroad": [
+    {
+      "id": "sodir-416994",
+      "name": "OBERKAPPEL",
+      "nation": "Austria",
+      "reason": "No published Sodir pipeline ends at this delivery point"
+    },
+    {
+      "id": "sodir-416127",
+      "name": "BLAREGNIES",
+      "nation": "Belgium",
+      "reason": "No published Sodir pipeline ends at this delivery point"
+    },
+    {
+      "id": "sodir-416595",
+      "name": "FREDERICIA",
+      "nation": "Denmark",
+      "reason": "No published Sodir pipeline ends at this delivery point"
+    },
+    {
+      "id": "sodir-712365",
+      "name": "KALUNDBORG",
+      "nation": "Denmark",
+      "reason": "No published Sodir pipeline ends at this delivery point"
+    },
+    {
+      "id": "sodir-416937",
+      "name": "NYBRO",
+      "nation": "Denmark",
+      "reason": "No published Sodir pipeline ends at this delivery point"
+    },
+    {
+      "id": "sodir-416537",
+      "name": "EUROPIPE",
+      "nation": "Germany",
+      "reason": "No published Sodir pipeline ends at this delivery point",
+      "note": "Source seconds field exceeds 60 (39'68.61\"); decimal value used by FactMaps is unverified"
+    },
+    {
+      "id": "sodir-416421",
+      "name": "DEN HELDER",
+      "nation": "Netherlands",
+      "reason": "No published Sodir pipeline ends at this delivery point"
+    },
+    {
+      "id": "sodir-449005",
+      "name": "GDANSK",
+      "nation": "Poland",
+      "reason": "No published Sodir pipeline ends at this delivery point"
+    },
+    {
+      "id": "sodir-416247",
+      "name": "COL DE LARRAU",
+      "nation": "Spain",
+      "reason": "No published Sodir pipeline ends at this delivery point",
+      "note": "Longitude sign appears inverted (0.93 E; the Col de Larrau border point is near 0.95 W)"
+    },
+    {
+      "id": "sodir-403588",
+      "name": "BRAEFOOT BAY",
+      "nation": "United Kingdom",
+      "reason": "No published Sodir pipeline ends at this delivery point"
+    },
+    {
+      "id": "sodir-416189",
+      "name": "CATS",
+      "nation": "United Kingdom",
+      "reason": "No published Sodir pipeline ends at this delivery point"
+    },
+    {
+      "id": "sodir-416305",
+      "name": "CRUDEN BAY",
+      "nation": "United Kingdom",
+      "reason": "No published Sodir pipeline ends at this delivery point"
+    },
+    {
+      "id": "sodir-416363",
+      "name": "DALMENY",
+      "nation": "United Kingdom",
+      "reason": "No published Sodir pipeline ends at this delivery point",
+      "note": "Coordinates fall within 70 m of CRUDEN BAY; the Dalmeny terminal lies on the Firth of Forth"
+    },
+    {
+      "id": "sodir-416651",
+      "name": "HOUND POINT",
+      "nation": "United Kingdom",
+      "reason": "No published Sodir pipeline ends at this delivery point"
+    },
+    {
+      "id": "sodir-416708",
+      "name": "KINNEIL",
+      "nation": "United Kingdom",
+      "reason": "No published Sodir pipeline ends at this delivery point"
+    },
+    {
+      "id": "sodir-417165",
+      "name": "SULLOM VOE",
+      "nation": "United Kingdom",
+      "reason": "No published Sodir pipeline ends at this delivery point"
+    }
+  ]
+}

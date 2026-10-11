@@ -35,12 +35,15 @@ from components.lng_chart            import render_lng_chart
 from components.hydro_chart          import render_hydro_chart
 from components.forward_curve_chart  import render_forward_curve_chart
 from components.coal_chart           import render_coal_chart
+from utils.globe     import globe_link
 from utils.helpers   import (
     has_entsoe_key, has_agsi_key, apply_dark_theme,
     pill, commentary, kpi_card, delta_span,
 )
+from utils.theme     import ACCENTS, CHART, PLOTLY_TEMPLATE, page_header, page_footer
 from utils.scenarios import (
     storage_status, ttf_status, spread_status, lng_status, market_summary,
+    storage_refill_pace,
 )
 import pandas as pd
 from datetime import date as _date, timedelta as _timedelta
@@ -53,7 +56,7 @@ from config.settings import (
 apply_dark_theme()
 
 
-@st.cache_data(ttl=3600, persist="disk", show_spinner=False)
+@st.cache_data(ttl=3600, show_spinner=False)
 def _get_spot_history_l1():
     return fetch_spot_prices(days=365)
 
@@ -197,16 +200,19 @@ lng_stat, lng_headline, lng_detail = lng_status(lng_wow)
 
 
 # ── Header ─────────────────────────────────────────────────────────────────
-_hdr_col, _btn_col = st.columns([5, 1])
+_hdr_col, _btn_col = st.columns([5, 1], vertical_alignment="center")
 with _hdr_col:
-    st.markdown("## Layer 1 · Live Market Monitor")
-    st.caption("Real-time European power and gas data, refreshed hourly. Sources: GIE AGSI+/ALSI, Nord Pool, ENTSO-E, ICE/Yahoo Finance")
+    page_header(
+        "Layer 1", "Live Market Monitor",
+        "Real-time European power and gas data, refreshed hourly.",
+        sources=["GIE AGSI+/ALSI", "Nord Pool", "ENTSO-E", "ICE/Yahoo Finance"],
+        accent=ACCENTS["l1"],
+    )
 with _btn_col:
-    st.markdown("<div style='padding-top:18px;'>", unsafe_allow_html=True)
-    if st.button("Refresh data"):
-        st.cache_data.clear()
-        st.rerun()
-    st.markdown("</div>", unsafe_allow_html=True)
+    with st.container(horizontal=True, horizontal_alignment="right"):
+        if st.button("Refresh data", icon=":material/refresh:"):
+            st.cache_data.clear()
+            st.rerun()
 
 missing = []
 if not has_agsi_key():   missing.append("AGSI_API_KEY (agsi.gie.eu)")
@@ -274,7 +280,7 @@ with k6:
     if lng_total_today is not None:
         color = "red" if lng_alert else ("amber" if lng_wow is not None and lng_wow < -7 else "green")
         d = delta_span(f"{lng_wow:+.1f}% vs prior 7d" if lng_wow is not None else "calculating", color)
-        st.markdown(kpi_card("NW EU LNG Sendout", f"{lng_total_today:.1f} TWh/d", d), unsafe_allow_html=True)
+        st.markdown(kpi_card("NW EU LNG Sendout", f"{lng_total_today:,.0f} GWh/d", d), unsafe_allow_html=True)
     else:
         st.markdown(kpi_card("NW EU LNG Sendout", "n/a", delta_span("AGSI key required", "amber")), unsafe_allow_html=True)
 
@@ -355,8 +361,7 @@ with tab_overview:
     with w1:
         st.markdown("**Storage refill pace**")
         if eu_pct is not None:
-            _required_pp = max(0.0, 90.0 - eu_pct)
-            _pace = "above" if _required_pp > 52 else "in line with"
+            _pace_info = storage_refill_pace(eu_pct, build_seasonal_bands(eu_df), _today)
             if ttf_price is not None and ttf_price > 35:
                 _lng_note = f"TTF at €{ttf_price:.0f}/MWh supports LNG cargo diversion to Europe over Asia."
             elif ttf_price is not None and ttf_price > 20:
@@ -365,11 +370,28 @@ with tab_overview:
                 _lng_note = f"TTF at €{ttf_price:.0f}/MWh; LNG import economics are weak at current prices."
             else:
                 _lng_note = ""
+            if _pace_info["verdict"] == "met":
+                _pace_text = (
+                    f"With EU storage at {eu_pct:.1f}%, the target is already met "
+                    f"({_pace_info['days']} days before 1 November). "
+                )
+            elif _pace_info["norm_pp"] is not None:
+                _pace_text = (
+                    f"With EU storage at {eu_pct:.1f}% and {_pace_info['days']} days remaining, "
+                    f"the required net injection is approximately {_pace_info['required_pp']:.0f}pp "
+                    f"({_pace_info['required_per_day']:.2f}pp/day), {_pace_info['verdict']} the "
+                    f"5-year average for the same window ({max(_pace_info['norm_pp'], 0.0):.0f}pp, "
+                    f"{max(_pace_info['norm_per_day'], 0.0):.2f}pp/day). "
+                )
+            else:
+                _pace_text = (
+                    f"With EU storage at {eu_pct:.1f}% and {_pace_info['days']} days remaining, "
+                    f"the required net injection is approximately {_pace_info['required_pp']:.0f}pp "
+                    f"({_pace_info['required_per_day']:.2f}pp/day); the 5-year comparison is unavailable. "
+                )
             st.caption(
-                f"EU regulation requires 90% fill by November 1. "
-                f"With EU storage at {eu_pct:.1f}% and {_days_to_nov} days remaining, "
-                f"the required net injection is approximately {_required_pp:.0f}pp, "
-                f"{_pace} the 5-year average injection pace. "
+                "EU regulation requires 90% fill by November 1. "
+                + _pace_text
                 + _lng_note
             )
         else:
@@ -470,10 +492,57 @@ with tab_gas:
 # ═══════════════════════════════════════════════════════════════════════════
 with tab_lng:
     render_lng_chart(lng)
+    globe_link("lng_europe", "LNG terminals on the 3D globe")
+
+    # ── 3B: TTF vs JKM spread card (roadmap 3B) ──────────────────────────────
+    # Keyless inter-basin price signal next to the send-out chart; the full
+    # history and methodology live in Layer 3, "TTF vs JKM" tab.
+    from data.lng_prices import load_ttf_jkm as _jkm_load
+    from models.lng_arbitrage import spread_summary as _jkm_summary, ordinal as _jkm_ordinal
+    import math as _jkm_math
+
+    _jkm_l1 = _jkm_load()
+    _jkm_l1_df = _jkm_l1.get("frame", pd.DataFrame())
+    _jkm_c1, _jkm_c2 = st.columns([1, 3])
+    if _jkm_l1_df.empty:
+        with _jkm_c1:
+            st.markdown(
+                kpi_card("TTF minus JKM", "n/a", delta_span("JKM=F / EURUSD=X unavailable", "amber")),
+                unsafe_allow_html=True,
+            )
+    else:
+        _jkm_l1_s = _jkm_summary(_jkm_l1_df)
+        _jkm_l1_pct = (
+            f" · {_jkm_ordinal(round(_jkm_l1_s['percentile']))} percentile (1y)"
+            if _jkm_math.isfinite(_jkm_l1_s["percentile"]) else ""
+        )
+        with _jkm_c1:
+            st.markdown(
+                kpi_card(
+                    "TTF minus JKM",
+                    f"€{_jkm_l1_s['spread']:+.2f}/MWh",
+                    delta_span(f"{_jkm_l1_s['regime']}{_jkm_l1_pct}",
+                               "green" if _jkm_l1_s["spread"] > 0 else "red"),
+                ),
+                unsafe_allow_html=True,
+            )
+        with _jkm_c2:
+            _jkm_l1_dir = (
+                "TTF above JKM favours deliveries into North-West European terminals, supporting LNG send-out."
+                if _jkm_l1_s["spread"] > 0 else
+                "JKM above TTF tends to pull flexible cargoes towards Asia, a headwind for NW European LNG send-out."
+            )
+            st.caption(
+                f"Inter-basin price signal for flexible LNG cargoes (settlement {_jkm_l1_s['latest_date']:%d %b %Y}; "
+                f"TTF €{_jkm_l1_s['ttf']:.2f}/MWh, JKM €{_jkm_l1_s['jkm_eur_mwh']:.2f}/MWh converted from "
+                f"${_jkm_l1_s['jkm_usd_mmbtu']:.3f}/MMBtu). {_jkm_l1_dir} Diversion pays only when the gap "
+                "exceeds the shipping cost differential. History and methodology: Layer 3, TTF vs JKM tab."
+            )
+    # ── end 3B: TTF vs JKM spread card ───────────────────────────────────────
 
     with st.expander("Understanding LNG sendout", expanded=True):
         st.markdown("""
-        **Definition:** LNG (liquefied natural gas) arrives by tanker at import terminals, where it is regasified and injected into the pipeline grid. The sendout rate (TWh/day) measures how much gas is delivered to the European grid from each terminal.
+        **Definition:** LNG (liquefied natural gas) arrives by tanker at import terminals, where it is regasified and injected into the pipeline grid. The sendout rate (GWh/day, as published by GIE ALSI) measures how much gas is delivered to the European grid from each terminal.
 
         **Market significance:** LNG is Europe's swing supply source. Cargoes can be diverted between Europe and Asia depending on relative benchmark prices (TTF versus JKM). When European TTF prices are elevated relative to Asian LNG, cargoes flow to Europe, supporting storage injection. A sustained decline in sendout tightens the European gas balance.
 
@@ -581,7 +650,7 @@ with tab_prices:
                 fillcolor="rgba(88,166,255,0.08)",
                 hovertemplate="NL−NO2: €%{y:.1f}/MWh<extra></extra>",
             ))
-            _fig_sp.add_hline(y=0, line=dict(color="rgba(255,255,255,0.25)", width=1))
+            _fig_sp.add_hline(y=0, line=dict(color=CHART["zero"], width=1))
             _fig_sp.add_hline(
                 y=SPREAD_CHART_REF_EUR, line=dict(color="#d4ac3a", width=1, dash="dot"),
                 annotation_text=f"  +€{SPREAD_CHART_REF_EUR:.0f} (NordLink historically >90% utilised)",
@@ -595,22 +664,22 @@ with tab_prices:
                 annotation_position="right",
             )
             _fig_sp.update_layout(
-                template="plotly_dark",
-                paper_bgcolor="#0d1117",
-                plot_bgcolor="#161b22",
+                template=PLOTLY_TEMPLATE,
+                paper_bgcolor=CHART["bg"],
+                plot_bgcolor=CHART["panel_bg"],
                 height=220,
                 margin=dict(l=50, r=140, t=10, b=35),
-                xaxis=dict(gridcolor="rgba(255,255,255,0.06)", tickfont=dict(size=10, color="#8b949e")),
+                xaxis=dict(gridcolor=CHART["grid"], tickfont=dict(size=10, color=CHART["muted"])),
                 yaxis=dict(
                     title="EUR/MWh",
-                    gridcolor="rgba(255,255,255,0.06)",
-                    tickfont=dict(size=10, color="#8b949e"),
+                    gridcolor=CHART["grid"],
+                    tickfont=dict(size=10, color=CHART["muted"]),
                     zeroline=False,
                 ),
                 showlegend=False,
                 hovermode="x unified",
             )
-            st.plotly_chart(_fig_sp, use_container_width=True)
+            st.plotly_chart(_fig_sp, width="stretch")
 
     with st.expander("Price interpretation reference", expanded=True):
         st.markdown("""
@@ -626,7 +695,7 @@ with tab_prices:
 
         **Nordic-Continental spread (NL − NO2):**
         Computed as `NL day-ahead − NO2 day-ahead` (EUR/MWh). Source: Nord Pool public endpoint, 365-day history.
-        Reference levels: ±€20/MWh are empirical thresholds — above +€20, NordLink has historically run above 90% utilisation.
+        Reference levels: ±€20/MWh are empirical thresholds; above +€20, NordLink has historically run above 90% utilisation.
 
         - Positive spread (Continental above Nordic): Norwegian hydro has a clear export incentive. Interconnectors are likely constrained.
         - Near zero: Markets are broadly coupled under normal conditions.
@@ -671,7 +740,7 @@ with tab_prices:
                         _color = "red" if abs(_diff) > 10 else ("amber" if abs(_diff) > 3 else "green")
                         _delta = delta_span(f"{'▲' if _diff >= 0 else '▼'} {abs(_diff):.1f} vs SYS", _color)
                     else:
-                        _delta = delta_span("—", "blue")
+                        _delta = delta_span("n/a", "blue")
                     st.markdown(
                         kpi_card(_NO_ZONE_LABELS[_zone], f"€{_zp:.1f}", _delta),
                         unsafe_allow_html=True,
@@ -701,30 +770,30 @@ with tab_prices:
             ))
 
         _fig_no.update_layout(
-            template="plotly_dark",
-            paper_bgcolor="#0d1117",
-            plot_bgcolor="#161b22",
+            template=PLOTLY_TEMPLATE,
+            paper_bgcolor=CHART["bg"],
+            plot_bgcolor=CHART["panel_bg"],
             height=260,
             margin=dict(l=50, r=20, t=10, b=35),
-            xaxis=dict(gridcolor="rgba(255,255,255,0.06)", tickfont=dict(size=10, color="#8b949e")),
+            xaxis=dict(gridcolor=CHART["grid"], tickfont=dict(size=10, color=CHART["muted"])),
             yaxis=dict(
                 title="EUR/MWh",
-                gridcolor="rgba(255,255,255,0.06)",
-                tickfont=dict(size=10, color="#8b949e"),
+                gridcolor=CHART["grid"],
+                tickfont=dict(size=10, color=CHART["muted"]),
                 zeroline=False,
             ),
             legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1,
                         font=dict(size=10)),
             hovermode="x unified",
         )
-        st.plotly_chart(_fig_no, use_container_width=True)
+        st.plotly_chart(_fig_no, width="stretch")
 
         with st.expander("Norwegian zonal pricing context", expanded=False):
             st.markdown("""
             **Why five zones?** Norway is divided into five bidding zones (NO1–NO5) reflecting
             geographic bottlenecks in the transmission grid. When the grid can carry surplus freely,
-            all zones clear at the same price. Congestion on key lines — particularly the north–south
-            corridor — causes zones to diverge.
+            all zones clear at the same price. Congestion on key lines (particularly the north–south
+            corridor) causes zones to diverge.
 
             **System price (SYS):** The Nordic system price is a theoretical unconstrained clearing
             price assuming no transmission limits within the Nordic area. It serves as the settlement
@@ -734,7 +803,7 @@ with tab_prices:
             **Key bottlenecks driving divergence:**
             - NO1 (Oslo) vs NO2 (Kristiansand/SW Norway): Affected by north–south flow on Sørlandsbanen lines.
             - NO3 (Central/Mid-Norway) vs NO1/NO5: Snøhvit and inland hydro reservoir imbalances push NO3 low in wet periods.
-            - NO4 (North Norway / Tromsø): Structurally cheap — large hydro surplus, limited southward export capacity.
+            - NO4 (North Norway / Tromsø): Structurally cheap: large hydro surplus, limited southward export capacity.
             - NO5 (West Norway / Bergen): High hydro density; diverges from NO1 on congestion into central grid.
 
             **Norgespris debate:** Norway is considering moving to a single national price zone
@@ -742,6 +811,243 @@ with tab_prices:
             consumers and industrial users. Critics argue this removes price signals needed to incentivise
             transmission investment and demand flexibility. The debate is active in the Storting (Norwegian parliament).
             """)
+
+    # ── 3A: FI minus IT-North spread (roadmap 3A) ────────────────────────────
+    # Self-contained block: data (data/italy_prices.py), statistics
+    # (models/fi_it_spread.py), KPI row, two-panel chart, commentary, methodology.
+    import math as _fiit_math
+    import plotly.graph_objects as _fiit_go
+    from plotly.subplots import make_subplots as _fiit_subplots
+    from data.italy_prices import fetch_it_north_daily as _fiit_fetch_it, fetch_fi_daily as _fiit_fetch_fi
+    from models.fi_it_spread import (
+        build_spread_frame as _fiit_build,
+        add_rolling_mean as _fiit_add_ma,
+        spread_statistics as _fiit_statistics,
+    )
+    from config.settings import (
+        FI_IT_HISTORY_DAYS as _FIIT_HIST_D,
+        FI_IT_AVG_WINDOW_DAYS as _FIIT_AVG_D,
+        FI_IT_Z_WINDOW_DAYS as _FIIT_Z_D,
+        FI_IT_Z_MIN_OBS as _FIIT_Z_MIN,
+        FI_IT_MIN_DAY_COVERAGE as _FIIT_COV,
+    )
+
+    st.divider()
+    st.markdown("#### FI minus IT-North Day-Ahead Spread")
+    st.caption(
+        "Finland (FI) minus northern Italy (IT-North) day-ahead price, daily averages per CET "
+        "delivery day (EUR/MWh). Contrasts a Nordic system clearing on low-marginal-cost supply "
+        "with a Continental zone where gas-fired plants usually set the price."
+    )
+
+    with st.spinner("Loading FI and IT-North day-ahead prices…"):
+        _fiit_it = _fiit_fetch_it(days=_FIIT_HIST_D)
+        _fiit_fi = _fiit_fetch_fi(days=_FIIT_HIST_D)
+
+    _fiit_it_df = _fiit_it.get("daily", pd.DataFrame())
+    _fiit_fi_df = _fiit_fi.get("daily", pd.DataFrame())
+    _fiit_df = _fiit_build(_fiit_fi_df, _fiit_it_df)
+
+    if _fiit_it_df.empty or _fiit_fi_df.empty:
+        _fiit_missing = []
+        if _fiit_fi_df.empty:
+            _fiit_missing.append("FI (Nord Pool Data Portal unreachable)")
+        if _fiit_it_df.empty:
+            _fiit_missing.append(
+                "IT-North (energy-charts.info unreachable; the ENTSO-E fallback requires ENTSOE_API_KEY)"
+            )
+        st.caption("FI minus IT-North spread unavailable. Missing: " + "; ".join(_fiit_missing) + ".")
+    elif len(_fiit_df) < 5:
+        st.caption(
+            f"FI minus IT-North spread unavailable: only {len(_fiit_df)} overlapping delivery days "
+            "between the FI and IT-North series."
+        )
+    else:
+        _fiit_df = _fiit_add_ma(_fiit_df, window_days=_FIIT_AVG_D)
+        _fs = _fiit_statistics(
+            _fiit_df, avg_window_days=_FIIT_AVG_D, z_window_days=_FIIT_Z_D, min_z_obs=_FIIT_Z_MIN,
+        )
+        _fiit_z = _fs["z"]
+        _fiit_z_ok = _fiit_math.isfinite(_fiit_z)
+        _fiit_win_lbl = "1-year" if _fs["z_full_window"] else f"{_fs['n_z']}-day"
+        _fiit_date_s = _fs["latest_date"].strftime("%d %b %Y")
+
+        _fk1, _fk2, _fk3, _fk4 = st.columns(4)
+        with _fk1:
+            st.markdown(
+                kpi_card(
+                    "FI minus IT-North (latest)",
+                    f"€{_fs['latest_spread']:+.1f}/MWh",
+                    delta_span(
+                        f"{_fiit_date_s}: FI €{_fs['latest_fi']:.1f}, IT-North €{_fs['latest_it_north']:.1f}",
+                        "blue",
+                    ),
+                ),
+                unsafe_allow_html=True,
+            )
+        with _fk2:
+            st.markdown(
+                kpi_card(
+                    f"{_FIIT_AVG_D}-day average spread",
+                    f"€{_fs['avg']:+.1f}/MWh",
+                    delta_span(f"FI below IT-North on {_fs['n_fi_below']} of {_fs['n_avg']} days", "blue"),
+                ),
+                unsafe_allow_html=True,
+            )
+        with _fk3:
+            if _fiit_z_ok:
+                _fiit_z_col = "red" if abs(_fiit_z) >= 2 else ("amber" if abs(_fiit_z) >= 1 else "green")
+                _fiit_z_note = f"vs {_fiit_win_lbl} mean €{_fs['z_mean']:+.1f}, σ €{_fs['z_std']:.1f}"
+                if not _fs["z_full_window"]:
+                    _fiit_z_note += " (partial year)"
+                st.markdown(
+                    kpi_card("Z-score vs 1-year", f"{_fiit_z:+.2f}σ", delta_span(_fiit_z_note, _fiit_z_col)),
+                    unsafe_allow_html=True,
+                )
+            else:
+                st.markdown(
+                    kpi_card(
+                        "Z-score vs 1-year", "n/a",
+                        delta_span(f"needs ≥{_FIIT_Z_MIN} days, have {_fs['n_z']}", "amber"),
+                    ),
+                    unsafe_allow_html=True,
+                )
+        with _fk4:
+            st.markdown(
+                kpi_card(
+                    f"{_fiit_win_lbl.capitalize()} spread range",
+                    f"€{_fs['window_min']:+.0f} to €{_fs['window_max']:+.0f}",
+                    delta_span(f"{_fs['n_z']} delivery days", "blue"),
+                ),
+                unsafe_allow_html=True,
+            )
+
+        # Two-panel chart: price levels (top), spread with rolling mean (bottom)
+        _fiit_fig = _fiit_subplots(
+            rows=2, cols=1, shared_xaxes=True, vertical_spacing=0.06, row_heights=[0.55, 0.45],
+        )
+        _fiit_it_plot = _fiit_it_df.copy()
+        _fiit_it_plot["date"] = pd.to_datetime(_fiit_it_plot["date"])
+        _fiit_fi_plot = _fiit_fi_df.copy()
+        _fiit_fi_plot["date"] = pd.to_datetime(_fiit_fi_plot["date"])
+        _fiit_fig.add_trace(_fiit_go.Scatter(
+            x=_fiit_it_plot["date"], y=_fiit_it_plot["it_north"], name="IT-North",
+            line=dict(color="#e07b39", width=1.5),
+            hovertemplate="IT-North: €%{y:.1f}/MWh<extra></extra>",
+        ), row=1, col=1)
+        _fiit_fig.add_trace(_fiit_go.Scatter(
+            x=_fiit_fi_plot["date"], y=_fiit_fi_plot["fi"], name="FI (Finland)",
+            line=dict(color="#8e6bbf", width=1.5),
+            hovertemplate="FI: €%{y:.1f}/MWh<extra></extra>",
+        ), row=1, col=1)
+        _fiit_fig.add_trace(_fiit_go.Scatter(
+            x=_fiit_df["date"], y=_fiit_df["spread"], name="FI minus IT-North",
+            line=dict(color="#58a6ff", width=1.3),
+            fill="tozeroy", fillcolor="rgba(88,166,255,0.08)",
+            hovertemplate="FI minus IT-North: €%{y:.1f}/MWh<extra></extra>",
+        ), row=2, col=1)
+        _fiit_fig.add_trace(_fiit_go.Scatter(
+            x=_fiit_df["date"], y=_fiit_df["spread_ma"], name=f"{_FIIT_AVG_D}-day mean",
+            line=dict(color="#d29922", width=1.6, dash="dot"),
+            hovertemplate=f"{_FIIT_AVG_D}-day mean: €%{{y:.1f}}/MWh<extra></extra>",
+        ), row=2, col=1)
+        _fiit_fig.add_hline(y=0, line=dict(color="rgba(255,255,255,0.25)", width=1), row=2, col=1)
+        _fiit_fig.update_layout(
+            template="plotly_dark",
+            paper_bgcolor="#0d1117",
+            plot_bgcolor="#161b22",
+            height=440,
+            margin=dict(l=50, r=20, t=10, b=35),
+            legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1,
+                        font=dict(size=10)),
+            hovermode="x unified",
+        )
+        _fiit_fig.update_xaxes(gridcolor="rgba(255,255,255,0.06)", tickfont=dict(size=10, color="#8b949e"))
+        _fiit_fig.update_yaxes(gridcolor="rgba(255,255,255,0.06)", tickfont=dict(size=10, color="#8b949e"),
+                               zeroline=False)
+        _fiit_fig.update_yaxes(title_text="EUR/MWh", row=1, col=1)
+        _fiit_fig.update_yaxes(title_text="Spread (EUR/MWh)", row=2, col=1)
+        st.plotly_chart(_fiit_fig, width="stretch")
+
+        _fiit_span_note = (
+            f"Spread shown for {len(_fiit_df)} overlapping delivery days "
+            f"({_fiit_df['date'].iloc[0]:%d %b %Y} to {_fiit_df['date'].iloc[-1]:%d %b %Y}). "
+            f"FI history: {_fiit_fi.get('source') or 'n/a'}, {len(_fiit_fi_df)} days"
+        )
+        if _fiit_fi.get("entsoe_days", 0) == 0 and len(_fiit_fi_df) < _FIIT_Z_D * 0.9:
+            _fiit_span_note += (
+                " (the public Nord Pool endpoint serves about two months; "
+                "set ENTSOE_API_KEY to extend FI to one year)"
+            )
+        st.caption(_fiit_span_note + ".")
+
+        # Commentary: every figure below is computed from the series above
+        _fiit_text = (
+            f"On {_fiit_date_s}, Finland cleared at €{_fs['latest_fi']:.1f}/MWh against "
+            f"€{_fs['latest_it_north']:.1f}/MWh in IT-North, a spread of €{_fs['latest_spread']:+.1f}/MWh. "
+            f"Across the {_fs['n_avg']} delivery days in the trailing {_FIIT_AVG_D}-day window the spread "
+            f"averaged €{_fs['avg']:+.1f}/MWh, with Finland pricing below IT-North on "
+            f"{_fs['n_fi_below']} of {_fs['n_avg']} days. "
+        )
+        if _fiit_z_ok:
+            _fiit_text += (
+                f"The latest reading is {_fiit_z:+.2f}σ from its {_fiit_win_lbl} mean of "
+                f"€{_fs['z_mean']:+.1f}/MWh. "
+            )
+        _fiit_text += (
+            "A deeply negative FI minus IT-North spread is the expected configuration when Italian "
+            "prices are set by gas-fired plants at the margin while Finland clears on low-marginal-cost "
+            "supply (hydro, nuclear including Olkiluoto 3, and wind). The spread narrows when Finnish "
+            "supply tightens (nuclear outages, low-wind spells, cold snaps) or when gas costs fall."
+        )
+        st.markdown(
+            commentary(_fiit_text, "warn" if (_fiit_z_ok and abs(_fiit_z) >= 2) else "ok"),
+            unsafe_allow_html=True,
+        )
+
+        with st.expander("FI minus IT-North spread: methodology and sources", expanded=False):
+            st.markdown(f"""
+            **Definition:** spread = FI day-ahead price minus IT-North day-ahead price (EUR/MWh),
+            using daily averages per CET/CEST delivery day. No unit or currency conversion is required.
+
+            **FI data:** Nord Pool Data Portal daily area averages (no key required). The public
+            endpoint only serves roughly the latest two months of delivery days; older dates return
+            HTTP 401. When `ENTSOE_API_KEY` is set, ENTSO-E A44 day-ahead prices for FI
+            (EIC 10YFI-1--------U) extend the history to {_FIIT_HIST_D} days; Nord Pool values are kept
+            on overlapping days because both publish the same coupled (SDAC) clearing prices.
+
+            **IT-North data:** energy-charts.info price API (Fraunhofer ISE), bidding zone IT-North,
+            requested in chunks of at most 90 days. Data from Bundesnetzagentur | SMARD.de, licensed
+            under CC BY 4.0 (creativecommons.org/licenses/by/4.0). Fallback: ENTSO-E A44 for IT-North
+            (EIC 10Y1001A1001A73I) when `ENTSOE_API_KEY` is set. energy-charts.info also publishes FI
+            prices, but under a licence restricted to private and internal use, so that series is not used.
+
+            **Daily aggregation:** quarter-hourly prices (from delivery day 1 October 2025) or hourly
+            prices (before) are averaged arithmetically per delivery day in Europe/Rome time
+            (23, 24 or 25 hours around daylight-saving changes). Days with less than
+            {_FIIT_COV:.0%} of the expected intervals are excluded.
+
+            **Statistics:** the {_FIIT_AVG_D}-day average covers the trailing {_FIIT_AVG_D} calendar days
+            ending on the latest common delivery day. The z-score is (latest spread minus mean) divided
+            by the sample standard deviation over the trailing {_FIIT_Z_D} calendar days, reported only
+            with at least {_FIIT_Z_MIN} daily observations and flagged as partial when the history is
+            shorter than a full year.
+
+            **Interpretation and limitations:** Finland and Italy are not directly interconnected,
+            so the spread is not a tradable arbitrage. It is a structural comparison of the marginal
+            technology in each zone: low-marginal-cost Nordic supply against gas-fired generation in
+            Italy. IT-North is one of several Italian bidding zones and hosts Italy's interconnections
+            with France, Switzerland, Austria and Slovenia.
+            """)
+
+    _fiit_src_bits = ["FI: " + (_fiit_fi.get("source") or "unavailable")]
+    _fiit_src_bits.append("IT-North: " + (_fiit_it.get("source") or "unavailable"))
+    if _fiit_it.get("licence"):
+        _fiit_src_bits.append("Licence: " + _fiit_it["licence"])
+    st.caption("Sources: " + " | ".join(_fiit_src_bits))
+    if _fiit_it.get("error"):
+        st.caption(f"IT-North chunks not loaded: {_fiit_it['error']}")
+    # ── end 3A: FI minus IT-North spread ─────────────────────────────────────
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -921,16 +1227,9 @@ with tab_hydro:
 
 
 # ── Footer ─────────────────────────────────────────────────────────────────
-
-st.divider()
-st.markdown(
-    """<div style="color:#484f58;font-size:0.72rem;line-height:1.8;">
-    Built by Tobias Gudbjerg &nbsp;|&nbsp;
-    Gas storage and LNG data: <a href="https://agsi.gie.eu" style="color:#484f58;">Gas Infrastructure Europe (GIE) AGSI+/ALSI</a> &nbsp;|&nbsp;
-    Power data: <a href="https://transparency.entsoe.eu" style="color:#484f58;">ENTSO-E Transparency Platform</a> &nbsp;|&nbsp;
-    Spot prices: <a href="https://www.nordpoolgroup.com" style="color:#484f58;">Nord Pool</a> &nbsp;|&nbsp;
-    TTF: <a href="https://finance.yahoo.com" style="color:#484f58;">Yahoo Finance / ICE</a><br>
-    For informational purposes only. Not financial advice.
-    </div>""",
-    unsafe_allow_html=True,
-)
+page_footer([
+    ("Gas storage and LNG data", "Gas Infrastructure Europe (GIE) AGSI+/ALSI", "https://agsi.gie.eu"),
+    ("Power data", "ENTSO-E Transparency Platform", "https://transparency.entsoe.eu"),
+    ("Spot prices", "Nord Pool", "https://www.nordpoolgroup.com"),
+    ("TTF", "Yahoo Finance / ICE", "https://finance.yahoo.com"),
+])

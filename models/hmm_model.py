@@ -235,6 +235,10 @@ def predict_regime(features_df: pd.DataFrame) -> dict | None:
     feature_cols  = meta["feature_cols"]
     regime_labels = {int(k): v for k, v in meta["regime_labels"].items()}
 
+    # Degrade cleanly when the feature matrix lacks a trained feature (e.g. no NO2)
+    if any(c not in features_df.columns for c in feature_cols + ["date"]):
+        return None
+
     df = features_df.copy().dropna(subset=feature_cols).sort_values("date")
     if len(df) < 5:
         return None
@@ -287,6 +291,10 @@ def get_regime_history(features_df: pd.DataFrame) -> pd.DataFrame:
 
     feature_cols  = meta["feature_cols"]
     regime_labels = {int(k): v for k, v in meta["regime_labels"].items()}
+
+    # Degrade cleanly when the feature matrix lacks a trained feature (e.g. no NO2)
+    if any(c not in features_df.columns for c in feature_cols + ["date"]):
+        return pd.DataFrame()
 
     df = features_df.copy().dropna(subset=feature_cols).sort_values("date")
     if df.empty:

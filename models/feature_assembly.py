@@ -16,6 +16,8 @@ data survives ENTSO-E outages and app restarts.
 """
 from __future__ import annotations
 
+from config.settings import ENTSOE_TIMEOUT_S
+
 import os
 import json
 import numpy as np
@@ -88,7 +90,7 @@ def _load_spot_entsoe(years: int) -> pd.DataFrame:
     if not key:
         return pd.DataFrame()
 
-    client = EntsoePandasClient(api_key=key)
+    client = EntsoePandasClient(api_key=key, timeout=ENTSOE_TIMEOUT_S)
     end   = pd.Timestamp.now(tz="UTC").normalize()
     start = end - pd.Timedelta(days=int(years * 365))
 

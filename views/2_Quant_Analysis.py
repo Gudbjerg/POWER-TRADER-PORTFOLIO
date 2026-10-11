@@ -1,6 +1,7 @@
 """
 Layer 2: Quantitative Analysis
 """
+from config.settings import ENTSOE_TIMEOUT_S
 import os
 import streamlit as st
 import pandas as pd
@@ -21,7 +22,8 @@ st.set_page_config(
     initial_sidebar_state="collapsed",
 )
 
-from utils.helpers import apply_dark_theme, kpi_card, delta_span, commentary
+from utils.helpers import ordinal, apply_dark_theme, kpi_card, delta_span, commentary
+from utils.theme import ACCENTS, CHART, PLOTLY_TEMPLATE, page_header, page_footer
 from config.settings import (
     SCORE_RISK_PREMIUM_EUR, SCORE_SEASONAL_HI_PCT, SCORE_SEASONAL_LO_PCT,
     COINT_ENTRY_Z, COINT_MIN_OBS, COINT_MIN_MATCH, HYDRO_MAX_LAG,
@@ -51,15 +53,15 @@ from data.sentiment import get_sentiment_data
 apply_dark_theme()
 
 # ── Load data ────────────────────────────────────────────────────────────────
-@st.cache_data(ttl=3600, show_spinner=False, persist="disk")
+@st.cache_data(ttl=3600, show_spinner=False)
 def _get_features_l2():
     return assemble_features(years=3)
 
-@st.cache_data(ttl=3600, show_spinner=False, persist="disk")
+@st.cache_data(ttl=3600, show_spinner=False)
 def _run_decomp_cached(df: pd.DataFrame, window: int = 90):
     return run_rolling_decomposition(df, window)
 
-@st.cache_data(ttl=3600, show_spinner=False, persist="disk")
+@st.cache_data(ttl=3600, show_spinner=False)
 def _run_ols_cached(reg_df: pd.DataFrame):
     return run_full_ols(reg_df)
 
@@ -67,11 +69,11 @@ def _run_ols_cached(reg_df: pd.DataFrame):
 def _get_sentiment_l2():
     return get_sentiment_data()
 
-@st.cache_data(ttl=3600, show_spinner=False, persist="disk")
+@st.cache_data(ttl=3600, show_spinner=False)
 def _get_eua():
     return fetch_eua_price()
 
-@st.cache_data(ttl=3600, show_spinner=False, persist="disk")
+@st.cache_data(ttl=3600, show_spinner=False)
 def _get_ttf_history_norm():
     return fetch_ttf_history(years=7)
 
@@ -204,7 +206,7 @@ def _run_pca(panel: pd.DataFrame) -> dict | None:
         return None
 
 
-@st.cache_data(ttl=3600, show_spinner=False, persist="disk")
+@st.cache_data(ttl=3600, show_spinner=False)
 def _get_scanner_prices(years: int = 3) -> pd.DataFrame:
     """Wide-format daily prices for cointegration scanner: NO2, NL, TTF + DE, FR (ENTSO-E A44) + NBP (yfinance)."""
     _base = _get_features_l2()
@@ -216,10 +218,12 @@ def _get_scanner_prices(years: int = 3) -> pd.DataFrame:
     if _key:
         try:
             from entsoe import EntsoePandasClient as _EPC
-            _cli = _EPC(api_key=_key)
+            _cli = _EPC(api_key=_key, timeout=ENTSOE_TIMEOUT_S)
             _end = pd.Timestamp.now(tz="UTC").normalize()
             _st0 = _end - pd.Timedelta(days=int(years * 365))
-            for _lbl, _eic in [("de", "10Y1001A1001A63L"), ("fr", "10YFR-RTE------C")]:
+            # DE-LU bidding zone (10Y1001A1001A82H). The former DE-AT-LU zone
+            # (10Y1001A1001A63L) stopped publishing day-ahead prices on 1 Oct 2018.
+            for _lbl, _eic in [("de", "10Y1001A1001A82H"), ("fr", "10YFR-RTE------C")]:
                 _chunks: list = []
                 _cs = _st0
                 while _cs < _end:
@@ -284,12 +288,12 @@ def _run_coint_scanner(price_df: pd.DataFrame) -> list[dict]:
                 _pval, _dep, _indep, _dn, _in_ = _pba, _yb, _ya, _b, _a
             _X_sc    = _sm_sc.add_constant(_indep)
             _ols_sc  = _sm_sc.OLS(_dep, _X_sc).fit()
-            _beta_sc = float(_ols_sc.params.iloc[1])
+            _beta_sc = float(np.asarray(_ols_sc.params)[1])   # params is an ndarray for ndarray inputs
             _resid_sc = np.asarray(_ols_sc.resid, dtype=float).copy()
             _rl  = _resid_sc[:-1]
             _rd  = np.diff(_resid_sc)
             _ou  = _sm_sc.OLS(_rd, _sm_sc.add_constant(_rl)).fit()
-            _lam = float(_ou.params.iloc[1])
+            _lam = float(np.asarray(_ou.params)[1])
             _hl  = (-np.log(2) / _lam) if _lam < 0 else float("inf")
             _rs  = pd.Series(_resid_sc, dtype=float)
             _em  = _rs.expanding(min_periods=30).mean()
@@ -338,7 +342,7 @@ def _run_coint_scanner(price_df: pd.DataFrame) -> list[dict]:
     return _results
 
 
-@st.cache_data(ttl=1800, show_spinner=False, persist="disk")
+@st.cache_data(ttl=1800, show_spinner=False)
 def _get_de_live_load_gw() -> tuple:
     """
     Fetch today's German total load from ENTSO-E A65.
@@ -356,7 +360,7 @@ def _get_de_live_load_gw() -> tuple:
         _now = _dt.now(_tz)
         _start = pd.Timestamp(_now.date(), tz="Europe/Berlin")
         _end   = _start + pd.Timedelta(days=1)
-        _client_a65 = EntsoePandasClient(api_key=_key)
+        _client_a65 = EntsoePandasClient(api_key=_key, timeout=ENTSOE_TIMEOUT_S)
         try:
             _ser = _client_a65.query_load("10Y1001A1001A83F", start=_start, end=_end)
         except Exception:
@@ -412,9 +416,11 @@ with st.sidebar:
     st.divider()
 
 # ── Header ───────────────────────────────────────────────────────────────────
-st.markdown("## Layer 2 · Quantitative Analysis")
-st.caption("Quantitative models for European power and gas market analysis.")
-st.divider()
+page_header(
+    "Layer 2", "Quantitative Analysis",
+    "Quantitative models for European power and gas market analysis.",
+    accent=ACCENTS["l2"],
+)
 
 with st.expander("Model overview", expanded=False):
     st.markdown("""
@@ -515,7 +521,7 @@ try:
             _sc_note = (f"Historically elevated for this time of year" if _sc_pct_rank > SCORE_SEASONAL_HI_PCT
                         else (f"Historically cheap for this time of year" if _sc_pct_rank < SCORE_SEASONAL_LO_PCT
                               else "Within typical seasonal range"))
-            _sc_signals.append({"name": "TTF Seasonal Rank", "value": f"{_sc_pct_rank:.0f}th pct",
+            _sc_signals.append({"name": "TTF Seasonal Rank", "value": f"{ordinal(_sc_pct_rank)} pct",
                                  "direction": _sc_dir, "note": _sc_note})
         else:
             _sc_signals.append({"name": "TTF Seasonal Rank", "value": "n/a",
@@ -544,14 +550,14 @@ try:
                else ("down" if _sc_fuel in ("wind", "solar", "hydro")
                      else "neutral"))
     _sc_fuel_note = {
-        "gas":   "Gas-marginal regime — TTF drives power prices",
-        "oil":   "Oil/peaker marginal — demand near capacity ceiling",
-        "coal":  "Coal-marginal — mid-stack clearing",
-        "wind":  "Renewable-marginal — structurally low-cost clearing",
-        "solar": "Renewable-marginal — structurally low-cost clearing",
-        "hydro": "Hydro-marginal — low-cost supply clearing",
-        "lignite": "Lignite-marginal — mid-stack clearing",
-        "biomass": "Biomass-marginal — mid-stack clearing",
+        "gas":   "Gas-marginal regime: TTF drives power prices",
+        "oil":   "Oil/peaker marginal: demand near capacity ceiling",
+        "coal":  "Coal-marginal: mid-stack clearing",
+        "wind":  "Renewable-marginal: structurally low-cost clearing",
+        "solar": "Renewable-marginal: structurally low-cost clearing",
+        "hydro": "Hydro-marginal: low-cost supply clearing",
+        "lignite": "Lignite-marginal: mid-stack clearing",
+        "biomass": "Biomass-marginal: mid-stack clearing",
     }.get(_sc_fuel, f"{_sc_fuel} marginal")
     if _sc_live_load is None:
         _sc_fuel_note += f" · A65 n/a: {_sc_load_src}"
@@ -577,8 +583,8 @@ try:
             _sc_hydro_mean = float(_sc_hydro_ser.iloc[-90:].mean())
             _sc_hydro_dev  = _sc_hydro_cur - _sc_hydro_mean
             _sc_dir = "down" if _sc_hydro_dev > 5 else ("up" if _sc_hydro_dev < -5 else "neutral")
-            _sc_note = (f"Above 90d mean ({_sc_hydro_mean:.0f}%) — supply comfortable" if _sc_hydro_dev > 5
-                        else (f"Below 90d mean ({_sc_hydro_mean:.0f}%) — hydro tightening" if _sc_hydro_dev < -5
+            _sc_note = (f"Above 90d mean ({_sc_hydro_mean:.0f}%): supply comfortable" if _sc_hydro_dev > 5
+                        else (f"Below 90d mean ({_sc_hydro_mean:.0f}%): hydro tightening" if _sc_hydro_dev < -5
                               else f"Near 90d mean ({_sc_hydro_mean:.0f}%)"))
             _sc_signals.append({"name": "Hydro Level", "value": f"{_sc_hydro_cur:.0f}%",
                                  "direction": _sc_dir, "note": _sc_note})
@@ -614,7 +620,7 @@ try:
                             else f"Significant (p={_sc_min_p:.3f}) + positive news flow → downside pressure")
             else:
                 _sc_dir = "neutral"
-                _sc_note = f"Not significant (p={_sc_min_p:.3f}) — no news-driven price signal"
+                _sc_note = f"Not significant (p={_sc_min_p:.3f}): no news-driven price signal"
             _sc_signals.append({"name": "Sentiment → TTF", "value": f"p={_sc_min_p:.3f}",
                                  "direction": _sc_dir, "note": _sc_note})
         else:
@@ -759,8 +765,8 @@ with tab_mc:
 
         # Fan chart
         C = {
-            "bg": "#0d1117", "panel_bg": "#161b22",
-            "grid": "rgba(255,255,255,0.06)", "text": "#c9d1d9",
+            "bg": CHART["bg"], "panel_bg": CHART["panel_bg"],
+            "grid": CHART["grid"], "text": CHART["text"],
             "band_out": "rgba(88,166,255,0.12)", "band_in": "rgba(88,166,255,0.27)",
             "median": "#58a6ff", "hist": "#8b949e",
             "mandate": "#d4ac3a", "target": "#3fb950",
@@ -797,7 +803,7 @@ with tab_mc:
                       annotation_text="80% (2022 original)", annotation_position="right",
                       annotation_font=dict(color=C["mandate"], size=10))
         fig.update_layout(
-            template="plotly_dark", paper_bgcolor=C["bg"], plot_bgcolor=C["panel_bg"],
+            template=PLOTLY_TEMPLATE, paper_bgcolor=C["bg"], plot_bgcolor=C["panel_bg"],
             font=dict(color=C["text"], size=12),
             margin=dict(l=10, r=90, t=10, b=10),
             legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
@@ -806,7 +812,7 @@ with tab_mc:
                        range=[max(0, current_pct - 5), 102]),
             hovermode="x unified",
         )
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig, width="stretch")
 
         if not has_empirical:
             st.info(
@@ -917,12 +923,12 @@ with tab_reg:
             )
 
         C = {
-            "bg": "#0d1117", "panel_bg": "#161b22",
-            "grid": "rgba(255,255,255,0.06)", "text": "#c9d1d9",
+            "bg": CHART["bg"], "panel_bg": CHART["panel_bg"],
+            "grid": CHART["grid"], "text": CHART["text"],
             "scatter": "#58a6ff", "regline": "#d4ac3a",
             "actual": "#c9d1d9", "fitted": "#58a6ff",
             "resid_pos": "#f85149", "resid_neg": "#3fb950",
-            "zero": "rgba(255,255,255,0.3)",
+            "zero": CHART["zero"],
         }
 
         # Two-column layout: scatter (left), residuals time series (right)
@@ -961,7 +967,7 @@ with tab_reg:
             ))
             fig_sc.update_layout(
                 title=dict(text="NL Power vs. TTF Gas Price (EUR/MWh)", font=dict(size=12)),
-                template="plotly_dark", paper_bgcolor=C["bg"], plot_bgcolor=C["panel_bg"],
+                template=PLOTLY_TEMPLATE, paper_bgcolor=C["bg"], plot_bgcolor=C["panel_bg"],
                 font=dict(color=C["text"], size=11),
                 margin=dict(l=10, r=10, t=40, b=10),
                 legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
@@ -969,7 +975,7 @@ with tab_reg:
                 yaxis=dict(title="NL day-ahead (EUR/MWh)", showgrid=True, gridcolor=C["grid"]),
                 height=340,
             )
-            st.plotly_chart(fig_sc, use_container_width=True)
+            st.plotly_chart(fig_sc, width="stretch")
 
         # Residuals time series
         with col_resid:
@@ -991,7 +997,7 @@ with tab_reg:
                               line_color=C["zero"], line_width=0.8)
             fig_res.update_layout(
                 title=dict(text="Standardised Residual (z-score)", font=dict(size=12)),
-                template="plotly_dark", paper_bgcolor=C["bg"], plot_bgcolor=C["panel_bg"],
+                template=PLOTLY_TEMPLATE, paper_bgcolor=C["bg"], plot_bgcolor=C["panel_bg"],
                 font=dict(color=C["text"], size=11),
                 margin=dict(l=10, r=10, t=40, b=10),
                 xaxis=dict(showgrid=True, gridcolor=C["grid"], title=None),
@@ -1000,7 +1006,7 @@ with tab_reg:
                 hovermode="x unified",
                 height=340,
             )
-            st.plotly_chart(fig_res, use_container_width=True)
+            st.plotly_chart(fig_res, width="stretch")
 
         # Signal interpretation
         if abs(latest_z) >= 2.0:
@@ -1146,8 +1152,8 @@ with tab_spike:
 
         # Z-score time series chart
         C = {
-            "bg": "#0d1117", "panel_bg": "#161b22",
-            "grid": "rgba(255,255,255,0.06)", "text": "#c9d1d9",
+            "bg": CHART["bg"], "panel_bg": CHART["panel_bg"],
+            "grid": CHART["grid"], "text": CHART["text"],
         }
         ZONE_COLORS = {
             "NO1": "#4caf8f", "NO2": "#2980b9", "SE3": "#7ec8e3",
@@ -1172,12 +1178,12 @@ with tab_spike:
             (-ALERT_Z, "rgba(248,81,73,0.7)",  "dash"),
             (WARNING_Z, "rgba(210,153,34,0.5)", "dot"),
             (-WARNING_Z,"rgba(210,153,34,0.5)", "dot"),
-            (0,         "rgba(255,255,255,0.2)", "solid"),
+            (0,         CHART["zero"], "solid"),
         ]:
             fig_z.add_hline(y=level, line_dash=dash, line_color=color, line_width=1)
 
         fig_z.update_layout(
-            template="plotly_dark",
+            template=PLOTLY_TEMPLATE,
             paper_bgcolor=C["bg"], plot_bgcolor=C["panel_bg"],
             font=dict(color=C["text"], size=12),
             margin=dict(l=10, r=10, t=10, b=10),
@@ -1186,7 +1192,7 @@ with tab_spike:
             yaxis=dict(title="z-score (30-day rolling)", showgrid=True, gridcolor=C["grid"]),
             hovermode="x unified",
         )
-        st.plotly_chart(fig_z, use_container_width=True)
+        st.plotly_chart(fig_z, width="stretch")
 
         with st.expander("Methodology", expanded=False):
             st.markdown(f"""
@@ -1293,10 +1299,10 @@ with tab_bt:
             )
 
         C = {
-            "bg": "#0d1117", "panel_bg": "#161b22",
-            "grid": "rgba(255,255,255,0.06)", "text": "#c9d1d9",
+            "bg": CHART["bg"], "panel_bg": CHART["panel_bg"],
+            "grid": CHART["grid"], "text": CHART["text"],
             "pos": "#3fb950", "neg": "#f85149",
-            "cum": "#58a6ff", "zero": "rgba(255,255,255,0.25)",
+            "cum": "#58a6ff", "zero": CHART["zero"],
             "cost": "rgba(210,180,40,0.55)",
         }
 
@@ -1323,7 +1329,7 @@ with tab_bt:
         )
         fig_bt.update_layout(
             title=dict(text="Annual P&L per MWh (net of storage cost)", font=dict(size=12)),
-            template="plotly_dark",
+            template=PLOTLY_TEMPLATE,
             paper_bgcolor=C["bg"], plot_bgcolor=C["panel_bg"],
             font=dict(color=C["text"], size=12),
             margin=dict(l=10, r=10, t=40, b=10),
@@ -1333,7 +1339,7 @@ with tab_bt:
             hovermode="x unified",
             height=300,
         )
-        st.plotly_chart(fig_bt, use_container_width=True)
+        st.plotly_chart(fig_bt, width="stretch")
 
         # ── Cumulative P&L line ──────────────────────────────────────────────
         fig_cum = go.Figure()
@@ -1349,7 +1355,7 @@ with tab_bt:
         fig_cum.add_hline(y=0, line_dash="solid", line_color=C["zero"], line_width=0.8)
         fig_cum.update_layout(
             title=dict(text="Cumulative P&L per MWh", font=dict(size=12)),
-            template="plotly_dark",
+            template=PLOTLY_TEMPLATE,
             paper_bgcolor=C["bg"], plot_bgcolor=C["panel_bg"],
             font=dict(color=C["text"], size=12),
             margin=dict(l=10, r=10, t=40, b=10),
@@ -1359,7 +1365,7 @@ with tab_bt:
             hovermode="x",
             height=220,
         )
-        st.plotly_chart(fig_cum, use_container_width=True)
+        st.plotly_chart(fig_cum, width="stretch")
 
         # ── Crisis context note ──────────────────────────────────────────────
         exc = stats.get("avg_pnl_ex_crisis")
@@ -1383,7 +1389,7 @@ with tab_bt:
             display = bt[["label", "summer_avg", "winter_avg", "spread", "pnl"]].copy()
             display.columns = ["Gas Year", "Summer avg (€/MWh)", "Winter avg (€/MWh)",
                                 "Spread (€/MWh)", f"P&L net of €{storage_cost:.1f} cost (€/MWh)"]
-            st.dataframe(display.set_index("Gas Year"), use_container_width=True)
+            st.dataframe(display.set_index("Gas Year"), width="stretch")
 
         # ── Signal: current gas year injection economics ──────────────────────
         if not ttf_hist.empty:
@@ -1466,7 +1472,7 @@ with tab_bt:
 # TAB 5: MERIT ORDER / SUPPLY STACK
 # ════════════════════════════════════════════════════════════════════════════
 with tab_stack:
-    st.markdown("### German Merit Order — Supply Stack")
+    st.markdown("### German Merit Order: Supply Stack")
     st.caption(
         "German generation fleet ordered by short-run marginal cost (SRMC). "
         "Demand line shows where on the merit order current consumption clears. "
@@ -1500,7 +1506,7 @@ with tab_stack:
         _load_badge = (
             f"Live demand: {_live_load_gw:.1f} GW ({_load_src})"
             if _live_load_gw is not None
-            else f"Live demand unavailable — {_load_src}. Using 60 GW default."
+            else f"Live demand unavailable: {_load_src}. Using 60 GW default."
         )
         st.markdown(
             commentary(
@@ -1569,7 +1575,7 @@ with tab_stack:
             color = "red" if premium > 10 else ("green" if premium < -10 else "blue")
             st.markdown(
                 kpi_card("NL vs implied", f"€{nl_latest:.1f}/MWh",
-                         delta_span(f"{premium:+.1f} EUR/MWh — {label}", color)),
+                         delta_span(f"{premium:+.1f} EUR/MWh: {label}", color)),
                 unsafe_allow_html=True,
             )
         else:
@@ -1585,7 +1591,7 @@ with tab_stack:
     fig_stack = make_merit_order_figure(
         stack_df, demand_gw, marginal, actual_power_price=nl_latest,
     )
-    st.plotly_chart(fig_stack, use_container_width=True)
+    st.plotly_chart(fig_stack, width="stretch")
 
     # ── Commentary ───────────────────────────────────────────────────────────
     if marginal["fuel"] == "gas":
@@ -1601,7 +1607,7 @@ with tab_stack:
         prose = (
             f"At {demand_gw:.0f} GW demand, the marginal fuel is hard coal at an implied clearing price of "
             f"€{marginal['marginal_cost']:.1f}/MWh. Gas CCGT SRMC (€{gas_srmc:.1f}/MWh) is above coal, "
-            "meaning gas plant is off the margin — a coal-marginal regime. The clean-dark spread is the "
+            "meaning gas plant is off the margin: a coal-marginal regime. The clean-dark spread is the "
             "relevant signal for generation economics in this demand scenario."
         )
         status = "warn"
@@ -1611,7 +1617,7 @@ with tab_stack:
             _gap = nl_latest - marginal["marginal_cost"]
             _gap_note = (
                 f" NL day-ahead at €{nl_latest:.1f}/MWh is €{_gap:.1f}/MWh above the structural cost "
-                "floor of €0/MWh — this is not a scarcity premium. It reflects grid constraints, "
+                "floor of €0/MWh: this is not a scarcity premium. It reflects grid constraints, "
                 "reserve capacity costs, import flows (NordLink, NorNed), or real-time demand that "
                 "the simplified merit order does not capture."
             )
@@ -1640,7 +1646,7 @@ with tab_stack:
         **Dynamic inputs:**
         - Gas CCGT SRMC = TTF ÷ 0.55 + EUA × 0.37 (live TTF: **€{ttf_latest:.1f}/MWh**, EUA: **€{eua_price:.0f}/t**)
         - Hard coal SRMC = 11 EUR/MWh_th ÷ 0.40 + EUA × 0.85 ≈ **€{coal_srmc:.1f}/MWh** at current EUA
-        - Demand default: **{_default_demand:.0f} GW** — {"ENTSO-E A65 today's average (" + _load_src + ")" if _live_load_gw is not None else "static 60 GW fallback (" + _load_src + ")"}
+        - Demand default: **{_default_demand:.0f} GW**, from {"ENTSO-E A65 today's average (" + _load_src + ")" if _live_load_gw is not None else "static 60 GW fallback (" + _load_src + ")"}
 
         **Static inputs (Bundesnetzagentur 2024):**
         - Wind: 66 GW installed | Solar: 73 GW | Hydro: 4.5 GW | Biomass: 8.5 GW
@@ -1652,7 +1658,7 @@ with tab_stack:
         **Key simplifications:**
         - This model shows installed capacity, not available capacity. Typical thermal availability
           is 85-90%; renewables depend on weather conditions.
-        - Wind and solar produce at weather-dependent output levels — their effective capacity at any
+        - Wind and solar produce at weather-dependent output levels; their effective capacity at any
           given hour is not 66/73 GW. The stack shows the structural position, not real-time dispatch.
         - No cross-border imports or exports. Germany regularly imports from France and Scandinavia,
           which can suppress the clearing price below the domestic marginal fuel SRMC.
@@ -1681,14 +1687,14 @@ with tab_decomp:
     st.markdown("### Nordic Price Decomposition")
     st.caption(
         "Rolling 90-day multivariate OLS decomposes the NO2 day-ahead price into contributions "
-        "from continental price (NL), gas price (TTF), and — where available — Norwegian hydro "
+        "from continental price (NL), gas price (TTF), and, where available, Norwegian hydro "
         "reservoir level and German wind output. Regressors are standardised so beta magnitudes "
         "are directly comparable across drivers."
     )
 
     # Lazy-load feature matrix: only assembled when this tab is first visited
     if "features_l2" not in st.session_state:
-        with st.spinner("Assembling feature matrix (first visit — subsequent loads are instant)…"):
+        with st.spinner("Assembling feature matrix (first visit; subsequent loads are instant)…"):
             st.session_state["features_l2"] = _get_features_l2()
     features_df = st.session_state["features_l2"]
 
@@ -1711,9 +1717,9 @@ with tab_decomp:
         if len(feat_cols) < 4:
             st.info(
                 f"Active: **{model_label}**. "
-                + ("Hydro and wind data unavailable — ENTSO-E key required for full 4-factor model."
+                + ("Hydro and wind data unavailable: ENTSO-E key required for full 4-factor model."
                    if len(feat_cols) == 2 else
-                   "Wind data unavailable — ENTSO-E key or Fraunhofer fallback required for 4-factor model.")
+                   "Wind data unavailable: ENTSO-E key or Fraunhofer fallback required for 4-factor model.")
                 + f" | Rolling OLS: {_decomp_tag}, {_decomp_ms/1000:.1f}s",
                 icon="ℹ️",
             )
@@ -1771,17 +1777,17 @@ with tab_decomp:
                 "Unit: EUR/MWh per one standard deviation of the factor."
             )
             fig_beta = make_beta_chart(decomp_results, feat_cols, window=90)
-            st.plotly_chart(fig_beta, use_container_width=True)
+            st.plotly_chart(fig_beta, width="stretch")
 
             # ── Today's contribution bar ──────────────────────────────────────
             if contribs:
                 st.markdown("#### Today's Factor Contributions")
                 st.caption(
-                    "Each bar shows β_i × z_i — how much that driver is currently adding or subtracting "
+                    "Each bar shows β_i × z_i: how much that driver is currently adding or subtracting "
                     "from the model-implied NO2 price, in EUR/MWh."
                 )
                 fig_contrib = make_contribution_bar(contribs, no2_actual=latest_no2)
-                st.plotly_chart(fig_contrib, use_container_width=True)
+                st.plotly_chart(fig_contrib, width="stretch")
 
             # ── Interpretation ────────────────────────────────────────────────
             if driver_key in contribs:
@@ -1794,7 +1800,7 @@ with tab_decomp:
                         f"corresponds to a {driver_beta:.2f} EUR/MWh move in NO2. "
                         f"At current levels, it is exerting {abs(driver_contrib):.1f} EUR/MWh of "
                         f"{direction} price pressure. "
-                        f"Rolling R² = {latest_r2:.2f} — the {model_label} explains "
+                        f"Rolling R² = {latest_r2:.2f}: the {model_label} explains "
                         f"{latest_r2*100:.0f}% of NO2 variance over the trailing window.",
                         "ok",
                     ),
@@ -1841,7 +1847,7 @@ with tab_decomp:
                 Feature availability: {"hydro ✅" if _avail_l2.get("hydro") else "hydro ❌"} |
                 {"wind ✅" if _avail_l2.get("wind") else "wind ❌ (ENTSO-E key required)"}.
 
-                **Forward link — Multi-Pair Cointegration Scanner:** The same rolling regression
+                **Forward link to the Multi-Pair Cointegration Scanner:** The same rolling regression
                 mechanism, extended with Engle-Granger cointegration tests, underpins the
                 NO2–NL pair-trading signal (expected spread mean-reversion speed and entry
                 z-score thresholds).
@@ -1869,16 +1875,16 @@ with tab_wind:
 
     # ── Load feature matrix (lazy — only when this tab is visited) ───────────
     if "features_l2" not in st.session_state:
-        with st.spinner("Assembling feature matrix (first visit — subsequent loads are instant)…"):
+        with st.spinner("Assembling feature matrix (first visit; subsequent loads are instant)…"):
             st.session_state["features_l2"] = _get_features_l2()
     features_df = st.session_state["features_l2"]
 
     # ── Load wind data ────────────────────────────────────────────────────────
-    @st.cache_data(ttl=3600, show_spinner=False, persist="disk")
+    @st.cache_data(ttl=3600, show_spinner=False)
     def _get_wind_forecast():
         return fetch_wind_forecast(days=90)
 
-    @st.cache_data(ttl=3600, show_spinner=False, persist="disk")
+    @st.cache_data(ttl=3600, show_spinner=False)
     def _get_wind_actual():
         return fetch_wind_daily(days=90)
 
@@ -1912,7 +1918,7 @@ with tab_wind:
         st.info(
             "Both forecast (ENTSO-E A69) and actual (ENTSO-E B18/B19 or Fraunhofer ISE) "
             "data are required for error computation. Actual DE wind is available via "
-            "Fraunhofer ISE fallback — forecast data requires an active ENTSO-E API key.",
+            "Fraunhofer ISE fallback: forecast data requires an active ENTSO-E API key.",
             icon="ℹ️",
         )
     else:
@@ -1922,7 +1928,7 @@ with tab_wind:
 
         if error_df.empty:
             st.warning(
-                "Could not compute forecast errors — no overlapping dates between "
+                "Could not compute forecast errors: no overlapping dates between "
                 "forecast and actual data. This typically means the zones with "
                 "forecast data (e.g. DK1, NO, GB) do not have corresponding actual "
                 "generation data available via the current fallback chain."
@@ -1960,7 +1966,7 @@ with tab_wind:
             st.markdown("#### Daily Forecast Error (last 60 days)")
             st.caption("Red = over-forecast (forecast > actual). Green = under-forecast.")
             fig_err = make_error_bar_chart(error_df, fc_zones, last_n_days=60)
-            st.plotly_chart(fig_err, use_container_width=True)
+            st.plotly_chart(fig_err, width="stretch")
 
             # ── RMSE chart ────────────────────────────────────────────────────
             if not rmse_df.empty:
@@ -1970,27 +1976,27 @@ with tab_wind:
                     "RMSE spikes typically coincide with rapid weather pattern changes."
                 )
                 fig_rmse = make_rmse_chart(rmse_df, fc_zones)
-                st.plotly_chart(fig_rmse, use_container_width=True)
+                st.plotly_chart(fig_rmse, width="stretch")
 
             # ── Correlation scatter ───────────────────────────────────────────
             primary_zone = fc_zones[0] if fc_zones else "DE"
             corr_df = compute_price_correlation(error_df, features_df, zone=primary_zone, window=30)
 
             if not corr_df.empty:
-                st.markdown(f"#### Forecast Error vs Price Volatility — {WIND_ZONE_LABELS.get(primary_zone, primary_zone)}")
+                st.markdown(f"#### Forecast Error vs Price Volatility: {WIND_ZONE_LABELS.get(primary_zone, primary_zone)}")
                 st.caption(
                     "Tests whether large wind forecast misses coincide with large next-day price moves. "
                     "Rolling 30-day Pearson correlation annotated. Significant positive correlation "
                     "implies wind forecast error is a viable intraday volatility predictor."
                 )
                 fig_corr = make_correlation_scatter(corr_df, zone=primary_zone)
-                st.plotly_chart(fig_corr, use_container_width=True)
+                st.plotly_chart(fig_corr, width="stretch")
 
                 latest_rho = corr_df["rolling_corr"].dropna().iloc[-1] if not corr_df["rolling_corr"].dropna().empty else float("nan")
                 if not np.isnan(latest_rho):
                     if abs(latest_rho) > 0.3:
                         interpretation = (
-                            f"Rolling 30-day correlation ρ = {latest_rho:.2f} — statistically meaningful. "
+                            f"Rolling 30-day correlation ρ = {latest_rho:.2f}: statistically meaningful. "
                             "Large wind forecast misses are co-moving with elevated power price volatility in "
                             "the current period. This is consistent with the theory that wind forecast errors "
                             "create imbalances that require expensive real-time correction."
@@ -1998,7 +2004,7 @@ with tab_wind:
                         status = "warn" if latest_rho > 0.3 else "ok"
                     else:
                         interpretation = (
-                            f"Rolling 30-day correlation ρ = {latest_rho:.2f} — weak relationship. "
+                            f"Rolling 30-day correlation ρ = {latest_rho:.2f}: weak relationship. "
                             "Wind forecast errors are not strongly co-moving with price volatility in the "
                             "current period. Other drivers (storage levels, gas price, continental flows) "
                             "are likely dominating price formation."
@@ -2009,7 +2015,7 @@ with tab_wind:
     # ── Methodology ───────────────────────────────────────────────────────────
     with st.expander("Methodology", expanded=False):
         st.markdown("""
-        **Wind forecast data:** ENTSO-E A69 (Day-Ahead Aggregated Generation — Wind and Solar),
+        **Wind forecast data:** ENTSO-E A69 (Day-Ahead Aggregated Generation, Wind and Solar),
         queried via `query_wind_and_solar_forecast()` in `entsoe-py`. Onshore (B19) + offshore
         (B18) PSR types are summed to daily GWh.
 
@@ -2027,7 +2033,7 @@ with tab_wind:
 
         **Price correlation:** Pearson correlation between `|forecast_error_gwh|` and
         `|day-over-day NO2 price change (EUR/MWh)|` over a 30-day trailing window.
-        The NO2 price change is used as a proxy for intraday/next-day market volatility —
+        The NO2 price change is used as a proxy for intraday/next-day market volatility;
         a direct intraday continuous price series requires REMIT / Epex intraday data.
 
         **ENTSO-E A69 vs B16/B19 availability:** A69 (forecasts) and B16/B19 (actuals) are
@@ -2035,7 +2041,7 @@ with tab_wind:
         If A69 is unavailable, the tab shows a clear error banner rather than silent null data.
 
         **Countries:** DE (Fraunhofer actuals, A69 forecast), DK1 (ENTSO-E both), NO (ENTSO-E both),
-        GB (ENTSO-E both — availability may vary post-Brexit).
+        GB (ENTSO-E for both; availability may vary post-Brexit).
         """)
 
     st.caption(
@@ -2052,7 +2058,7 @@ with tab_granger:
     st.caption(
         "Tests whether lagged energy news sentiment Granger-causes next-day TTF price returns. "
         "A statistically significant result (p < 0.05) means past sentiment adds predictive power "
-        "beyond TTF's own history — a potential leading indicator for gas price direction."
+        "beyond TTF's own history: a potential leading indicator for gas price direction."
     )
 
     with st.spinner("Loading sentiment history…"):
@@ -2072,7 +2078,7 @@ with tab_granger:
         _ttf_prices_df = ttf.get("prices", pd.DataFrame())
 
         if _ttf_prices_df.empty:
-            st.warning("TTF price data unavailable — cannot compute Granger test.", icon="⚠️")
+            st.warning("TTF price data unavailable: cannot compute Granger test.", icon="⚠️")
         elif _daily_sent.empty:
             st.info(
                 "No sentiment history yet. Granger test requires at least 21 days of scored headlines. "
@@ -2099,7 +2105,7 @@ with tab_granger:
                 _days_needed = _MIN_DAYS - _n_merged
                 st.info(
                     f"Granger test requires {_MIN_DAYS} aligned trading days with both sentiment "
-                    f"and TTF return data. Currently have **{_n_merged}** — "
+                    f"and TTF return data. Currently have **{_n_merged}**; "
                     f"**{_days_needed} more** needed before the test can run. "
                     "Sentiment history accumulates automatically.",
                     icon="ℹ️",
@@ -2111,7 +2117,7 @@ with tab_granger:
                         _merged.tail(10)[["date", "net_sentiment", "return"]].rename(columns={
                             "date": "Date", "net_sentiment": "Net Sentiment", "return": "TTF Return (%)"
                         }),
-                        use_container_width=True, hide_index=True,
+                        width="stretch", hide_index=True,
                     )
             else:
                 # ── Run Granger test ──────────────────────────────────────────
@@ -2203,20 +2209,20 @@ with tab_granger:
                         annotation_position="bottom right",
                     )
                     _fig_gc.update_layout(
-                        template="plotly_dark",
-                        paper_bgcolor="#0d1117",
-                        plot_bgcolor="#161b22",
-                        xaxis=dict(title="Lag", gridcolor="rgba(255,255,255,0.06)"),
+                        template=PLOTLY_TEMPLATE,
+                        paper_bgcolor=CHART["bg"],
+                        plot_bgcolor=CHART["panel_bg"],
+                        xaxis=dict(title="Lag", gridcolor=CHART["grid"]),
                         yaxis=dict(
                             title="p-value (SSR F-test)",
                             range=[0, min(1.05, max(_pvals) * 1.2)],
-                            gridcolor="rgba(255,255,255,0.06)",
+                            gridcolor=CHART["grid"],
                         ),
                         margin=dict(l=60, r=20, t=30, b=50),
                         height=360,
                         showlegend=False,
                     )
-                    st.plotly_chart(_fig_gc, use_container_width=True)
+                    st.plotly_chart(_fig_gc, width="stretch")
 
                     # ── Sentiment + TTF return overlay ────────────────────────
                     st.markdown("#### Net Sentiment vs TTF Daily Return")
@@ -2239,13 +2245,13 @@ with tab_granger:
                         hovertemplate="TTF return: %{y:.2f}%<extra></extra>",
                     ))
                     _fig_ts.update_layout(
-                        template="plotly_dark",
-                        paper_bgcolor="#0d1117",
-                        plot_bgcolor="#161b22",
-                        xaxis=dict(gridcolor="rgba(255,255,255,0.06)"),
+                        template=PLOTLY_TEMPLATE,
+                        paper_bgcolor=CHART["bg"],
+                        plot_bgcolor=CHART["panel_bg"],
+                        xaxis=dict(gridcolor=CHART["grid"]),
                         yaxis=dict(
                             title="Net sentiment",
-                            gridcolor="rgba(255,255,255,0.06)",
+                            gridcolor=CHART["grid"],
                             side="left",
                         ),
                         yaxis2=dict(
@@ -2258,7 +2264,7 @@ with tab_granger:
                         height=320,
                         hovermode="x unified",
                     )
-                    st.plotly_chart(_fig_ts, use_container_width=True)
+                    st.plotly_chart(_fig_ts, width="stretch")
 
                     # ── Commentary ────────────────────────────────────────────
                     if _min_p < 0.05:
@@ -2269,7 +2275,7 @@ with tab_granger:
                             "information for next-day TTF returns, beyond TTF's own lagged values. "
                             "In practical terms: when sentiment deteriorates sharply, a TTF upside move "
                             f"tends to follow within {_best_lag} trading day(s). "
-                            "Note: Granger causality does not imply structural causality — "
+                            "Note: Granger causality does not imply structural causality; "
                             "both may respond to a common unobserved shock (e.g. a supply disruption "
                             "hits news feeds before it is fully priced in)."
                         )
@@ -2277,7 +2283,7 @@ with tab_granger:
                     elif _min_p < 0.10:
                         _prose = (
                             f"Borderline Granger causality at lag {_best_lag}d (p={_min_p:.3f}). "
-                            "Sentiment shows weak predictive value for TTF returns — directionally "
+                            "Sentiment shows weak predictive value for TTF returns; directionally "
                             "interesting but not robust enough to trade on without additional confirmation. "
                             f"Sample size: {_n_merged} days."
                         )
@@ -2309,9 +2315,9 @@ with tab_granger:
                         - Null hypothesis H₀: sentiment at lag k does not Granger-cause TTF return
 
                         **Significance levels:**
-                        - p < 0.05: reject H₀ — sentiment is a statistically significant predictor
-                        - p < 0.10: borderline — directionally suggestive, not robust
-                        - p ≥ 0.10: fail to reject H₀ — no predictive evidence in current sample
+                        - p < 0.05: reject H₀; sentiment is a statistically significant predictor
+                        - p < 0.10: borderline; directionally suggestive, not robust
+                        - p ≥ 0.10: fail to reject H₀; no predictive evidence in current sample
 
                         **Sentiment source:** ProsusAI/FinBERT applied to filtered energy RSS headlines
                         (BBC Business, Guardian Energy, LNG World News, Energy Monitor).
@@ -2346,7 +2352,7 @@ with tab_storage_reg:
     st.markdown("### EU Storage → TTF Price Regression")
     st.caption(
         "OLS regression of TTF front-month price on EU aggregate storage fill level. "
-        "The residual — actual TTF minus the storage-implied fair value — is the "
+        "The residual (actual TTF minus the storage-implied fair value) is the "
         "supply-risk premium: a positive residual means the market prices in additional "
         "fear (geopolitical, supply disruption) beyond what storage fundamentals explain."
     )
@@ -2443,7 +2449,7 @@ with tab_storage_reg:
                 st.divider()
 
                 # ── Scatter + OLS fit ─────────────────────────────────────────
-                st.markdown("#### Storage Fill % vs TTF Price — Scatter & OLS Fit")
+                st.markdown("#### Storage Fill % vs TTF Price: Scatter & OLS Fit")
                 st.caption(
                     "Each dot is one trading day. Colour indicates year. "
                     "Red dot = current observation. Regression line shows the storage-implied fair value."
@@ -2486,19 +2492,19 @@ with tab_storage_reg:
                 ))
 
                 _fig_scatter.update_layout(
-                    template="plotly_dark",
-                    paper_bgcolor="#0d1117",
-                    plot_bgcolor="#161b22",
+                    template=PLOTLY_TEMPLATE,
+                    paper_bgcolor=CHART["bg"],
+                    plot_bgcolor=CHART["panel_bg"],
                     xaxis=dict(title="EU storage fill level (%)",
-                               gridcolor="rgba(255,255,255,0.06)"),
+                               gridcolor=CHART["grid"]),
                     yaxis=dict(title="TTF front-month (EUR/MWh)",
-                               gridcolor="rgba(255,255,255,0.06)"),
+                               gridcolor=CHART["grid"]),
                     legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="left", x=0,
                                 font=dict(size=10)),
                     margin=dict(l=60, r=20, t=30, b=50),
                     height=420,
                 )
-                st.plotly_chart(_fig_scatter, use_container_width=True)
+                st.plotly_chart(_fig_scatter, width="stretch")
 
                 # ── Residual time series ──────────────────────────────────────
                 st.markdown("#### Supply-Risk Premium (OLS Residual) Over Time")
@@ -2519,7 +2525,7 @@ with tab_storage_reg:
                     marker_color=_resid_color,
                     hovertemplate="Date: %{x|%Y-%m-%d}<br>Premium: %{y:+.1f} EUR/MWh<extra></extra>",
                 ))
-                _fig_resid.add_hline(y=0, line=dict(color="rgba(255,255,255,0.3)", width=1))
+                _fig_resid.add_hline(y=0, line=dict(color=CHART["zero"], width=1))
                 _fig_resid.add_hline(
                     y=10, line=dict(color="rgba(248,81,73,0.4)", width=1, dash="dot"),
                     annotation_text="+10 EUR/MWh",
@@ -2533,17 +2539,17 @@ with tab_storage_reg:
                     annotation_position="bottom right",
                 )
                 _fig_resid.update_layout(
-                    template="plotly_dark",
-                    paper_bgcolor="#0d1117",
-                    plot_bgcolor="#161b22",
-                    xaxis=dict(title=None, gridcolor="rgba(255,255,255,0.06)"),
+                    template=PLOTLY_TEMPLATE,
+                    paper_bgcolor=CHART["bg"],
+                    plot_bgcolor=CHART["panel_bg"],
+                    xaxis=dict(title=None, gridcolor=CHART["grid"]),
                     yaxis=dict(title="Residual (EUR/MWh)",
-                               gridcolor="rgba(255,255,255,0.06)"),
+                               gridcolor=CHART["grid"]),
                     margin=dict(l=60, r=20, t=20, b=50),
                     height=320,
                     showlegend=False,
                 )
-                st.plotly_chart(_fig_resid, use_container_width=True)
+                st.plotly_chart(_fig_resid, width="stretch")
 
                 # ── Commentary ────────────────────────────────────────────────
                 _eq_str = f"TTF = {_alpha:.1f} + {_beta:.2f} × storage_pct"
@@ -2551,7 +2557,7 @@ with tab_storage_reg:
                     _prose = (
                         f"At {_latest_storage:.1f}% EU storage fill, the OLS model implies a fair-value "
                         f"TTF of €{_latest_fitted:.1f}/MWh ({_eq_str}). "
-                        f"Actual TTF (€{_latest_ttf:.1f}/MWh) is €{_latest_resid:.1f}/MWh above this — "
+                        f"Actual TTF (€{_latest_ttf:.1f}/MWh) is €{_latest_resid:.1f}/MWh above this: "
                         "a supply-fear premium. The market is pricing in risk (geopolitical, supply disruption, "
                         "demand shock) that the storage fill level alone does not justify."
                     )
@@ -2560,7 +2566,7 @@ with tab_storage_reg:
                     _prose = (
                         f"At {_latest_storage:.1f}% EU storage fill, the OLS model implies a fair-value "
                         f"TTF of €{_latest_fitted:.1f}/MWh ({_eq_str}). "
-                        f"Actual TTF (€{_latest_ttf:.1f}/MWh) is €{abs(_latest_resid):.1f}/MWh below this — "
+                        f"Actual TTF (€{_latest_ttf:.1f}/MWh) is €{abs(_latest_resid):.1f}/MWh below this: "
                         "TTF is trading at a discount to storage-implied fundamental value. "
                         "Possible explanations: strong LNG imports, subdued industrial demand, or a risk-off "
                         "market environment compressing the forward risk premium."
@@ -2570,7 +2576,7 @@ with tab_storage_reg:
                     _prose = (
                         f"At {_latest_storage:.1f}% EU storage fill, the OLS model implies a fair-value "
                         f"TTF of €{_latest_fitted:.1f}/MWh ({_eq_str}). "
-                        f"Actual TTF (€{_latest_ttf:.1f}/MWh) is {_latest_resid:+.1f} EUR/MWh — "
+                        f"Actual TTF (€{_latest_ttf:.1f}/MWh) is {_latest_resid:+.1f} EUR/MWh from it, "
                         "near the storage-implied fundamental level. "
                         "The market is pricing storage fundamentals without a significant risk premium or discount."
                     )
@@ -2597,7 +2603,7 @@ with tab_storage_reg:
 
                     **Supply-risk premium (residual):** The OLS residual captures the component of TTF that
                     is not explained by storage fill alone. Persistent positive residuals indicate that the
-                    market is pricing in supply risk beyond what the current fill level justifies — a fear
+                    market is pricing in supply risk beyond what the current fill level justifies: a fear
                     premium driven by geopolitical events, pipeline disruptions, or LNG market tightness.
 
                     **Limitations:**
@@ -2629,13 +2635,13 @@ with tab_hydro_lag:
     st.caption(
         "Cross-correlation of Norwegian hydro reservoir fill level (% of historical max) "
         "with NO2 day-ahead price at lags 0–21 days. A negative correlation at lag k means "
-        "high reservoir fill k days ago is associated with lower prices today — quantifying "
+        "high reservoir fill k days ago is associated with lower prices today, quantifying "
         "how far ahead hydro fundamentals lead the spot market."
     )
 
     # Lazy-load feature matrix
     if "features_l2" not in st.session_state:
-        with st.spinner("Assembling feature matrix (first visit — subsequent loads are instant)…"):
+        with st.spinner("Assembling feature matrix (first visit; subsequent loads are instant)…"):
             st.session_state["features_l2"] = _get_features_l2()
     _hydro_feat_df = st.session_state["features_l2"]
 
@@ -2709,7 +2715,7 @@ with tab_hydro_lag:
             st.markdown("#### Cross-Correlation ρ(hydro_pct[t−k], NO2[t]) by Lag")
             st.caption(
                 "Negative correlation (blue) means higher hydro fill at lag k is associated with lower "
-                "NO2 price today — the expected direction. The lag with the largest |ρ| is the point "
+                "NO2 price today, the expected direction. The lag with the largest |ρ| is the point "
                 "where hydro has the most predictive power for NO2."
             )
 
@@ -2734,21 +2740,21 @@ with tab_hydro_lag:
                 annotation_font=dict(color="#f0e040", size=10),
                 annotation_position="top right",
             )
-            _fig_cc.add_hline(y=0, line=dict(color="rgba(255,255,255,0.2)", width=1))
+            _fig_cc.add_hline(y=0, line=dict(color=CHART["zero"], width=1))
             _fig_cc.update_layout(
-                template="plotly_dark",
-                paper_bgcolor="#0d1117",
-                plot_bgcolor="#161b22",
+                template=PLOTLY_TEMPLATE,
+                paper_bgcolor=CHART["bg"],
+                plot_bgcolor=CHART["panel_bg"],
                 xaxis=dict(title="Lag (days)", dtick=1,
-                           gridcolor="rgba(255,255,255,0.06)"),
+                           gridcolor=CHART["grid"]),
                 yaxis=dict(title="Pearson correlation ρ",
-                           gridcolor="rgba(255,255,255,0.06)",
+                           gridcolor=CHART["grid"],
                            range=[min(_corrs) * 1.2 - 0.05, max(_corrs) * 1.2 + 0.05]),
                 margin=dict(l=60, r=20, t=30, b=50),
                 height=380,
                 showlegend=False,
             )
-            st.plotly_chart(_fig_cc, use_container_width=True)
+            st.plotly_chart(_fig_cc, width="stretch")
 
             # ── Rolling correlation time series ───────────────────────────────
             _roll_win = 90
@@ -2776,7 +2782,7 @@ with tab_hydro_lag:
                 line=dict(color="#58a6ff", width=1.5),
                 hovertemplate="%{x|%Y-%m-%d}: ρ=%{y:.3f}<extra></extra>",
             ))
-            _fig_roll.add_hline(y=0, line=dict(color="rgba(255,255,255,0.2)", width=1))
+            _fig_roll.add_hline(y=0, line=dict(color=CHART["zero"], width=1))
             _fig_roll.add_hline(
                 y=-0.4, line=dict(color="rgba(248,81,73,0.3)", width=1, dash="dot"),
                 annotation_text="ρ=−0.4",
@@ -2784,17 +2790,17 @@ with tab_hydro_lag:
                 annotation_position="bottom right",
             )
             _fig_roll.update_layout(
-                template="plotly_dark",
-                paper_bgcolor="#0d1117",
-                plot_bgcolor="#161b22",
-                xaxis=dict(title=None, gridcolor="rgba(255,255,255,0.06)"),
+                template=PLOTLY_TEMPLATE,
+                paper_bgcolor=CHART["bg"],
+                plot_bgcolor=CHART["panel_bg"],
+                xaxis=dict(title=None, gridcolor=CHART["grid"]),
                 yaxis=dict(title="Rolling Pearson ρ",
-                           gridcolor="rgba(255,255,255,0.06)"),
+                           gridcolor=CHART["grid"]),
                 margin=dict(l=60, r=20, t=20, b=50),
                 height=300,
                 showlegend=False,
             )
-            st.plotly_chart(_fig_roll, use_container_width=True)
+            st.plotly_chart(_fig_roll, width="stretch")
 
             # ── Commentary ────────────────────────────────────────────────────
             if abs(_peak_corr) > 0.4:
@@ -2803,14 +2809,14 @@ with tab_hydro_lag:
                     f"{'Higher' if _peak_corr < 0 else 'Lower'} Norwegian hydro reservoir fill {_peak_lag} days ago "
                     f"is associated with {'lower' if _peak_corr < 0 else 'higher'} NO2 day-ahead prices today. "
                     "This confirms Norwegian hydro as a leading fundamental driver of Nordic spot prices. "
-                    "Hydro reservoir changes — from precipitation, snowmelt, or drawdown — propagate into "
+                    "Hydro reservoir changes (from precipitation, snowmelt or drawdown) propagate into "
                     f"spot market pricing with a delay of roughly {_peak_lag} trading day(s)."
                 )
                 _h_status = "warn" if _peak_corr > 0 else "ok"
             elif abs(_peak_corr) > 0.2:
                 _h_prose = (
                     f"Moderate hydro→NO2 correlation at lag {_peak_lag}d (ρ = {_peak_corr:.3f}). "
-                    "The hydro signal is present but not dominant — other factors (continental prices, TTF, "
+                    "The hydro signal is present but not dominant: other factors (continental prices, TTF, "
                     "grid constraints) are likely exerting stronger influence on NO2 in the current sample."
                 )
                 _h_status = "ok"
@@ -2849,7 +2855,7 @@ with tab_hydro_lag:
                 % of expanding 98th percentile to create a stationary fill-rate signal.
 
                 **Limitations:**
-                - Weekly ENTSO-E hydro data is forward-filled to daily — this reduces the effective
+                - Weekly ENTSO-E hydro data is forward-filled to daily; this reduces the effective
                   degrees of freedom and may understate lags shorter than 7 days.
                 - Correlation does not imply causality: hydro and prices may both respond to common
                   factors (temperature, precipitation forecasts).
@@ -2966,11 +2972,11 @@ with tab_ttf_norm:
                         _rank_label = (
                             "above 90th pct" if _pct_rank > 90 else
                             "below 10th pct" if _pct_rank < 10 else
-                            f"{_pct_rank:.0f}th percentile"
+                            f"{ordinal(_pct_rank)} percentile"
                         )
                         _rank_color = "red" if _pct_rank > 90 else ("green" if _pct_rank < 10 else "blue")
                         st.markdown(
-                            kpi_card("Seasonal rank", f"{_pct_rank:.0f}th pct",
+                            kpi_card("Seasonal rank", f"{ordinal(_pct_rank)} pct",
                                      delta_span(_rank_label, _rank_color)),
                             unsafe_allow_html=True,
                         )
@@ -3038,18 +3044,18 @@ with tab_ttf_norm:
                 ))
 
             _fig_norm.update_layout(
-                template="plotly_dark",
-                paper_bgcolor="#0d1117",
-                plot_bgcolor="#161b22",
+                template=PLOTLY_TEMPLATE,
+                paper_bgcolor=CHART["bg"],
+                plot_bgcolor=CHART["panel_bg"],
                 xaxis=dict(
                     title="Calendar month",
                     tickformat="%b",
                     dtick="M1",
-                    gridcolor="rgba(255,255,255,0.06)",
+                    gridcolor=CHART["grid"],
                 ),
                 yaxis=dict(
                     title="TTF front-month (EUR/MWh)",
-                    gridcolor="rgba(255,255,255,0.06)",
+                    gridcolor=CHART["grid"],
                     rangemode="tozero",
                 ),
                 legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="left", x=0,
@@ -3057,14 +3063,14 @@ with tab_ttf_norm:
                 margin=dict(l=60, r=20, t=30, b=50),
                 height=420,
             )
-            st.plotly_chart(_fig_norm, use_container_width=True)
+            st.plotly_chart(_fig_norm, width="stretch")
 
             # ── Commentary ────────────────────────────────────────────────────
             if _pct_rank is not None:
                 if _pct_rank > 90:
                     _norm_prose = (
-                        f"TTF at €{_latest_ttf_norm:.1f}/MWh is at the {_pct_rank:.0f}th percentile of "
-                        f"the historical seasonal distribution for this time of year — "
+                        f"TTF at €{_latest_ttf_norm:.1f}/MWh is at the {ordinal(_pct_rank)} percentile of "
+                        f"the historical seasonal distribution for this time of year: "
                         f"€{_latest_ttf_norm - _p50:.1f}/MWh above the seasonal median. "
                         "This is historically elevated. Such levels typically reflect supply risk "
                         "(geopolitical disruption, LNG tightness) or cold-weather demand pressure "
@@ -3073,8 +3079,8 @@ with tab_ttf_norm:
                     _norm_status = "warn"
                 elif _pct_rank < 10:
                     _norm_prose = (
-                        f"TTF at €{_latest_ttf_norm:.1f}/MWh is at the {_pct_rank:.0f}th percentile of "
-                        f"the historical seasonal distribution — "
+                        f"TTF at €{_latest_ttf_norm:.1f}/MWh is at the {ordinal(_pct_rank)} percentile of "
+                        f"the historical seasonal distribution: "
                         f"€{abs(_latest_ttf_norm - _p50):.1f}/MWh below the seasonal median. "
                         "Historically cheap. Possible explanations: strong LNG imports, full storage, "
                         "mild demand, or a post-shock normalization from prior elevated prices."
@@ -3082,8 +3088,8 @@ with tab_ttf_norm:
                     _norm_status = "ok"
                 else:
                     _norm_prose = (
-                        f"TTF at €{_latest_ttf_norm:.1f}/MWh sits at the {_pct_rank:.0f}th percentile "
-                        f"of the historical seasonal range — {abs(_latest_ttf_norm - _p50):.1f} EUR/MWh "
+                        f"TTF at €{_latest_ttf_norm:.1f}/MWh sits at the {ordinal(_pct_rank)} percentile "
+                        f"of the historical seasonal range: {abs(_latest_ttf_norm - _p50):.1f} EUR/MWh "
                         f"{'above' if _latest_ttf_norm > _p50 else 'below'} the seasonal median. "
                         "Within normal seasonal bounds for this time of year."
                     )
@@ -3134,7 +3140,7 @@ with tab_coint:
 
     # Lazy-load feature matrix
     if "features_l2" not in st.session_state:
-        with st.spinner("Assembling feature matrix (first visit — subsequent loads are instant)…"):
+        with st.spinner("Assembling feature matrix (first visit; subsequent loads are instant)…"):
             st.session_state["features_l2"] = _get_features_l2()
     _coint_feat = st.session_state["features_l2"]
 
@@ -3174,7 +3180,7 @@ with tab_coint:
                 _ci_resid_d   = np.diff(_ci_resid)
                 _ci_ou_X = _sm_ci.add_constant(_ci_resid_lag)
                 _ci_ou   = _sm_ci.OLS(_ci_resid_d, _ci_ou_X).fit()
-                _ci_lambda = float(_ci_ou.params.iloc[1])
+                _ci_lambda = float(np.asarray(_ci_ou.params)[1])   # params is an ndarray for ndarray inputs
                 _ci_halflife = (-np.log(2) / _ci_lambda) if _ci_lambda < 0 else float("inf")
 
                 # ── Spread z-score (expanding window — no look-ahead bias) ───
@@ -3273,7 +3279,7 @@ with tab_coint:
                     (1.0,  "rgba(224,123,57,0.5)",   "±1σ (base entry)"),
                     (-1.0, "rgba(224,123,57,0.5)",   ""),
                     (-2.0, "rgba(248,81,73,0.5)",    ""),
-                    (0.0,  "rgba(255,255,255,0.2)",  "Mean"),
+                    (0.0,  CHART["zero"],  "Mean"),
                 ]:
                     _fig_z_ci.add_hline(
                         y=_lv, line=dict(color=_col, width=1, dash="dot"),
@@ -3291,16 +3297,16 @@ with tab_coint:
                     hovertemplate=f"Now: z={_ci_z_now:+.2f}<extra></extra>",
                 ))
                 _fig_z_ci.update_layout(
-                    template="plotly_dark",
-                    paper_bgcolor="#0d1117", plot_bgcolor="#161b22",
-                    xaxis=dict(title=None, gridcolor="rgba(255,255,255,0.06)"),
-                    yaxis=dict(title="Z-score (σ)", gridcolor="rgba(255,255,255,0.06)"),
+                    template=PLOTLY_TEMPLATE,
+                    paper_bgcolor=CHART["bg"], plot_bgcolor=CHART["panel_bg"],
+                    xaxis=dict(title=None, gridcolor=CHART["grid"]),
+                    yaxis=dict(title="Z-score (σ)", gridcolor=CHART["grid"]),
                     legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="left", x=0),
                     margin=dict(l=60, r=20, t=30, b=50),
                     height=360,
                     hovermode="x unified",
                 )
-                st.plotly_chart(_fig_z_ci, use_container_width=True)
+                st.plotly_chart(_fig_z_ci, width="stretch")
 
                 # ── Raw spread + NO2 / NL price overlay ──────────────────────
                 st.markdown("#### NO2 vs NL Day-Ahead Prices")
@@ -3320,16 +3326,16 @@ with tab_coint:
                     hovertemplate="NL: €%{y:.1f}/MWh<extra></extra>",
                 ))
                 _fig_px.update_layout(
-                    template="plotly_dark",
-                    paper_bgcolor="#0d1117", plot_bgcolor="#161b22",
-                    xaxis=dict(title=None, gridcolor="rgba(255,255,255,0.06)"),
-                    yaxis=dict(title="EUR/MWh", gridcolor="rgba(255,255,255,0.06)"),
+                    template=PLOTLY_TEMPLATE,
+                    paper_bgcolor=CHART["bg"], plot_bgcolor=CHART["panel_bg"],
+                    xaxis=dict(title=None, gridcolor=CHART["grid"]),
+                    yaxis=dict(title="EUR/MWh", gridcolor=CHART["grid"]),
                     legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="left", x=0),
                     margin=dict(l=60, r=20, t=30, b=50),
                     height=300,
                     hovermode="x unified",
                 )
-                st.plotly_chart(_fig_px, use_container_width=True)
+                st.plotly_chart(_fig_px, width="stretch")
 
                 # ── Commentary ────────────────────────────────────────────────
                 if _ci_pval < 0.05:
@@ -3338,7 +3344,7 @@ with tab_coint:
                         _ci_prose = (
                             f"NO2 and NL are statistically cointegrated (E-G p={_ci_pval:.3f}). "
                             f"The spread is mean-reverting with an OU half-life of {_ci_hl_prose}. "
-                            f"Current z-score = {_ci_z_now:+.2f}σ — beyond the ±1σ entry threshold. "
+                            f"Current z-score = {_ci_z_now:+.2f}σ: beyond the ±1σ entry threshold. "
                             f"Signal: {_side}. "
                             f"Historical ±1σ reversion rate: {_bt_hit_rate:.0f}% within {int(_MAX_HOLD)} days "
                             f"(avg {_bt_avg_str} to revert, {_bt_total} signals in sample)."
@@ -3348,7 +3354,7 @@ with tab_coint:
                         _ci_prose = (
                             f"NO2 and NL are statistically cointegrated (E-G p={_ci_pval:.3f}). "
                             f"OU half-life: {_ci_hl_prose}. "
-                            f"Current z-score = {_ci_z_now:+.2f}σ — within the neutral zone (|z| < 1σ). "
+                            f"Current z-score = {_ci_z_now:+.2f}σ: within the neutral zone (|z| < 1σ). "
                             "No active spread trade signal."
                         )
                         _ci_status = "ok"
@@ -3371,13 +3377,13 @@ with tab_coint:
                     **Engle-Granger cointegration test (Engle & Granger 1987):**
                     Two non-stationary series X and Y are cointegrated if there exists a linear combination
                     `ε = Y − α − β·X` that is stationary (I(0)). This means deviations from the long-run
-                    equilibrium are transient — the spread mean-reverts.
+                    equilibrium are transient: the spread mean-reverts.
 
-                    **Step 1 — OLS regression:** `NO2 = α + β·NL + ε`
+                    **Step 1. OLS regression:** `NO2 = α + β·NL + ε`
                     - Estimated β (hedge ratio) = {_ci_beta_hedge:.3f}
                     - This means 1 MWh NO2 is hedged by {_ci_beta_hedge:.3f} MWh NL exposure.
 
-                    **Step 2 — Residual stationarity (ADF test on ε):**
+                    **Step 2. Residual stationarity (ADF test on ε):**
                     - Test statistic = {_ci_score:.3f}
                     - p-value = {_ci_pval:.4f}
                     - Critical values: 1% = {_ci_crit[0]:.3f}, 5% = {_ci_crit[1]:.3f}, 10% = {_ci_crit[2]:.3f}
@@ -3398,7 +3404,7 @@ with tab_coint:
                     Hit rate = {_bt_hit_rate:.0f}% ({_bt_hits}/{_bt_total} signals).
 
                     **Important limitations:**
-                    - Cointegration is a full-sample result — regime breaks (e.g. the 2021/22 energy crisis)
+                    - Cointegration is a full-sample result: regime breaks (e.g. the 2021/22 energy crisis)
                       can cause temporary breakdown of the relationship.
                     - Hedge ratio β is estimated unconditionally; rolling β from the Nordic Decomp tab
                       provides a more responsive estimate.
@@ -3444,13 +3450,22 @@ with tab_scanner:
         )
     else:
         _scan_universe = " · ".join(c.upper() for c in _scan_cols)
-        st.caption(f"Universe loaded: **{_scan_universe}** — {len(_scan_px):,} daily obs (longest common window)")
+        st.caption(f"Universe loaded: **{_scan_universe}**, {len(_scan_px):,} daily obs (longest common window)")
         _expected_extra = {"de", "fr", "nbp"}
         _missing_extra  = _expected_extra - set(_scan_cols)
         if _missing_extra:
+            _why = []
+            if _missing_extra & {"de", "fr"}:
+                _why.append(
+                    "DE/FR come from ENTSO-E A44 and returned no data"
+                    if os.getenv("ENTSOE_API_KEY", "")
+                    else "DE/FR need ENTSOE_API_KEY (ENTSO-E A44)"
+                )
+            if "nbp" in _missing_extra:
+                _why.append("NBP comes from Yahoo Finance (NBP=F) and returned no data")
             st.caption(
                 "Not loaded: " + ", ".join(m.upper() for m in sorted(_missing_extra))
-                + " — ENTSO-E A44 key required for DE/FR; NBP requires yfinance (ICE/Yahoo Finance)."
+                + ". " + "; ".join(_why) + "."
             )
 
         _scan_err_msg = None
@@ -3462,10 +3477,10 @@ with tab_scanner:
             _scan_res = []
 
         if _scan_err_msg:
-            st.error(f"Scanner failed — {_scan_err_msg}", icon="🚨")
+            st.error(f"Scanner failed: {_scan_err_msg}", icon="🚨")
         elif not _scan_res:
             st.info(
-                "No pairs tested — no pair had sufficient overlapping data "
+                "No pairs tested: no pair had sufficient overlapping data "
                 f"(≥{COINT_MIN_OBS} obs required per pair).",
                 icon="ℹ️",
             )
@@ -3502,8 +3517,57 @@ with tab_scanner:
 
             st.divider()
 
+            # ── D2_alt: rolling cointegration stability (computed before the ranked table) ──
+            # Pure functions in models/coint_stability.py; cached per price frame and settings.
+            from models.coint_stability import (
+                window_end_dates as _stab_ends_fn,
+                rolling_eg_pvalues as _stab_pvals_fn,
+                stability_summary as _stab_summary_fn,
+            )
+            from config.settings import (
+                COINT_ROLL_WINDOW as _STAB_W,
+                COINT_ROLL_STEP as _STAB_STEP,
+                COINT_ROLL_ALPHA as _STAB_ALPHA,
+                COINT_STABLE_SHARE as _STAB_HI,
+                COINT_EPISODIC_SHARE as _STAB_LO,
+            )
+
+            @st.cache_data(ttl=3600, max_entries=4, show_spinner=False)
+            def _run_coint_stability(price_df: pd.DataFrame, pairs: tuple, window: int, step: int) -> dict:
+                """Rolling Engle-Granger p-values for every scanner pair on a common window-end grid."""
+                _ends = _stab_ends_fn(price_df["date"], window=window, step=step)
+                return {
+                    _lbl: _stab_pvals_fn(price_df["date"], price_df[_a], price_df[_b], _ends, window=window)
+                    for _lbl, _a, _b in pairs
+                }
+
+            _stab_pairs = tuple((_r["pair"], _r["a"], _r["b"]) for _r in _scan_res)
+            _stab_err = None
+            _stab_t0 = _time.perf_counter()
+            try:
+                with st.spinner(f"Running rolling Engle-Granger windows ({_STAB_W} obs, every {_STAB_STEP} days)…"):
+                    _stab_pv = _run_coint_stability(_scan_px, _stab_pairs, _STAB_W, _STAB_STEP)
+            except Exception as _stab_ex:
+                _stab_pv, _stab_err = {}, f"{type(_stab_ex).__name__}: {_stab_ex}"
+            _stab_secs = _time.perf_counter() - _stab_t0
+            _stab_map = {_k: _stab_summary_fn(_v, alpha=_STAB_ALPHA) for _k, _v in _stab_pv.items()}
+            _STAB_COLORS = {
+                "Persistent": "#3fb950", "Episodic": "#d4ac3a", "Rare": "#8b949e",
+                "Absent": "#6e7681", "n/a": "#484f58",
+            }
+
+            def _stab_cell(_pair_label: str) -> str:
+                _s = _stab_map.get(_pair_label)
+                if not _s or _s["n_windows"] == 0:
+                    return "<span style='color:#484f58'>n/a</span>"
+                return (
+                    f"<span style='color:{_STAB_COLORS.get(_s['label'], '#8b949e')};font-weight:600'>"
+                    f"{_s['share']:.0%}</span> <span style='color:#8b949e'>{_s['label']}</span>"
+                )
+            # ── end D2_alt computation ────────────────────────────────────────────
+
             # ── Ranked table ──────────────────────────────────────────────────────
-            st.markdown("#### All Pairs — Ranked by Cointegration Strength")
+            st.markdown("#### All Pairs: Ranked by Cointegration Strength")
 
             _STATUS_BADGE = {
                 "Actionable": ("<span style='background:#3d1515;color:#f85149;border-radius:4px;"
@@ -3528,6 +3592,7 @@ with tab_scanner:
                     f"<td style='padding:5px 10px;text-align:right;color:#8b949e'>{_hl_s}</td>"
                     f"<td style='padding:5px 10px;text-align:right;color:{_zc};font-weight:600'>{_r['z_now']:+.2f}σ</td>"
                     f"<td style='padding:5px 10px;text-align:right;color:#8b949e'>{_hr_s}</td>"
+                    f"<td style='padding:5px 10px;text-align:right'>{_stab_cell(_r['pair'])}</td>"
                     f"<td style='padding:5px 10px'>{_STATUS_BADGE.get(_r['status'], _r['status'])}</td>"
                     f"</tr>"
                 )
@@ -3541,6 +3606,7 @@ with tab_scanner:
                 "<th style='padding:6px 10px;text-align:right'>OU Half-life</th>"
                 "<th style='padding:6px 10px;text-align:right'>z now</th>"
                 "<th style='padding:6px 10px;text-align:right'>±1σ hit rate</th>"
+                "<th style='padding:6px 10px;text-align:right'>Stability</th>"
                 "<th style='padding:6px 10px'>Status</th>"
                 "</tr></thead><tbody>"
             )
@@ -3548,6 +3614,144 @@ with tab_scanner:
                 _tbl_header + "".join(_tbl_rows_html) + "</tbody></table>",
                 unsafe_allow_html=True,
             )
+
+            # ── D2_alt: stability heatmap and per-pair table ──────────────────────
+            st.caption(
+                f"Stability: share of rolling {_STAB_W}-observation windows (window ends every {_STAB_STEP} "
+                f"trading days) in which the Engle-Granger p-value is below {_STAB_ALPHA}. Persistent ≥ "
+                f"{_STAB_HI:.0%}, Episodic ≥ {_STAB_LO:.0%}, Rare above 0%, Absent at 0%."
+            )
+            st.markdown("<div style='margin-top:24px'></div>", unsafe_allow_html=True)
+            st.markdown("#### Rolling Cointegration Stability")
+            st.caption(
+                f"Engle-Granger p-values on rolling {_STAB_W}-observation windows for every scanner pair "
+                "(rows ranked as in the table above). Blue cells: cointegrated at the 5% level; red cells: "
+                "not cointegrated. The colour scale breaks at p = 0.05."
+            )
+            _stab_ok_pairs = [
+                _r["pair"] for _r in _scan_res
+                if _stab_map.get(_r["pair"], {}).get("n_windows", 0) > 0
+            ]
+            if _stab_err:
+                st.caption(f"Rolling stability unavailable: {_stab_err}")
+            elif not _stab_ok_pairs:
+                st.caption(
+                    f"Rolling stability unavailable: no pair has {_STAB_W} aligned observations "
+                    f"(longest common window: {len(_scan_px):,} days)."
+                )
+            else:
+                _stab_ends_all = sorted({
+                    _e for _p in _stab_ok_pairs for _e in _stab_pv[_p]["window_end"]
+                })
+                _stab_z, _stab_txt = [], []
+                for _p in _stab_ok_pairs:
+                    _ser = _stab_pv[_p].set_index("window_end")["p_value"].reindex(_stab_ends_all)
+                    _stab_z.append([
+                        float(np.log10(max(_v, 1e-3))) if np.isfinite(_v) else None for _v in _ser
+                    ])
+                    _stab_txt.append([f"{_v:.3f}" if np.isfinite(_v) else "n/a" for _v in _ser])
+                _stab_lo_log = -3.0
+                _stab_mid = (np.log10(_STAB_ALPHA) - _stab_lo_log) / (0.0 - _stab_lo_log)
+                _stab_ticks = [0.001, 0.01, _STAB_ALPHA, 0.2, 1.0]
+                _fig_stab = go.Figure(go.Heatmap(
+                    z=_stab_z,
+                    x=_stab_ends_all,
+                    y=_stab_ok_pairs,
+                    text=_stab_txt,
+                    zmin=_stab_lo_log, zmax=0.0,
+                    colorscale=[
+                        [0.0, "#2166ac"],
+                        [_stab_mid, "#92c5de"],
+                        [_stab_mid, "#f4a582"],
+                        [1.0, "#b2182b"],
+                    ],
+                    xgap=1, ygap=1,
+                    hoverongaps=False,
+                    colorbar=dict(
+                        title="E-G p",
+                        tickvals=[float(np.log10(_t)) for _t in _stab_ticks],
+                        ticktext=[f"{_t:g}" for _t in _stab_ticks],
+                        thickness=12, len=0.9, tickfont=dict(size=10),
+                    ),
+                    hovertemplate="%{y}<br>window ending %{x|%d %b %Y}<br>p = %{text}<extra></extra>",
+                ))
+                _fig_stab.update_layout(
+                    template="plotly_dark",
+                    paper_bgcolor="#0d1117", plot_bgcolor="#161b22",
+                    font=dict(color="#c9d1d9", size=11),
+                    margin=dict(l=10, r=10, t=10, b=30),
+                    height=max(240, 34 * len(_stab_ok_pairs) + 90),
+                    xaxis=dict(title=None, showgrid=False),
+                    yaxis=dict(title=None, autorange="reversed", tickfont=dict(size=11)),
+                )
+                st.plotly_chart(_fig_stab, width="stretch", key="sc_stability_heatmap")
+
+                _stab_rows = []
+                for _p in _stab_ok_pairs:
+                    _s = _stab_map[_p]
+                    _p_last = float(_stab_pv[_p]["p_value"].dropna().iloc[-1])
+                    _cur_c = "#3fb950" if _s["current_coint"] else "#f85149"
+                    _cur_t = "Cointegrated" if _s["current_coint"] else "Not cointegrated"
+                    _brk = _s["last_break"].strftime("%Y-%m-%d") if _s["last_break"] is not None else "none"
+                    _stab_rows.append(
+                        "<tr style='border-bottom:1px solid #21262d'>"
+                        f"<td style='padding:5px 10px;font-weight:600;color:#e6edf3'>{_p}</td>"
+                        f"<td style='padding:5px 10px;text-align:right;color:#8b949e'>{_s['n_windows']}</td>"
+                        f"<td style='padding:5px 10px;text-align:right;color:#8b949e'>{_s['n_coint']} ({_s['share']:.0%})</td>"
+                        f"<td style='padding:5px 10px;color:{_cur_c}'>{_cur_t} (p = {_p_last:.3f})</td>"
+                        f"<td style='padding:5px 10px;text-align:right;color:#8b949e'>{_s['current_streak']} "
+                        f"window{'s' if _s['current_streak'] != 1 else ''}</td>"
+                        f"<td style='padding:5px 10px;text-align:right;color:#8b949e'>{_brk}</td>"
+                        f"<td style='padding:5px 10px;font-weight:600;color:{_STAB_COLORS.get(_s['label'], '#8b949e')}'>{_s['label']}</td>"
+                        "</tr>"
+                    )
+                st.markdown(
+                    "<table style='width:100%;border-collapse:collapse;font-size:0.85rem;margin-top:4px'>"
+                    "<thead><tr style='border-bottom:2px solid #30363d;color:#8b949e;text-align:left'>"
+                    "<th style='padding:6px 10px'>Pair</th>"
+                    "<th style='padding:6px 10px;text-align:right'>Windows</th>"
+                    f"<th style='padding:6px 10px;text-align:right'>p &lt; {_STAB_ALPHA}</th>"
+                    "<th style='padding:6px 10px'>Latest window</th>"
+                    "<th style='padding:6px 10px;text-align:right'>Current streak</th>"
+                    "<th style='padding:6px 10px;text-align:right'>Last break</th>"
+                    "<th style='padding:6px 10px'>Stability</th>"
+                    "</tr></thead><tbody>" + "".join(_stab_rows) + "</tbody></table>",
+                    unsafe_allow_html=True,
+                )
+                st.caption(
+                    f"{len(_stab_ok_pairs)} pairs × {len(_stab_ends_all)} window ends; "
+                    f"computed in {_stab_secs:.1f}s (cached thereafter). Last break: end date of the latest "
+                    "window in which a previously cointegrated pair stopped being cointegrated."
+                )
+
+                with st.expander("Rolling stability: methodology", expanded=False):
+                    st.markdown(f"""
+                    **Why rolling windows:** a full-sample Engle-Granger test can report cointegration for a
+                    pair whose relationship held only in part of the sample (for example before a structural
+                    break in interconnector flows or the gas-power link). Re-running the test on rolling
+                    windows shows whether the equilibrium is persistent or episodic.
+
+                    **Test settings:** identical to the scanner: `statsmodels.tsa.stattools.coint` with its
+                    defaults (constant term, augmented Engle-Granger, ADF lag length chosen by AIC), run in both
+                    regression directions, keeping the lower p-value.
+
+                    **Windows:** each window holds the last {_STAB_W} observations of the pair's own aligned
+                    sample up to its end date. End dates come from the scanner's common date grid, anchored on
+                    the latest date and spaced {_STAB_STEP} trading days apart, so all pairs share one axis.
+
+                    **Statistics:** share of windows with p < {_STAB_ALPHA}; current streak = consecutive latest
+                    windows with the same status as the latest; last break = end date of the latest window that
+                    turned from cointegrated to not cointegrated. Labels: Persistent ≥ {_STAB_HI:.0%},
+                    Episodic ≥ {_STAB_LO:.0%}, Rare above 0%, Absent at 0%.
+
+                    **Caveats:** shorter windows have less test power than the full sample, so shares understate
+                    persistence and are best compared across pairs. Overlapping windows are not independent.
+                    Choosing the better of the two directions in every window, as the scanner does, makes each
+                    window's p-value somewhat optimistic. Daily day-ahead power prices mean-revert strongly; when a
+                    series is close to stationary on its own, the test rejects easily, so a high share for a power
+                    pair partly reflects that mean reversion rather than a tradable long-run equilibrium.
+                    """)
+            # ── end D2_alt heatmap and table ──────────────────────────────────────
 
             # ── Pair detail charts ────────────────────────────────────────────────
             _coint_pairs = [r for r in _scan_res if r["pval"] < 0.05]
@@ -3613,7 +3817,7 @@ with tab_scanner:
                             ( 1.0, "rgba(224,123,57,0.5)",  "±1σ"),
                             (-1.0, "rgba(224,123,57,0.5)",  ""),
                             (-2.0, "rgba(248,81,73,0.5)",   ""),
-                            ( 0.0, "rgba(255,255,255,0.2)", "Mean"),
+                            ( 0.0, CHART["zero"], "Mean"),
                         ]:
                             _dfig_z.add_hline(
                                 y=_dlv,
@@ -3630,17 +3834,17 @@ with tab_scanner:
                             hovertemplate=f"Now: z={_cp['z_now']:+.2f}<extra></extra>",
                         ))
                         _dfig_z.update_layout(
-                            template="plotly_dark",
-                            paper_bgcolor="#0d1117", plot_bgcolor="#161b22",
-                            xaxis=dict(title=None, gridcolor="rgba(255,255,255,0.06)"),
-                            yaxis=dict(title="Z-score (σ)", gridcolor="rgba(255,255,255,0.06)"),
+                            template=PLOTLY_TEMPLATE,
+                            paper_bgcolor=CHART["bg"], plot_bgcolor=CHART["panel_bg"],
+                            xaxis=dict(title=None, gridcolor=CHART["grid"]),
+                            yaxis=dict(title="Z-score (σ)", gridcolor=CHART["grid"]),
                             legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="left", x=0),
                             margin=dict(l=60, r=20, t=30, b=50),
                             height=300,
                             hovermode="x unified",
                         )
                         _cp_key = _cp["pair"].replace("/", "_")
-                        st.plotly_chart(_dfig_z, use_container_width=True, key=f"sc_z_{_cp_key}")
+                        st.plotly_chart(_dfig_z, width="stretch", key=f"sc_z_{_cp_key}")
 
                         # Price overlay
                         _dfig_px = go.Figure()
@@ -3657,16 +3861,38 @@ with tab_scanner:
                             hovertemplate=f"{_cp['b'].upper()}: €%{{y:.1f}}/MWh<extra></extra>",
                         ))
                         _dfig_px.update_layout(
-                            template="plotly_dark",
-                            paper_bgcolor="#0d1117", plot_bgcolor="#161b22",
-                            xaxis=dict(title=None, gridcolor="rgba(255,255,255,0.06)"),
-                            yaxis=dict(title="EUR/MWh", gridcolor="rgba(255,255,255,0.06)"),
+                            template=PLOTLY_TEMPLATE,
+                            paper_bgcolor=CHART["bg"], plot_bgcolor=CHART["panel_bg"],
+                            xaxis=dict(title=None, gridcolor=CHART["grid"]),
+                            yaxis=dict(title="EUR/MWh", gridcolor=CHART["grid"]),
                             legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="left", x=0),
                             margin=dict(l=60, r=20, t=20, b=50),
                             height=260,
                             hovermode="x unified",
                         )
-                        st.plotly_chart(_dfig_px, use_container_width=True, key=f"sc_px_{_cp_key}")
+                        st.plotly_chart(_dfig_px, width="stretch", key=f"sc_px_{_cp_key}")
+
+                        # ── D2_alt: rolling-stability context for the signal commentary ──
+                        _cps = _stab_map.get(_cp["pair"])
+                        _stab_note = ""
+                        if _cps and _cps["n_windows"]:
+                            _stab_note = (
+                                f" Rolling stability: cointegrated in {_cps['n_coint']} of {_cps['n_windows']} "
+                                f"rolling {_STAB_W}-observation windows ({_cps['share']:.0%}, {_cps['label'].lower()}); "
+                                f"the latest window is {'cointegrated' if _cps['current_coint'] else 'not cointegrated'} "
+                                f"({_cps['current_streak']} consecutive window{'s' if _cps['current_streak'] != 1 else ''}"
+                                + (f", last break {_cps['last_break']:%d %b %Y}" if _cps["last_break"] is not None else "")
+                                + ")."
+                            )
+                            if _cp["status"] == "Actionable":
+                                _stab_note += (
+                                    " The persistent relationship supports the reversion signal."
+                                    if _cps["label"] == "Persistent" else
+                                    " Cointegration is not persistent across windows, so this high z-score "
+                                    "deserves lower confidence: the spread may be re-pricing a structural "
+                                    "shift rather than mean-reverting."
+                                )
+                        # ── end D2_alt commentary context ──
 
                         # Trade signal commentary
                         if _cp["status"] == "Actionable":
@@ -3676,21 +3902,21 @@ with tab_scanner:
                             _dpr = (
                                 f"{_cp['pair']} is statistically cointegrated (E-G p={_cp['pval']:.3f}). "
                                 f"Spread mean-reverts with OU half-life {_cp_hl_s}. "
-                                f"Current z-score = {_cp['z_now']:+.2f}σ — beyond the "
+                                f"Current z-score = {_cp['z_now']:+.2f}σ: beyond the "
                                 f"±{COINT_ENTRY_Z}σ entry threshold. "
                                 f"Signal: {_dside}. "
                                 f"Historical ±{COINT_ENTRY_Z}σ reversion rate: {_dhr_s} within "
                                 f"{_cp['max_hold']}d ({_cp['n_signals']} signals in sample)."
                             )
-                            st.markdown(commentary(_dpr, "warn"), unsafe_allow_html=True)
+                            st.markdown(commentary(_dpr + _stab_note, "warn"), unsafe_allow_html=True)
                         else:
                             _dpr = (
                                 f"{_cp['pair']} is cointegrated (E-G p={_cp['pval']:.3f}), "
                                 f"OU half-life {_cp_hl_s}. "
-                                f"Current z-score = {_cp['z_now']:+.2f}σ — within the neutral band. "
+                                f"Current z-score = {_cp['z_now']:+.2f}σ: within the neutral band. "
                                 "No active spread entry signal."
                             )
-                            st.markdown(commentary(_dpr, "ok"), unsafe_allow_html=True)
+                            st.markdown(commentary(_dpr + _stab_note, "ok"), unsafe_allow_html=True)
 
             # ── Methodology ───────────────────────────────────────────────────────
             with st.expander("Methodology", expanded=False):
@@ -3699,7 +3925,7 @@ with tab_scanner:
                 (ICE/yfinance), DE and FR day-ahead prices (ENTSO-E A44, when available),
                 NBP (ICE/yfinance, when available). All power prices in EUR/MWh; gas prices
                 converted where possible. NBP from yfinance may include FX/unit differences
-                relative to EUR/MWh — treat gas-to-gas pairs with additional caution.
+                relative to EUR/MWh: treat gas-to-gas pairs with additional caution.
 
                 **Pair selection:** All unique combinations of available series with
                 ≥{COINT_MIN_OBS} overlapping daily observations are tested.
@@ -3709,21 +3935,22 @@ with tab_scanner:
                 the direction with the lower p-value is retained. OLS regression
                 `Y = α + β·X + ε` defines the spread residual series.
 
-                **Z-score:** `z_t = (ε_t − μ_ε(t)) / σ_ε(t)` — expanding-window moments
+                **Z-score:** `z_t = (ε_t − μ_ε(t)) / σ_ε(t)` with expanding-window moments
                 (min 30 obs, no look-ahead bias). Entry threshold: |z| > {COINT_ENTRY_Z}σ.
                 Exit: sign flip or |z| < 0.5σ.
 
                 **Status logic:**
-                - *Actionable* — E-G p < 0.05 AND |z_now| > {COINT_ENTRY_Z}σ
-                - *Wait* — E-G p < 0.05 but |z_now| ≤ {COINT_ENTRY_Z}σ (spread in neutral zone)
-                - *Not cointegrated* — E-G p ≥ 0.05
+                - *Actionable*: E-G p < 0.05 AND |z_now| > {COINT_ENTRY_Z}σ
+                - *Wait*: E-G p < 0.05 but |z_now| ≤ {COINT_ENTRY_Z}σ (spread in neutral zone)
+                - *Not cointegrated*: E-G p ≥ 0.05
 
                 **OU half-life:** Estimated via `Δε_t = λ·ε_{{t−1}} + const`; half-life = −ln(2)/λ.
                 Capped maximum hold at {min(60, max(5, 21))}–60 days for backtest integrity.
 
                 **Limitations:** All Tab 12 caveats apply. Gas-to-power pairs may show spurious
-                cointegration during structural breaks. Rolling-window cointegration (Phase D2)
-                will provide more robust entry timing signals.
+                cointegration during structural breaks. The Rolling Cointegration Stability panel
+                re-runs the test on rolling {_STAB_W}-observation windows to separate persistent
+                from episodic relationships (the Stability column in the ranked table).
 
                 **Data:** ENTSO-E A44 (power zone day-ahead prices) | ICE/Yahoo Finance (TTF, NBP).
                 History: {_SCANNER_YEARS} years requested per series.
@@ -3739,7 +3966,7 @@ with tab_scanner:
 # TAB 14: FORWARD CURVE PCA
 # ════════════════════════════════════════════════════════════════════════════
 with tab_pca:
-    st.markdown("### Forward Curve PCA — TTF M+1–M+18 Structural Decomposition")
+    st.markdown("### Forward Curve PCA: TTF M+1–M+18 Structural Decomposition")
     st.caption(
         "PCA on a model-derived TTF forward strip. "
         "PC1 = level shift · PC2 = slope (steepening/flattening) · PC3 = curvature (butterfly). "
@@ -3752,7 +3979,7 @@ with tab_pca:
     _pca_result = _run_pca(_pca_panel) if not _pca_panel.empty else None
 
     if _pca_result is None:
-        st.warning(f"Forward curve PCA unavailable — {_pca_msg}")
+        st.warning(f"Forward curve PCA unavailable: {_pca_msg}")
     else:
         _ev       = _pca_result["ev_ratio"]
         _pc1_pct  = round(_ev[0] * 100, 1)
@@ -3807,16 +4034,16 @@ with tab_pca:
             textposition="outside",
         ))
         _fig_ev.update_layout(
-            template="plotly_dark",
-            paper_bgcolor="#0d1117", plot_bgcolor="#161b22",
-            font=dict(color="#c9d1d9", size=11),
+            template=PLOTLY_TEMPLATE,
+            paper_bgcolor=CHART["bg"], plot_bgcolor=CHART["panel_bg"],
+            font=dict(color=CHART["text"], size=11),
             margin=dict(l=10, r=10, t=10, b=10), height=220,
             yaxis=dict(title="Variance explained (%)", range=[0, 115],
-                       gridcolor="rgba(255,255,255,0.06)"),
-            xaxis=dict(gridcolor="rgba(255,255,255,0.06)"),
+                       gridcolor=CHART["grid"]),
+            xaxis=dict(gridcolor=CHART["grid"]),
             showlegend=False,
         )
-        st.plotly_chart(_fig_ev, use_container_width=True)
+        st.plotly_chart(_fig_ev, width="stretch")
 
         # ── Factor loadings ───────────────────────────────────────────────────
         st.markdown("#### Factor Loadings (M+1 to M+18)")
@@ -3832,22 +4059,22 @@ with tab_pca:
                 name=_pc, line=dict(color=_col, width=2),
                 hovertemplate=f"{_pc}: %{{y:.4f}}<extra></extra>",
             ))
-        _fig_ld.add_hline(y=0, line=dict(color="rgba(255,255,255,0.2)", width=1))
+        _fig_ld.add_hline(y=0, line=dict(color=CHART["zero"], width=1))
         _fig_ld.update_layout(
-            template="plotly_dark",
-            paper_bgcolor="#0d1117", plot_bgcolor="#161b22",
-            font=dict(color="#c9d1d9", size=11),
+            template=PLOTLY_TEMPLATE,
+            paper_bgcolor=CHART["bg"], plot_bgcolor=CHART["panel_bg"],
+            font=dict(color=CHART["text"], size=11),
             margin=dict(l=10, r=10, t=10, b=50), height=280,
-            yaxis=dict(title="Loading", gridcolor="rgba(255,255,255,0.06)", zeroline=False),
-            xaxis=dict(title="Tenor", gridcolor="rgba(255,255,255,0.06)",
+            yaxis=dict(title="Loading", gridcolor=CHART["grid"], zeroline=False),
+            xaxis=dict(title="Tenor", gridcolor=CHART["grid"],
                        tickangle=45, tickfont=dict(size=9)),
             legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="left", x=0),
             hovermode="x unified",
         )
-        st.plotly_chart(_fig_ld, use_container_width=True)
+        st.plotly_chart(_fig_ld, width="stretch")
 
         # ── Factor scores time series ─────────────────────────────────────────
-        st.markdown("#### Factor Scores — Full Panel History")
+        st.markdown("#### Factor Scores: Full Panel History")
         _fig_sc = go.Figure()
         for _pc, _col, _lbl in [
             ("PC1", "#58a6ff", "PC1 (Level)"),
@@ -3859,21 +4086,21 @@ with tab_pca:
                 name=_lbl, line=dict(color=_col, width=1.5),
                 hovertemplate=f"{_lbl}: %{{y:.2f}}<extra></extra>",
             ))
-        _fig_sc.add_hline(y=0, line=dict(color="rgba(255,255,255,0.2)", width=1))
+        _fig_sc.add_hline(y=0, line=dict(color=CHART["zero"], width=1))
         _fig_sc.update_layout(
-            template="plotly_dark",
-            paper_bgcolor="#0d1117", plot_bgcolor="#161b22",
-            font=dict(color="#c9d1d9", size=11),
+            template=PLOTLY_TEMPLATE,
+            paper_bgcolor=CHART["bg"], plot_bgcolor=CHART["panel_bg"],
+            font=dict(color=CHART["text"], size=11),
             margin=dict(l=10, r=10, t=10, b=10), height=300,
-            yaxis=dict(title="Score", gridcolor="rgba(255,255,255,0.06)", zeroline=False),
-            xaxis=dict(title=None, gridcolor="rgba(255,255,255,0.06)"),
+            yaxis=dict(title="Score", gridcolor=CHART["grid"], zeroline=False),
+            xaxis=dict(title=None, gridcolor=CHART["grid"]),
             legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="left", x=0),
             hovermode="x unified",
         )
-        st.plotly_chart(_fig_sc, use_container_width=True)
+        st.plotly_chart(_fig_sc, width="stretch")
 
         # ── Trade signals ─────────────────────────────────────────────────────
-        st.markdown("#### Trade Signals — PC2 and PC3 Z-Scores")
+        st.markdown("#### Trade Signals: PC2 and PC3 Z-Scores")
         st.caption(
             f"Expanding z-score (no look-ahead). "
             f"PC2 z > +{PCA_ENTRY_Z:.0f}σ: curve unusually steep → short front / long back. "
@@ -3898,33 +4125,33 @@ with tab_pca:
                 y=_lvl,
                 line=dict(color=_ann_c, width=1, dash="dot"),
                 annotation_text=f"{_lvl:+.0f}σ",
-                annotation_font=dict(size=9, color="#8b949e"),
+                annotation_font=dict(size=9, color=CHART["muted"]),
             )
-        _fig_sig.add_hline(y=0, line=dict(color="rgba(255,255,255,0.2)", width=1))
+        _fig_sig.add_hline(y=0, line=dict(color=CHART["zero"], width=1))
         _fig_sig.update_layout(
-            template="plotly_dark",
-            paper_bgcolor="#0d1117", plot_bgcolor="#161b22",
-            font=dict(color="#c9d1d9", size=11),
+            template=PLOTLY_TEMPLATE,
+            paper_bgcolor=CHART["bg"], plot_bgcolor=CHART["panel_bg"],
+            font=dict(color=CHART["text"], size=11),
             margin=dict(l=10, r=10, t=10, b=10), height=280,
-            yaxis=dict(title="Z-score (σ)", gridcolor="rgba(255,255,255,0.06)", zeroline=False),
-            xaxis=dict(title=None, gridcolor="rgba(255,255,255,0.06)"),
+            yaxis=dict(title="Z-score (σ)", gridcolor=CHART["grid"], zeroline=False),
+            xaxis=dict(title=None, gridcolor=CHART["grid"]),
             legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="left", x=0),
             hovermode="x unified",
         )
-        st.plotly_chart(_fig_sig, use_container_width=True)
+        st.plotly_chart(_fig_sig, width="stretch")
 
         # Current signal status boxes
         _sc_last = _sc_df.iloc[-1]
         _pca_signals = [
             (
                 "PC2_z", "PC2 (Slope)",
-                f"Curve unusually steep (+{PCA_ENTRY_Z:.0f}σ) — Calendar spread: short front, long back",
-                f"Curve unusually flat (−{PCA_ENTRY_Z:.0f}σ) — Reverse calendar: long front, short back",
+                f"Curve unusually steep (+{PCA_ENTRY_Z:.0f}σ). Calendar spread: short front, long back",
+                f"Curve unusually flat (−{PCA_ENTRY_Z:.0f}σ). Reverse calendar: long front, short back",
             ),
             (
                 "PC3_z", "PC3 (Curvature)",
-                f"Butterfly wide (+{PCA_ENTRY_Z:.0f}σ) — Sell wings (M+1, M+18), buy belly (M+9)",
-                f"Butterfly compressed (−{PCA_ENTRY_Z:.0f}σ) — Buy wings (M+1, M+18), sell belly (M+9)",
+                f"Butterfly wide (+{PCA_ENTRY_Z:.0f}σ). Sell wings (M+1, M+18), buy belly (M+9)",
+                f"Butterfly compressed (−{PCA_ENTRY_Z:.0f}σ). Buy wings (M+1, M+18), sell belly (M+9)",
             ),
         ]
         for _pcz, _lbl, _bull_msg, _bear_msg in _pca_signals:
@@ -3936,7 +4163,7 @@ with tab_pca:
             elif _z <= -PCA_ENTRY_Z:
                 _msg, _border = _bear_msg, "#3fb950"
             else:
-                _msg, _border = "In neutral zone — no trade signal", "#58a6ff"
+                _msg, _border = "In neutral zone: no trade signal", "#58a6ff"
             st.markdown(
                 f"<div class='commentary' style='border-left-color:{_border};'>"
                 f"<strong>{_lbl}</strong>&nbsp;&nbsp;"
@@ -3979,9 +4206,9 @@ The storage carry term introduces a second source of genuine time-variation: ele
 
 The panel is de-meaned column-wise (each tenor centred on its historical mean). PCA is applied via singular value decomposition on the de-meaned matrix.
 
-- **PC1 (Level):** approximately flat loadings across tenors — represents parallel curve shifts driven primarily by spot.
-- **PC2 (Slope):** monotonic loadings — represents steepening/flattening, driven by storage z-score variation propagated through the carry term.
-- **PC3 (Curvature):** U-shaped or ∩-shaped loadings — residual mid-curve distortion relative to wings.
+- **PC1 (Level):** approximately flat loadings across tenors, representing parallel curve shifts driven primarily by spot.
+- **PC2 (Slope):** monotonic loadings, representing steepening/flattening, driven by storage z-score variation propagated through the carry term.
+- **PC3 (Curvature):** U-shaped or ∩-shaped loadings, capturing residual mid-curve distortion relative to wings.
 
 Expected variance decomposition for energy forward curves (Litterman & Scheinkman 1991 applied to interest rates; Cortazar & Schwartz 1994 extended to commodities): PC1 80–95%, PC2 4–15%, PC3 1–5%.
 
@@ -3996,7 +4223,7 @@ Z-scores use an expanding window from the start of the panel (no look-ahead bias
 
 **Limitations**
 
-PCA assumes a stationary covariance structure — this breaks during major regime shifts (Russian supply cut-off 2022, extreme cold snaps, Hormuz disruptions). The model-derived panel means factor loadings reflect the two-factor construction (spot + storage carry), not an observed futures term structure. A production-grade implementation would use live ICE TTF strip quotes from an EEX/Trayport feed.
+PCA assumes a stationary covariance structure; this breaks during major regime shifts (Russian supply cut-off 2022, extreme cold snaps, Hormuz disruptions). The model-derived panel means factor loadings reflect the two-factor construction (spot + storage carry), not an observed futures term structure. A production-grade implementation would use live ICE TTF strip quotes from an EEX/Trayport feed.
 """)
 
         st.caption(
@@ -4006,14 +4233,8 @@ PCA assumes a stationary covariance structure — this breaks during major regim
 
 
 # ── Footer ────────────────────────────────────────────────────────────────────
-st.divider()
-st.markdown(
-    """<div style="color:#484f58;font-size:0.72rem;line-height:1.8;">
-    Built by Tobias Gudbjerg &nbsp;|&nbsp;
-    Storage data: <a href="https://agsi.gie.eu" style="color:#484f58;">GIE AGSI+</a> &nbsp;|&nbsp;
-    Gas price: <a href="https://finance.yahoo.com" style="color:#484f58;">ICE/Yahoo Finance (TTF)</a> &nbsp;|&nbsp;
-    Power price: <a href="https://www.nordpoolgroup.com" style="color:#484f58;">Nord Pool</a><br>
-    For informational purposes only. Not financial advice.
-    </div>""",
-    unsafe_allow_html=True,
-)
+page_footer([
+    ("Storage data", "GIE AGSI+", "https://agsi.gie.eu"),
+    ("Gas price", "ICE/Yahoo Finance (TTF)", "https://finance.yahoo.com"),
+    ("Power price", "Nord Pool", "https://www.nordpoolgroup.com"),
+])

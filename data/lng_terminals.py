@@ -59,7 +59,7 @@ def _to_df(records: list[dict], country: str) -> pd.DataFrame:
     return df
 
 
-@st.cache_data(ttl=3600, persist="disk")
+@st.cache_data(ttl=3600)
 def fetch_lng_country(country: str, date_from: str, date_to: str) -> pd.DataFrame:
     if not os.getenv("AGSI_API_KEY", ""):
         return pd.DataFrame()
@@ -71,7 +71,7 @@ def get_lng_data() -> dict:
     """
     Returns dict with keys:
       'sendout'      : DataFrame — per-country daily sendout (long format)
-      'totals'       : DataFrame — date, total_sendout_twh, ma7
+      'totals'       : DataFrame: date, total_sendout (GWh/d, as published by ALSI), ma7
       'wow_change_pct': float or None — week-on-week % change in total sendout
       'alert'        : bool — True if sendout dropped > LNG_SENDOUT_DROP_PCT
       'fetched_at'   : datetime

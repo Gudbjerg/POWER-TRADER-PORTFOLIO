@@ -4,15 +4,16 @@ TTF gas price chart with 30/90-day moving averages, spike alert, and reference t
 import plotly.graph_objects as go
 import streamlit as st
 import pandas as pd
+from utils.theme import CHART, PLOTLY_TEMPLATE
 
 COLORS = {
     "ttf":      "#e07b39",
     "ma30":     "#2a9d8f",
     "ma90":     "#b5a642",
-    "grid":     "rgba(255,255,255,0.06)",
-    "text":     "#c9d1d9",
-    "bg":       "#0d1117",
-    "panel_bg": "#161b22",
+    "grid":     CHART["grid"],
+    "text":     CHART["text"],
+    "bg":       CHART["bg"],
+    "panel_bg": CHART["panel_bg"],
 }
 
 # Reference price thresholds with label and line colour
@@ -104,7 +105,7 @@ def render_ttf_chart(ttf_data: dict, events: list | None = None):
         )
 
     fig.update_layout(
-        template="plotly_dark",
+        template=PLOTLY_TEMPLATE,
         paper_bgcolor=COLORS["bg"],
         plot_bgcolor=COLORS["panel_bg"],
         font=dict(color=COLORS["text"], size=12),
@@ -115,7 +116,7 @@ def render_ttf_chart(ttf_data: dict, events: list | None = None):
         hovermode="x unified",
     )
 
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig, width="stretch")
 
     latest_price = df["price"].iloc[-1] if not df.empty else None
     ma30_latest  = df["ma30"].iloc[-1]  if not df.empty else None

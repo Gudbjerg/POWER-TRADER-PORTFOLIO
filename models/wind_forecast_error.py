@@ -19,6 +19,7 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
+from utils.theme import CHART, PLOTLY_TEMPLATE
 
 
 # ── Zone display config ────────────────────────────────────────────────────────
@@ -206,24 +207,24 @@ def make_error_bar_chart(
             hovertemplate=f"<b>{ZONE_LABELS.get(zone, zone)}</b><br>Error: %{{y:.1f}} GWh<extra></extra>",
         ))
 
-    fig.add_hline(y=0, line=dict(color="rgba(255,255,255,0.25)", width=1))
+    fig.add_hline(y=0, line=dict(color=CHART["zero"], width=1))
 
     fig.update_layout(
-        template="plotly_dark",
-        paper_bgcolor="#0d1117",
-        plot_bgcolor="#161b22",
+        template=PLOTLY_TEMPLATE,
+        paper_bgcolor=CHART["bg"],
+        plot_bgcolor=CHART["panel_bg"],
         barmode="group",
         height=320,
         margin=dict(l=55, r=20, t=20, b=40),
-        xaxis=dict(gridcolor="rgba(255,255,255,0.06)", tickfont=dict(size=10, color="#8b949e")),
+        xaxis=dict(gridcolor=CHART["grid"], tickfont=dict(size=10, color=CHART["muted"])),
         yaxis=dict(
             title="Forecast error (GWh)  [positive = over-forecast]",
-            gridcolor="rgba(255,255,255,0.06)",
-            tickfont=dict(size=10, color="#8b949e"),
+            gridcolor=CHART["grid"],
+            tickfont=dict(size=10, color=CHART["muted"]),
         ),
         legend=dict(
             orientation="h", yanchor="bottom", y=1.02, xanchor="left", x=0,
-            font=dict(size=10, color="#8b949e"),
+            font=dict(size=10, color=CHART["muted"]),
         ),
         hovermode="x unified",
     )
@@ -254,21 +255,21 @@ def make_rmse_chart(
         ))
 
     fig.update_layout(
-        template="plotly_dark",
-        paper_bgcolor="#0d1117",
-        plot_bgcolor="#161b22",
+        template=PLOTLY_TEMPLATE,
+        paper_bgcolor=CHART["bg"],
+        plot_bgcolor=CHART["panel_bg"],
         height=280,
         margin=dict(l=55, r=20, t=20, b=40),
-        xaxis=dict(gridcolor="rgba(255,255,255,0.06)", tickfont=dict(size=10, color="#8b949e")),
+        xaxis=dict(gridcolor=CHART["grid"], tickfont=dict(size=10, color=CHART["muted"])),
         yaxis=dict(
             title="7-day rolling RMSE (GWh)",
-            gridcolor="rgba(255,255,255,0.06)",
-            tickfont=dict(size=10, color="#8b949e"),
+            gridcolor=CHART["grid"],
+            tickfont=dict(size=10, color=CHART["muted"]),
             rangemode="tozero",
         ),
         legend=dict(
             orientation="h", yanchor="bottom", y=1.02, xanchor="left", x=0,
-            font=dict(size=10, color="#8b949e"),
+            font=dict(size=10, color=CHART["muted"]),
         ),
         hovermode="x unified",
     )
@@ -311,27 +312,27 @@ def make_correlation_scatter(
         xref="paper", yref="paper", x=0.98, y=0.98,
         text=corr_label, showarrow=False,
         font=dict(size=12, color="#e6edf3"),
-        bgcolor="rgba(22,27,34,0.85)",
-        bordercolor="rgba(255,255,255,0.15)",
+        bgcolor=CHART["annotation_bg"],
+        bordercolor=CHART["annotation_border"],
         borderwidth=1,
         xanchor="right", yanchor="top",
     )
 
     fig.update_layout(
-        template="plotly_dark",
-        paper_bgcolor="#0d1117",
-        plot_bgcolor="#161b22",
+        template=PLOTLY_TEMPLATE,
+        paper_bgcolor=CHART["bg"],
+        plot_bgcolor=CHART["panel_bg"],
         height=300,
         margin=dict(l=55, r=20, t=20, b=50),
         xaxis=dict(
-            title=f"|Forecast error| (GWh) — {ZONE_LABELS.get(zone, zone)}",
-            gridcolor="rgba(255,255,255,0.06)",
-            tickfont=dict(size=10, color="#8b949e"),
+            title=f"|Forecast error| (GWh) · {ZONE_LABELS.get(zone, zone)}",
+            gridcolor=CHART["grid"],
+            tickfont=dict(size=10, color=CHART["muted"]),
         ),
         yaxis=dict(
             title="|NO2 day-over-day price change| (EUR/MWh)",
-            gridcolor="rgba(255,255,255,0.06)",
-            tickfont=dict(size=10, color="#8b949e"),
+            gridcolor=CHART["grid"],
+            tickfont=dict(size=10, color=CHART["muted"]),
         ),
         showlegend=False,
     )

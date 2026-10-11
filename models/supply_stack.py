@@ -25,6 +25,7 @@ from __future__ import annotations
 
 import pandas as pd
 import plotly.graph_objects as go
+from utils.theme import CHART, PLOTLY_TEMPLATE
 
 try:
     import yfinance as yf
@@ -190,7 +191,7 @@ def make_merit_order_figure(
             width=[row["capacity_gw"]],
             name=row["label"],
             marker=dict(color=row["color"], opacity=0.85,
-                        line=dict(color="#0d1117", width=1)),
+                        line=dict(color=CHART["edge"], width=1)),
             hovertemplate=(
                 f"<b>{row['label']}</b><br>"
                 f"Capacity: {row['capacity_gw']:.0f} GW<br>"
@@ -230,33 +231,33 @@ def make_merit_order_figure(
     # Footnote: explain the 2 EUR/MWh display minimum for zero-cost fuels
     fig.add_annotation(
         xref="paper", yref="paper", x=0.01, y=0.01,
-        text="* Wind / solar / hydro SRMC = €0/MWh — shown at €2/MWh min height for visibility",
+        text="* Wind / solar / hydro SRMC = €0/MWh, shown at €2/MWh min height for visibility",
         showarrow=False,
-        font=dict(size=9, color="#8b949e"),
+        font=dict(size=9, color=CHART["muted"]),
         xanchor="left", yanchor="bottom",
     )
 
     total_cap = stack_df["capacity_gw"].sum()
     fig.update_layout(
-        template="plotly_dark",
-        paper_bgcolor="#0d1117",
-        plot_bgcolor="#161b22",
+        template=PLOTLY_TEMPLATE,
+        paper_bgcolor=CHART["bg"],
+        plot_bgcolor=CHART["panel_bg"],
         barmode="overlay",
         showlegend=True,
         legend=dict(
             orientation="h", yanchor="bottom", y=1.02, xanchor="left", x=0,
-            font=dict(size=10, color="#8b949e"),
+            font=dict(size=10, color=CHART["muted"]),
         ),
         xaxis=dict(
-            title="Installed capacity — cumulative (GW)",
+            title="Installed capacity, cumulative (GW)",
             range=[0, total_cap * 1.02],
-            gridcolor="rgba(255,255,255,0.06)",
-            tickfont=dict(size=11, color="#8b949e"),
+            gridcolor=CHART["grid"],
+            tickfont=dict(size=11, color=CHART["muted"]),
         ),
         yaxis=dict(
             title="Short-run marginal cost (EUR/MWh)",
-            gridcolor="rgba(255,255,255,0.06)",
-            tickfont=dict(size=11, color="#8b949e"),
+            gridcolor=CHART["grid"],
+            tickfont=dict(size=11, color=CHART["muted"]),
             rangemode="tozero",
         ),
         margin=dict(l=60, r=20, t=20, b=50),

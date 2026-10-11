@@ -1,7 +1,7 @@
 """
-Phase E — BESS Optimiser
+Phase E: BESS Optimiser
 Battery Energy Storage System multi-market revenue stack and financial model for Nordic power markets.
-Markets: DAM arbitrage, FCR-N (Frequency Containment Reserve — Normal), FCR-D (Disturbed), intraday.
+Markets: DAM arbitrage, FCR-N (Frequency Containment Reserve, Normal), FCR-D (Disturbed), intraday.
 All revenue inputs derived from the existing NO2 feature matrix plus hardcoded Nordic FCR price averages.
 """
 import streamlit as st
@@ -20,6 +20,7 @@ st.set_page_config(
 )
 
 from utils.helpers import apply_dark_theme, kpi_card, delta_span
+from utils.theme import ACCENTS, CHART, PLOTLY_TEMPLATE, callout, page_header, page_footer, render
 from models.feature_assembly import assemble_features
 from config.settings import (
     BESS_FCR_N_EUR_PER_MW_YEAR,
@@ -227,22 +228,20 @@ def _npv_only(
 # PAGE
 # ═══════════════════════════════════════════════════════════════════════════════
 
-st.markdown("## BESS Optimiser")
-st.caption(
+page_header(
+    "Project Toolkit", "BESS Optimiser",
     "Battery Energy Storage System multi-market revenue stack for Nordic power markets. "
-    "Configure asset parameters and select markets to compute financial projections."
+    "Configure asset parameters and select markets to compute financial projections.",
+    accent=ACCENTS["bess"],
 )
 
-st.markdown(
-    """<div style="background:#1f1108;border-left:3px solid #d4ac3a;padding:10px 14px;
-    border-radius:4px;color:#d4ac3a;font-size:0.84rem;margin-bottom:14px;">
-    <strong>Revenue estimates are simplified deterministic projections</strong> based on historical
-    average market prices and are not guaranteed. Actual returns depend on contracted FCR volumes,
-    intraday market conditions, battery degradation, and grid connection costs.
-    FCR prices are market averages, not contracted rates. Not financial advice.
-    </div>""",
-    unsafe_allow_html=True,
-)
+render(callout(
+    "<strong>Revenue estimates are simplified deterministic projections</strong> based on historical "
+    "average market prices and are not guaranteed. Actual returns depend on contracted FCR volumes, "
+    "intraday market conditions, battery degradation, and grid connection costs. "
+    "FCR prices are market averages, not contracted rates. Not financial advice.",
+    "warn",
+))
 
 # ── Feature matrix (for DAM spread) ──────────────────────────────────────────
 with st.spinner("Loading market data for DAM spread estimation…"):
@@ -410,20 +409,20 @@ _fig_bar.add_trace(go.Bar(
 ))
 _fig_bar.update_layout(
     barmode="relative",
-    template="plotly_dark",
-    paper_bgcolor="#0d1117", plot_bgcolor="#161b22",
+    template=PLOTLY_TEMPLATE,
+    paper_bgcolor=CHART["bg"], plot_bgcolor=CHART["panel_bg"],
     height=280,
     margin=dict(l=60, r=20, t=10, b=35),
     legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1,
                 font=dict(size=10)),
-    xaxis=dict(title="Year", gridcolor="rgba(255,255,255,0.06)",
-               tickfont=dict(size=10, color="#8b949e"), dtick=1),
-    yaxis=dict(title="EUR / year", gridcolor="rgba(255,255,255,0.06)",
-               tickfont=dict(size=10, color="#8b949e"), zeroline=True,
-               zerolinecolor="rgba(255,255,255,0.2)"),
+    xaxis=dict(title="Year", gridcolor=CHART["grid"],
+               tickfont=dict(size=10, color=CHART["muted"]), dtick=1),
+    yaxis=dict(title="EUR / year", gridcolor=CHART["grid"],
+               tickfont=dict(size=10, color=CHART["muted"]), zeroline=True,
+               zerolinecolor=CHART["zero"]),
     hovermode="x unified",
 )
-st.plotly_chart(_fig_bar, use_container_width=True)
+st.plotly_chart(_fig_bar, width="stretch")
 
 st.divider()
 
@@ -460,26 +459,26 @@ _fig_wf = go.Figure(go.Waterfall(
     measure=_wf_measure,
     x=_wf_labels,
     y=_wf_vals,
-    connector=dict(line=dict(color="rgba(255,255,255,0.15)", width=1)),
+    connector=dict(line=dict(color=CHART["axis"], width=1)),
     increasing=dict(marker=dict(color="#3fb950")),
     decreasing=dict(marker=dict(color="#f85149")),
     totals=dict(marker=dict(color="#58a6ff")),
     texttemplate="€%{y:,.0f}",
     textposition="outside",
-    textfont=dict(size=9, color="#c9d1d9"),
+    textfont=dict(size=9, color=CHART["text"]),
     hovertemplate="%{x}: €%{y:,.0f}<extra></extra>",
 ))
 _fig_wf.update_layout(
-    template="plotly_dark",
-    paper_bgcolor="#0d1117", plot_bgcolor="#161b22",
+    template=PLOTLY_TEMPLATE,
+    paper_bgcolor=CHART["bg"], plot_bgcolor=CHART["panel_bg"],
     height=300,
     margin=dict(l=60, r=20, t=30, b=50),
-    xaxis=dict(tickfont=dict(size=10, color="#8b949e")),
-    yaxis=dict(title="EUR", gridcolor="rgba(255,255,255,0.06)",
-               tickfont=dict(size=10, color="#8b949e")),
+    xaxis=dict(tickfont=dict(size=10, color=CHART["muted"])),
+    yaxis=dict(title="EUR", gridcolor=CHART["grid"],
+               tickfont=dict(size=10, color=CHART["muted"])),
     showlegend=False,
 )
-st.plotly_chart(_fig_wf, use_container_width=True)
+st.plotly_chart(_fig_wf, width="stretch")
 st.caption("Depreciation shown for reference. Non-cash item; does not affect cash flow or NPV calculation.")
 
 st.divider()
@@ -506,7 +505,7 @@ _fig_cum.add_trace(go.Scatter(
     line=dict(color="#d4ac3a", width=2, dash="dot"),
     hovertemplate="Year %{x} NPV: €%{y:,.0f}<extra></extra>",
 ))
-_fig_cum.add_hline(y=0, line=dict(color="rgba(255,255,255,0.25)", width=1.2))
+_fig_cum.add_hline(y=0, line=dict(color=CHART["zero"], width=1.2))
 
 # Breakeven annotation
 _be = _m.get("breakeven_yr")
@@ -519,19 +518,19 @@ if _be is not None and _be <= _lifetime:
     )
 
 _fig_cum.update_layout(
-    template="plotly_dark",
-    paper_bgcolor="#0d1117", plot_bgcolor="#161b22",
+    template=PLOTLY_TEMPLATE,
+    paper_bgcolor=CHART["bg"], plot_bgcolor=CHART["panel_bg"],
     height=300,
     margin=dict(l=60, r=20, t=10, b=35),
     legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1,
                 font=dict(size=10)),
-    xaxis=dict(title="Year", gridcolor="rgba(255,255,255,0.06)",
-               tickfont=dict(size=10, color="#8b949e"), dtick=1),
-    yaxis=dict(title="Cumulative EUR", gridcolor="rgba(255,255,255,0.06)",
-               tickfont=dict(size=10, color="#8b949e"), zeroline=False),
+    xaxis=dict(title="Year", gridcolor=CHART["grid"],
+               tickfont=dict(size=10, color=CHART["muted"]), dtick=1),
+    yaxis=dict(title="Cumulative EUR", gridcolor=CHART["grid"],
+               tickfont=dict(size=10, color=CHART["muted"]), zeroline=False),
     hovermode="x unified",
 )
-st.plotly_chart(_fig_cum, use_container_width=True)
+st.plotly_chart(_fig_cum, width="stretch")
 
 st.divider()
 
@@ -566,7 +565,7 @@ for _var, _label, _kwarg in [
         "NPV range":   f"€{(_hi - _lo) / 1e6:.2f}M",
     })
 
-st.dataframe(pd.DataFrame(_sens_rows), use_container_width=True, hide_index=True)
+st.dataframe(pd.DataFrame(_sens_rows), width="stretch", hide_index=True)
 
 st.divider()
 
@@ -620,16 +619,12 @@ with st.expander("Model methodology and assumptions", expanded=False):
 # ═══════════════════════════════════════════════════════════════════════════════
 # FOOTER
 # ═══════════════════════════════════════════════════════════════════════════════
-st.divider()
-st.markdown(
-    f"""<div style="color:#484f58;font-size:0.72rem;line-height:1.8;">
-    Built by Tobias Gudbjerg &nbsp;|&nbsp;
-    DAM data: ENTSO-E A44 / Nord Pool (NO2) &nbsp;|&nbsp;
-    FCR prices: Nordic/NordREG market averages (FCR-N ≈ €{BESS_FCR_N_EUR_PER_MW_YEAR:,.0f}/MW/yr,
-    FCR-D ≈ €{BESS_FCR_D_EUR_PER_MW_YEAR:,.0f}/MW/yr), approximate, varies by auction.<br>
-    For analytical and educational purposes only. Not financial advice.
-    Consult project-specific grid connection studies, PPA terms, and contracted FCR volumes
-    for investment-grade projections.
-    </div>""",
-    unsafe_allow_html=True,
+page_footer(
+    [
+        ("DAM data", "ENTSO-E A44 / Nord Pool (NO2)"),
+        ("FCR prices", f"Nordic/NordREG market averages (FCR-N ≈ €{BESS_FCR_N_EUR_PER_MW_YEAR:,.0f}/MW/yr, "
+                       f"FCR-D ≈ €{BESS_FCR_D_EUR_PER_MW_YEAR:,.0f}/MW/yr), approximate, varies by auction"),
+    ],
+    note="For analytical and educational purposes only. Consult project-specific grid connection studies, "
+         "PPA terms, and contracted FCR volumes for investment-grade projections.",
 )
