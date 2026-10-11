@@ -5,6 +5,8 @@ import plotly.graph_objects as go
 import pandas as pd
 from datetime import datetime
 from data.gas_storage import build_seasonal_bands
+from config.settings import GIE_FAILURE_TTL_S
+from utils.helpers import has_agsi_key
 from utils.theme import CHART, PLOTLY_TEMPLATE
 
 
@@ -31,10 +33,16 @@ def render_storage_chart(storage_data: dict, region: str = "europe"):
     st.subheader(f"Gas Storage: {label}")
 
     if df.empty:
-        st.warning(
-            f"Gas storage data unavailable for {label}. "
-            "Add AGSI_API_KEY to .env (free registration at agsi.gie.eu)."
-        )
+        if has_agsi_key():
+            st.warning(
+                f"Gas storage data unavailable for {label}: GIE AGSI+ did not answer. "
+                f"The panel retries within {max(GIE_FAILURE_TTL_S // 60, 1)} minutes."
+            )
+        else:
+            st.warning(
+                f"Gas storage data unavailable for {label}. "
+                "Add AGSI_API_KEY to .env (free registration at agsi.gie.eu)."
+            )
         st.caption("Source: Gas Infrastructure Europe (GIE), AGSI+ | agsi.gie.eu")
         return
 
@@ -46,9 +54,8 @@ def render_storage_chart(storage_data: dict, region: str = "europe"):
 
     if bands.empty:
         st.warning(
-            "Historical seasonal bands unavailable. The AGSI+ API returned partial data "
-            "(likely a timeout on a slow page). Current fill level may still be shown. "
-            "Refresh the page to retry."
+            "Historical seasonal bands unavailable: the AGSI+ history holds no earlier "
+            "year to compare with."
         )
         return
 
