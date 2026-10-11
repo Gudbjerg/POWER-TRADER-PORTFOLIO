@@ -7,6 +7,7 @@ Fallback: energy-charts.info (Fraunhofer ISE) for DE — no key required.
 
 Returns daily GWh totals per country.
 """
+from config.settings import ENTSOE_TIMEOUT_S
 import os
 import pandas as pd
 import streamlit as st
@@ -27,7 +28,7 @@ def _client():
     key = os.getenv("ENTSOE_API_KEY", "")
     if not key or not ENTSOE_PY_AVAILABLE:
         return None
-    return EntsoePandasClient(api_key=key)
+    return EntsoePandasClient(api_key=key, timeout=ENTSOE_TIMEOUT_S)
 
 
 def _entsoe_wind(client, eic: str, start, end) -> pd.Series:
@@ -86,7 +87,7 @@ def _energy_charts_wind(days: int) -> pd.Series:
     return pd.concat(parts, axis=1).sum(axis=1)
 
 
-@st.cache_data(ttl=3600, persist="disk")
+@st.cache_data(ttl=3600)
 def fetch_wind_daily(days: int = 730) -> dict:
     """
     Fetch daily wind generation totals for DE and NO.
@@ -180,7 +181,7 @@ def _entsoe_wind_forecast(client, eic: str, start, end) -> pd.Series:
     return total
 
 
-@st.cache_data(ttl=3600, persist="disk")
+@st.cache_data(ttl=3600)
 def fetch_wind_forecast(days: int = 90) -> dict:
     """
     Fetch ENTSO-E A69 day-ahead wind generation forecasts for DE, DK1, NO, GB.

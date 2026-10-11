@@ -9,6 +9,7 @@ Fallback: energy-charts.info (Fraunhofer ISE) — public REST API, no key needed
 Returns hourly averages (hour 0-23) of day-ahead price and solar generation
 averaged over the last `days` days for Germany.
 """
+from config.settings import ENTSOE_TIMEOUT_S
 import os
 import pandas as pd
 import streamlit as st
@@ -20,7 +21,8 @@ try:
 except ImportError:
     ENTSOE_PY_AVAILABLE = False
 
-DE_EIC = "10Y1001A1001A83F"
+DE_EIC = "10Y1001A1001A83F"        # Germany (generation per production type)
+DE_LU_EIC = "10Y1001A1001A82H"     # DE-LU bidding zone (day-ahead prices, A44)
 ENERGY_CHARTS_BASE = "https://api.energy-charts.info"
 
 
@@ -28,7 +30,7 @@ def _entsoe_client():
     key = os.getenv("ENTSOE_API_KEY", "")
     if not key or not ENTSOE_PY_AVAILABLE:
         return None
-    return EntsoePandasClient(api_key=key)
+    return EntsoePandasClient(api_key=key, timeout=ENTSOE_TIMEOUT_S)
 
 
 def _fetch_entsoe(days: int) -> pd.DataFrame:
@@ -44,7 +46,7 @@ def _fetch_entsoe(days: int) -> pd.DataFrame:
     solar_df = pd.DataFrame()
 
     try:
-        prices = client.query_day_ahead_prices(DE_EIC, start=start, end=today)
+        prices = client.query_day_ahead_prices(DE_LU_EIC, start=start, end=today)
         prices = prices.tz_convert("Europe/Berlin")
         price_df = pd.DataFrame({"price": prices.values}, index=prices.index)
     except Exception:
@@ -137,7 +139,7 @@ def _fetch_energy_charts(days: int) -> pd.DataFrame:
     return merged.groupby("hour")[["price", "solar_mw"]].mean().reset_index()
 
 
-@st.cache_data(ttl=3600, persist="disk")
+@st.cache_data(ttl=3600)
 def fetch_solar_cannibalisation(days: int = 14) -> dict:
     """
     Fetch hourly solar cannibalisation data, trying ENTSO-E first.

@@ -3,14 +3,31 @@ Scenario interpretation logic. Translates raw data into trader-readable signals.
 Returns (status, headline, detail) tuples where status is one of: critical, warn, ok, good.
 """
 from __future__ import annotations
+from datetime import date
 import pandas as pd
+
+# EU storage regulation target used in the commentary: 90% full by 1 November.
+STORAGE_TARGET_PCT = 90.0
 
 
 # ── Gas Storage ─────────────────────────────────────────────────────────────
 
-def storage_status(pct: float, min_pct: float | None, mean_pct: float | None, region: str = "EU") -> tuple[str, str, str]:
+def _injection_season(today: date) -> bool:
+    """True from 1 April to 31 October, the usual net-injection season."""
+    return 4 <= today.month <= 10
+
+
+def storage_status(
+    pct: float,
+    min_pct: float | None,
+    mean_pct: float | None,
+    region: str = "EU",
+    today: date | None = None,
+) -> tuple[str, str, str]:
     if mean_pct is None or min_pct is None:
         return ("ok", f"{region} storage at {pct:.1f}%; historical bands unavailable", "")
+    today = today or date.today()
+    injecting = _injection_season(today)
     gap_to_mean = pct - mean_pct
     gap_to_min  = pct - min_pct
 
@@ -20,9 +37,15 @@ def storage_status(pct: float, min_pct: float | None, mean_pct: float | None, re
             f"{region} storage at historic low: {pct:.1f}% (below 5-year minimum of {min_pct:.1f}%)",
             (
                 f"Storage has fallen below every prior year's level for this date over the last five years. "
-                f"At {pct:.1f}%, the market faces a steep injection requirement heading into summer. "
-                f"A cold snap or LNG supply disruption could rapidly tighten balances. "
-                f"Watch EU injection mandate (90% by November 1). The gap to target is significant."
+                + (
+                    f"At {pct:.1f}%, the market faces a steep injection requirement before the winter "
+                    f"withdrawal season. "
+                    if injecting else
+                    f"At {pct:.1f}%, stocks may run short before the end of the withdrawal season, and "
+                    f"next summer's refill requirement grows with every week of deficit. "
+                )
+                + f"A cold snap or LNG supply disruption could rapidly tighten balances. "
+                f"Watch the EU storage target ({STORAGE_TARGET_PCT:.0f}% by 1 November). The gap to target is significant."
             ),
         )
     elif gap_to_mean < -15:
@@ -32,8 +55,12 @@ def storage_status(pct: float, min_pct: float | None, mean_pct: float | None, re
             (
                 f"Storage is {abs(gap_to_mean):.1f}pp below the 5-year average for this date. "
                 f"While above the historical minimum, the pace of injection required to reach "
-                f"80% by November 1 is well above seasonal norms. "
-                f"Higher summer TTF prices are likely to incentivise LNG cargoes and pipeline volumes."
+                f"{STORAGE_TARGET_PCT:.0f}% by 1 November is well above seasonal norms. "
+                + (
+                    "Higher TTF prices are likely to incentivise LNG cargoes and pipeline volumes."
+                    if injecting else
+                    "Withdrawals from a low base raise the risk premium on late-winter delivery."
+                )
             ),
         )
     elif gap_to_mean < -5:
@@ -61,6 +88,58 @@ def storage_status(pct: float, min_pct: float | None, mean_pct: float | None, re
             f"{region} storage near the seasonal average: {pct:.1f}% ({gap_to_mean:+.1f}pp versus 5-year mean)",
             f"Storage is tracking close to the 5-year seasonal average. No acute supply risk.",
         )
+
+
+def storage_refill_pace(
+    pct: float,
+    bands: pd.DataFrame,
+    today: date,
+    target_pct: float = STORAGE_TARGET_PCT,
+) -> dict:
+    """Compare the injection still needed to reach the 1 November target with the 5-year norm.
+
+    ``bands`` is the output of ``data.gas_storage.build_seasonal_bands`` (day_of_year,
+    min, mean, max). The 5-year norm for the remaining period is the mean fill on
+    1 November minus the mean fill on today's day of year: the net injection that the
+    average of the last five years achieved over the same calendar window.
+
+    Returns a dict with ``days`` (to the next 1 November), ``required_pp``,
+    ``required_per_day``, ``norm_pp`` and ``norm_per_day`` (None when the bands cannot
+    supply them) and ``verdict``: one of "met", "well above", "above", "in line with",
+    "below" or None.
+    """
+    nov1 = date(today.year if today < date(today.year, 11, 1) else today.year + 1, 11, 1)
+    days = max((nov1 - today).days, 1)
+    required = max(0.0, target_pct - float(pct))
+    out = {
+        "days": days,
+        "required_pp": required,
+        "required_per_day": required / days,
+        "norm_pp": None,
+        "norm_per_day": None,
+        "verdict": "met" if required <= 0 else None,
+    }
+    if required <= 0 or bands is None or bands.empty:
+        return out
+    by_doy = bands.set_index("day_of_year")["mean"]
+    today_doy = pd.Timestamp(today).dayofyear
+    nov1_doy = pd.Timestamp(nov1).dayofyear
+    if today_doy not in by_doy.index or nov1_doy not in by_doy.index:
+        return out
+    norm = float(by_doy.loc[nov1_doy]) - float(by_doy.loc[today_doy])
+    out["norm_pp"] = norm
+    out["norm_per_day"] = norm / days
+    if norm <= 0.1:
+        out["verdict"] = "well above"
+    else:
+        ratio = required / norm
+        out["verdict"] = (
+            "well above" if ratio >= 1.5 else
+            "above" if ratio >= 1.1 else
+            "in line with" if ratio >= 0.9 else
+            "below"
+        )
+    return out
 
 
 # ── TTF Gas Price ────────────────────────────────────────────────────────────
@@ -160,9 +239,10 @@ def spread_status(nordic_avg: float, continental_avg: float) -> tuple[str, str, 
 
 # ── LNG Terminal Sendout ────────────────────────────────────────────────────
 
-def lng_status(wow_change_pct: float | None) -> tuple[str, str, str]:
+def lng_status(wow_change_pct: float | None, today: date | None = None) -> tuple[str, str, str]:
     if wow_change_pct is None:
         return ("ok", "LNG sendout: awaiting data", "")
+    injecting = _injection_season(today or date.today())
     if wow_change_pct < -15:
         return (
             "critical",
@@ -179,16 +259,22 @@ def lng_status(wow_change_pct: float | None) -> tuple[str, str, str]:
             f"LNG sendout down {abs(wow_change_pct):.1f}% week-on-week",
             (
                 "Moderate decline in NW European LNG sendout. Watch for continuation; "
-                "a sustained drop would tighten the gas balance heading into injection season."
+                + (
+                    "a sustained drop would slow storage injection and tighten the gas balance."
+                    if injecting else
+                    "a sustained drop would deepen storage withdrawals and tighten the winter gas balance."
+                )
             ),
         )
     elif wow_change_pct > 10:
         return (
             "good",
-            f"LNG sendout up {wow_change_pct:.1f}% week-on-week, supportive for the refill season",
+            f"LNG sendout up {wow_change_pct:.1f}% week-on-week, "
+            + ("supportive for the refill season" if injecting else "supportive for winter supply"),
             (
-                "Strong LNG imports are supporting the injection season. "
-                "US and Qatari cargoes appear to be flowing freely into NW Europe."
+                ("Strong LNG imports are supporting storage injection. " if injecting else
+                 "Strong LNG imports are cushioning storage withdrawals. ")
+                + "Cargo arrivals into North-West European terminals are running well above the prior week."
             ),
         )
     else:
@@ -229,7 +315,7 @@ def market_summary(
     if de_pct is not None and de_min is not None and de_pct < de_min:
         parts.append(
             f"Germany is particularly exposed at <strong>{de_pct:.1f}%</strong>, already below the 5-year minimum "
-            f"({de_min:.1f}%), the weakest level for this date on record."
+            f"({de_min:.1f}%), the weakest level for this date in the last five years."
         )
 
     # TTF

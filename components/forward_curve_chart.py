@@ -6,16 +6,18 @@ P25-P75 historical range shown as error bars.
 import plotly.graph_objects as go
 import streamlit as st
 import pandas as pd
+from utils.theme import CHART, PLOTLY_TEMPLATE
 
 COLORS = {
     "winter":   "#4c8cbf",
     "summer":   "#4caf8f",
     "range":    "rgba(139,148,158,0.35)",
     "spot":     "#e07b39",
-    "grid":     "rgba(255,255,255,0.06)",
-    "text":     "#c9d1d9",
-    "bg":       "#0d1117",
-    "panel_bg": "#161b22",
+    "grid":     CHART["grid"],
+    "text":     CHART["text"],
+    "bg":       CHART["bg"],
+    "panel_bg": CHART["panel_bg"],
+    "annotation_bg": CHART["annotation_bg"],
 }
 
 TTF_THRESHOLDS = [
@@ -106,7 +108,7 @@ def render_forward_curve_chart(fwd_data: dict):
             text=f"Winter premium: {sign}€{wp:.1f}/MWh",
             showarrow=False,
             font=dict(size=11, color=acolor),
-            bgcolor=COLORS["panel_bg"],
+            bgcolor=COLORS["annotation_bg"],
             bordercolor=acolor,
             borderwidth=1,
             borderpad=6,
@@ -115,7 +117,7 @@ def render_forward_curve_chart(fwd_data: dict):
         )
 
     fig.update_layout(
-        template="plotly_dark",
+        template=PLOTLY_TEMPLATE,
         paper_bgcolor=COLORS["bg"],
         plot_bgcolor=COLORS["panel_bg"],
         font=dict(color=COLORS["text"], size=12),
@@ -134,7 +136,7 @@ def render_forward_curve_chart(fwd_data: dict):
         hovermode="x unified",
     )
 
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig, width="stretch")
 
     # KPI row
     k1, k2, k3, k4 = st.columns(4)

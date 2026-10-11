@@ -4,6 +4,7 @@ Composite rich/cheap signal aggregator across gas, power, storage, and spreads.
 Every signal carries a historical percentile and confidence rating derived from
 the same underlying data and models as Layers 1–4.
 """
+from config.settings import ENTSOE_TIMEOUT_S
 import os
 import streamlit as st
 import pandas as pd
@@ -22,7 +23,8 @@ st.set_page_config(
     initial_sidebar_state="collapsed",
 )
 
-from utils.helpers import apply_dark_theme, kpi_card, delta_span
+from utils.helpers import ordinal, apply_dark_theme, kpi_card, delta_span
+from utils.theme import ACCENTS, page_header, page_footer
 from config.settings import (
     COINT_ENTRY_Z, COINT_MIN_OBS,
 )
@@ -238,6 +240,9 @@ def _get_mispricing_signals() -> list[dict]:
                     _eua_hist.index = pd.to_datetime(_eua_hist.index).tz_localize(None).normalize()
                     _eua_hist.index.name = "date"
                     _eua_hist = _eua_hist.rename(columns={"Close": "eua"}).reset_index()
+                    # Yahoo can publish the latest bar without a close (NaN); a NaN EUA
+                    # would turn the current spread, its percentile and the signal into NaN.
+                    _eua_hist = _eua_hist.dropna(subset=["eua"])
             except Exception:
                 pass
 
@@ -250,6 +255,7 @@ def _get_mispricing_signals() -> list[dict]:
                     .merge(_eua_hist, on="date", how="inner")
                     .iloc[-_HIST_WINDOW:]
                 )
+                _f5 = _f5.dropna(subset=["no2", "ttf", "eua"])
                 if len(_f5) >= 30:
                     _css = (
                         _f5["no2"].values
@@ -273,7 +279,7 @@ def _get_mispricing_signals() -> list[dict]:
                         "direction": _d,
                         "dlabel":   _dl,
                         "note":     (f"NO2 - TTF*{_CCGT_HEAT_RATE:.2f} - EUA*{_CCGT_EMISSION:.3f}"
-                                     f"  (CCGT ~49% eff., EUA hist. avg. ~{_cur_eua:.0f}/t)"),
+                                     f"  (CCGT ~49% eff., latest EUA €{_cur_eua:.0f}/t)"),
                         "source":   "Computed",
                     })
     except Exception:
@@ -346,7 +352,7 @@ def _get_mispricing_signals() -> list[dict]:
                 if _key8:
                     _now8 = _dt8.now(_tz8.timezone("Europe/Berlin"))
                     _s8   = pd.Timestamp(_now8.date(), tz="Europe/Berlin")
-                    _ser8 = _EP8(api_key=_key8).query_load(
+                    _ser8 = _EP8(api_key=_key8, timeout=ENTSOE_TIMEOUT_S).query_load(
                         "10Y1001A1001A83F", start=_s8, end=_s8 + pd.Timedelta(days=1)
                     )
                     if _ser8 is not None and not (hasattr(_ser8, "empty") and _ser8.empty):
@@ -386,11 +392,12 @@ def _get_mispricing_signals() -> list[dict]:
 
 # ── Page ─────────────────────────────────────────────────────────────────────
 
-st.markdown("## Layer 5 · Mispricing Dashboard")
-st.caption(
+page_header(
+    "Layer 5", "Mispricing Dashboard",
     "Composite rich/cheap signal aggregator across gas, power, storage, and spread markets. "
     "Each signal shows its current value and historical percentile within a 2–7 year rolling window. "
-    "Signals are sorted by extremity. The most off-centre appear first."
+    "Signals are sorted by extremity. The most off-centre appear first.",
+    accent=ACCENTS["l5"],
 )
 
 with st.spinner("Computing signals…"):
@@ -484,7 +491,7 @@ for _s in _signals:
 
     _dp = _s["pctile"]
     if np.isnan(_dp):
-        _bar_html = "<span style='color:#484f58;font-size:0.80rem'>—</span>"
+        _bar_html = "<span style='color:#484f58;font-size:0.80rem'>n/a</span>"
     else:
         _bar_clr = ({"up": "#3fb950", "down": "#f85149", "neutral": "#58a6ff"}
                     .get(_s["direction"], "#58a6ff"))
@@ -493,7 +500,7 @@ for _s in _signals:
             f"<div style='flex:0 0 110px;height:6px;background:#21262d;border-radius:3px;overflow:hidden'>"
             f"<div style='width:{_dp:.1f}%;height:100%;background:{_bar_clr};border-radius:3px'></div>"
             f"</div>"
-            f"<span style='color:#8b949e;font-size:0.80rem;white-space:nowrap'>{_dp:.0f}th</span>"
+            f"<span style='color:#8b949e;font-size:0.80rem;white-space:nowrap'>{ordinal(_dp)}</span>"
             f"</div>"
         )
 
@@ -572,15 +579,15 @@ with st.expander("Methodology", expanded=False):
     **Percentile calculation:** For each signal, the current value is ranked within its
     historical distribution (rolling 2–7 year window, same day-of-year ±10d for seasonal
     signals). Percentile = fraction of historical observations below the current value × 100.
-    Requires ≥10 historical observations; shown as "—" if insufficient data.
+    Requires ≥10 historical observations; shown as "n/a" if insufficient data.
 
     **Confidence levels:**
-    - *High* — signal percentile is below 15th or above 85th (strong departure from historical norm)
-    - *Medium* — percentile below 30th or above 70th
-    - *Low* — percentile within 30th–70th range (signal near historical median)
+    - *High*: signal percentile is below 15th or above 85th (strong departure from historical norm)
+    - *Medium*: percentile below 30th or above 70th
+    - *Low*: percentile within 30th–70th range (signal near historical median)
 
     **Direction convention:**
-    - *Elevated / Bullish* — signal is historically high. For storage and hydro (low-is-bullish),
+    - *Elevated / Bullish*: signal is historically high. For storage and hydro (low-is-bullish),
       low values yield "Bullish"; for all others, high values yield "Elevated".
     - Spread z-scores: direction = trade signal side (long/short) when |z| > {COINT_ENTRY_Z}σ.
     - Marginal Fuel: gas/oil-marginal → "up"; renewable-marginal → "down".
@@ -597,14 +604,8 @@ with st.expander("Methodology", expanded=False):
     """)
 
 # ── Footer ────────────────────────────────────────────────────────────────────
-st.divider()
-st.markdown(
-    """<div style="color:#484f58;font-size:0.72rem;line-height:1.8;">
-    Built by Tobias Gudbjerg &nbsp;|&nbsp;
-    Gas price: <a href="https://finance.yahoo.com" style="color:#484f58;">ICE/Yahoo Finance (TTF)</a> &nbsp;|&nbsp;
-    Power price: <a href="https://transparency.entsoe.eu" style="color:#484f58;">ENTSO-E A44</a> &nbsp;|&nbsp;
-    Storage: <a href="https://agsi.gie.eu" style="color:#484f58;">GIE AGSI+</a><br>
-    For informational purposes only. Not financial advice.
-    </div>""",
-    unsafe_allow_html=True,
-)
+page_footer([
+    ("Gas price", "ICE/Yahoo Finance (TTF)", "https://finance.yahoo.com"),
+    ("Power price", "ENTSO-E A44", "https://transparency.entsoe.eu"),
+    ("Storage", "GIE AGSI+", "https://agsi.gie.eu"),
+])

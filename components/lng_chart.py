@@ -5,6 +5,7 @@ Data source: GIE ALSI (same API key as AGSI).
 import plotly.graph_objects as go
 import streamlit as st
 import pandas as pd
+from utils.theme import CHART, PLOTLY_TEMPLATE
 
 COUNTRY_COLORS = {
     "BE": "#e07b39",
@@ -15,10 +16,10 @@ COUNTRY_COLORS = {
 
 COLORS = {
     "ma_line":  "#c0392b",
-    "grid":     "rgba(255,255,255,0.06)",
-    "text":     "#c9d1d9",
-    "bg":       "#0d1117",
-    "panel_bg": "#161b22",
+    "grid":     CHART["grid"],
+    "text":     CHART["text"],
+    "bg":       CHART["bg"],
+    "panel_bg": CHART["panel_bg"],
 }
 
 
@@ -29,7 +30,7 @@ def render_lng_chart(lng_data: dict):
     alert      = lng_data.get("alert", False)
     fetched_at = lng_data.get("fetched_at")
 
-    st.subheader("NW European LNG Terminal Sendout (TWh/day)")
+    st.subheader("NW European LNG Terminal Sendout (GWh/day)")
 
     if df.empty:
         st.warning(
@@ -66,7 +67,7 @@ def render_lng_chart(lng_data: dict):
             y=subset["sendOut"],
             name=label,
             marker_color=COUNTRY_COLORS.get(country, "#888"),
-            hovertemplate=f"{label}: %{{y:.2f}} TWh/d<extra></extra>",
+            hovertemplate=f"{label}: %{{y:,.1f}} GWh/d<extra></extra>",
         ))
 
     # 7-day MA total overlay
@@ -77,23 +78,23 @@ def render_lng_chart(lng_data: dict):
             y=totals_plot["ma7"],
             name="7-day MA (total)",
             line=dict(color=COLORS["ma_line"], width=2, dash="dot"),
-            hovertemplate="7d MA: %{y:.2f} TWh/d<extra></extra>",
+            hovertemplate="7d MA: %{y:,.1f} GWh/d<extra></extra>",
         ))
 
     fig.update_layout(
         barmode="stack",
-        template="plotly_dark",
+        template=PLOTLY_TEMPLATE,
         paper_bgcolor=COLORS["bg"],
         plot_bgcolor=COLORS["panel_bg"],
         font=dict(color=COLORS["text"], size=12),
         margin=dict(l=10, r=10, t=10, b=10),
         legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
         xaxis=dict(showgrid=True, gridcolor=COLORS["grid"], title=None),
-        yaxis=dict(title="TWh/day", showgrid=True, gridcolor=COLORS["grid"]),
+        yaxis=dict(title="GWh/day", showgrid=True, gridcolor=COLORS["grid"]),
         hovermode="x unified",
     )
 
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig, width="stretch")
 
     if missing_countries:
         _gb_missing = any("Great Britain" in c or c == "GB" for c in missing_countries)

@@ -16,15 +16,17 @@ st.set_page_config(
     initial_sidebar_state="collapsed",
 )
 
-from utils.helpers import apply_dark_theme, commentary, kpi_card, delta_span, has_torch
+from utils.helpers import ordinal, apply_dark_theme, commentary, kpi_card, delta_span, has_torch
+from utils.theme import ACCENTS, CHART, PLOTLY_TEMPLATE, page_header, page_footer
 from data.sentiment import get_sentiment_data
 from data.prices import get_ttf_data
 
 apply_dark_theme()
 
-st.markdown("## Layer 4 · Machine Learning")
-st.caption(
-    "Machine learning applied to European power and gas market forecasting and regime classification."
+page_header(
+    "Layer 4", "Machine Learning",
+    "Machine learning applied to European power and gas market forecasting and regime classification.",
+    accent=ACCENTS["l4"],
 )
 
 _TORCH_AVAILABLE = has_torch()
@@ -51,7 +53,7 @@ from models.hmm_model import (
 st.divider()
 
 # ── Load feature matrix (cached) ─────────────────────────────────────────────
-@st.cache_data(ttl=3600, show_spinner=False, persist="disk")
+@st.cache_data(ttl=3600, show_spinner=False)
 def _get_features():
     return assemble_features(years=3)
 
@@ -203,7 +205,7 @@ with st.expander("Live Model 1: Train and Predict", expanded=lstm_is_trained()):
                             f"naive persistence baseline (€{_naive_f:.2f}/MWh). "
                             "Predictions currently revert toward the mean and should not be used for "
                             "trading decisions. Root cause: the Q1–Q2 2026 test window coincides with "
-                            "the Iran/Hormuz supply shock — a regime structurally outside the training "
+                            "the Iran/Hormuz supply shock, a regime structurally outside the training "
                             "distribution. Methodology fix (log-return target, quantile loss, "
                             "walk-forward validation) is scheduled for a future session.",
                             icon="⚠️",
@@ -253,16 +255,16 @@ with st.expander("Live Model 1: Train and Predict", expanded=lstm_is_trained()):
                 hovertemplate="NL predicted: €%{y:.1f}<extra></extra>",
             ))
             _fig_pred.update_layout(
-                template="plotly_dark", paper_bgcolor="#0d1117", plot_bgcolor="#161b22",
-                font=dict(color="#c9d1d9", size=12),
+                template=PLOTLY_TEMPLATE, paper_bgcolor=CHART["bg"], plot_bgcolor=CHART["panel_bg"],
+                font=dict(color=CHART["text"], size=12),
                 margin=dict(l=10, r=10, t=10, b=10),
                 legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
-                xaxis=dict(showgrid=True, gridcolor="rgba(255,255,255,0.06)"),
-                yaxis=dict(title="EUR/MWh", showgrid=True, gridcolor="rgba(255,255,255,0.06)"),
+                xaxis=dict(showgrid=True, gridcolor=CHART["grid"]),
+                yaxis=dict(title="EUR/MWh", showgrid=True, gridcolor=CHART["grid"]),
                 hovermode="x unified",
             )
             st.markdown("**Test set: actual vs predicted**")
-            st.plotly_chart(_fig_pred, use_container_width=True)
+            st.plotly_chart(_fig_pred, width="stretch")
             _lm2 = lstm_load_meta()
             st.caption(
                 f"Solid lines: actual day-ahead prices. Dotted lines: LSTM predictions. "
@@ -270,7 +272,7 @@ with st.expander("Live Model 1: Train and Predict", expanded=lstm_is_trained()):
                 f"MAE above naive baseline reflects high price volatility in the test window "
                 f"(Q1 2025 to Q1 2026 included the post-crisis normalisation period). "
                 f"The model captures directional trends; large spikes are systematically "
-                f"underestimated — a known limitation of MAE-trained sequence models."
+                f"underestimated: a known limitation of MAE-trained sequence models."
             )
 
         # Train button
@@ -395,7 +397,7 @@ with st.expander("Live Model 2: Train and Classify", expanded=hmm_is_trained()):
                 # Regime history chart
                 _hist_df = get_regime_history(_features_df)
                 if not _hist_df.empty:
-                    _C = {"bg": "#0d1117", "panel_bg": "#161b22", "grid": "rgba(255,255,255,0.06)", "text": "#c9d1d9"}
+                    _C = {"bg": CHART["bg"], "panel_bg": CHART["panel_bg"], "grid": CHART["grid"], "text": CHART["text"]}
                     _fig_r = go.Figure()
                     for _regime, _grp in _hist_df.groupby("regime"):
                         _color = REGIME_COLORS.get(_regime, "#8b949e")
@@ -407,7 +409,7 @@ with st.expander("Live Model 2: Train and Classify", expanded=hmm_is_trained()):
                             hovertemplate=f"<b>{_regime}</b><br>%{{x|%Y-%m-%d}}<extra></extra>",
                         ))
                     _fig_r.update_layout(
-                        template="plotly_dark", paper_bgcolor=_C["bg"], plot_bgcolor=_C["panel_bg"],
+                        template=PLOTLY_TEMPLATE, paper_bgcolor=_C["bg"], plot_bgcolor=_C["panel_bg"],
                         font=dict(color=_C["text"], size=11),
                         margin=dict(l=10, r=10, t=10, b=10), height=200,
                         legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
@@ -415,7 +417,257 @@ with st.expander("Live Model 2: Train and Classify", expanded=hmm_is_trained()):
                         yaxis=dict(showgrid=False, title=None),
                         hovermode="x unified",
                     )
-                    st.plotly_chart(_fig_r, use_container_width=True)
+                    st.plotly_chart(_fig_r, width="stretch")
+
+                    # ── 3D: realised-volatility overlay on the regime timeline (roadmap 3D) ──
+                    # Pure post-processing in models/regime_volatility.py; uses the decoded
+                    # history (_hist_df) and the NO2 column of the feature matrix.
+                    from models.regime_volatility import (
+                        realised_volatility as _rv_calc,
+                        volatility_by_regime as _rv_by_regime,
+                        transition_spike_proximity as _rv_proximity,
+                    )
+                    from config.settings import (
+                        REGIME_VOL_WINDOW as _RV_WIN,
+                        REGIME_VOL_SPIKE_PCTL as _RV_PCTL,
+                        REGIME_VOL_PROXIMITY_DAYS as _RV_PROX,
+                        REGIME_VOL_MIN_DAYS as _RV_MIN,
+                    )
+
+                    st.markdown("#### Realised Volatility Overlay: NO2 Day-Ahead")
+                    st.caption(
+                        f"Rolling {_RV_WIN}-trading-day realised volatility of NO2 day-ahead prices (standard "
+                        "deviation of daily price changes, EUR/MWh, right axis) over the decoded regime timeline. "
+                        f"Diamonds mark regime transitions; the dotted line is the {ordinal(_RV_PCTL)}-percentile "
+                        "spike threshold."
+                    )
+                    _rv_has_no2 = (
+                        "no2" in _features_df.columns
+                        and int(_features_df["no2"].notna().sum()) > _RV_WIN
+                    )
+                    if not _rv_has_no2:
+                        st.caption(
+                            "Volatility overlay unavailable: the feature matrix holds no NO2 day-ahead prices "
+                            f"(or fewer than {_RV_WIN + 1} days of them)."
+                        )
+                    else:
+                        _rv_src = _features_df[["date", "no2"]].dropna().copy()
+                        _rv_src["date"] = pd.to_datetime(_rv_src["date"]).dt.normalize()
+                        _rv_df = _rv_calc(_rv_src.set_index("date")["no2"], window=_RV_WIN, method="abs")
+                        _rv_hist = _hist_df[["date", "regime"]].copy()
+                        _rv_hist["date"] = pd.to_datetime(_rv_hist["date"]).dt.normalize()
+                        _rv_stats = _rv_proximity(_rv_hist, _rv_df, spike_pctl=_RV_PCTL, window=_RV_PROX)
+                        _rv_tbl = _rv_by_regime(_rv_hist, _rv_df)
+
+                        if not _rv_stats or _rv_stats["n_days"] < _RV_MIN or _rv_tbl.empty:
+                            st.caption(
+                                "Volatility overlay unavailable: fewer than "
+                                f"{_RV_MIN} regime days with a defined {_RV_WIN}-day realised volatility."
+                            )
+                        else:
+                            _rv_plot = _rv_hist.merge(_rv_df[["date", "rv"]], on="date", how="left")
+                            _rv_valid = _rv_plot["rv"].dropna()
+                            _rv_now = float(_rv_valid.iloc[-1])
+                            _rv_now_pct = float((_rv_valid <= _rv_now).mean() * 100)
+                            _rv_thr = _rv_stats["threshold"]
+
+                            _fig_rv = go.Figure()
+                            _rv_order = [r for r in REGIME_COLORS if r in set(_rv_plot["regime"])]
+                            for _regime in _rv_order:
+                                _grp = _rv_plot[_rv_plot["regime"] == _regime]
+                                _fig_rv.add_trace(go.Scatter(
+                                    x=_grp["date"], y=[_regime] * len(_grp),
+                                    mode="markers", name=_regime,
+                                    marker=dict(color=REGIME_COLORS.get(_regime, "#8b949e"), size=6, symbol="square"),
+                                    hovertemplate=f"<b>{_regime}</b><extra></extra>",
+                                ))
+                            _fig_rv.add_trace(go.Scatter(
+                                x=_rv_plot["date"], y=_rv_plot["rv"], yaxis="y2", mode="lines",
+                                name=f"{_RV_WIN}-day realised vol",
+                                line=dict(color="#e6edf3", width=1.4),
+                                hovertemplate="Realised vol: €%{y:.2f}/MWh<extra></extra>",
+                            ))
+                            _fig_rv.add_trace(go.Scatter(
+                                x=[_rv_plot["date"].min(), _rv_plot["date"].max()], y=[_rv_thr, _rv_thr],
+                                yaxis="y2", mode="lines", name=f"P{_RV_PCTL:.0f} spike threshold",
+                                line=dict(color="rgba(255,255,255,0.45)", width=1, dash="dot"),
+                                hoverinfo="skip",
+                            ))
+                            _rv_tr = _rv_plot[_rv_plot["date"].isin(_rv_stats["transition_dates"])]
+                            if not _rv_tr.empty:
+                                _fig_rv.add_trace(go.Scatter(
+                                    x=_rv_tr["date"], y=_rv_tr["rv"], yaxis="y2", mode="markers",
+                                    name="Regime transition",
+                                    marker=dict(
+                                        symbol="diamond", size=9,
+                                        color=[REGIME_COLORS.get(r, "#8b949e") for r in _rv_tr["regime"]],
+                                        line=dict(color="#ffffff", width=1),
+                                    ),
+                                    customdata=_rv_tr[["regime"]].to_numpy(),
+                                    hovertemplate="Transition to %{customdata[0]}<extra></extra>",
+                                ))
+                            _fig_rv.update_layout(
+                                template="plotly_dark", paper_bgcolor=_C["bg"], plot_bgcolor=_C["panel_bg"],
+                                font=dict(color=_C["text"], size=11),
+                                margin=dict(l=10, r=10, t=10, b=10), height=330,
+                                legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+                                xaxis=dict(showgrid=True, gridcolor=_C["grid"], title=None),
+                                yaxis=dict(showgrid=False, title=None,
+                                           categoryorder="array", categoryarray=_rv_order),
+                                yaxis2=dict(title="Realised vol (EUR/MWh)", overlaying="y", side="right",
+                                            showgrid=True, gridcolor=_C["grid"], rangemode="tozero"),
+                                hovermode="x unified",
+                            )
+                            st.plotly_chart(_fig_rv, width="stretch")
+
+                            # KPI row
+                            _rvk1, _rvk2, _rvk3, _rvk4 = st.columns(4)
+                            with _rvk1:
+                                st.markdown(kpi_card(
+                                    f"{_RV_WIN}-day realised vol (latest)", f"€{_rv_now:.2f}/MWh",
+                                    delta_span(f"{ordinal(_rv_now_pct)} percentile of sample · spike above €{_rv_thr:.2f}",
+                                               "red" if _rv_now > _rv_thr else "blue"),
+                                ), unsafe_allow_html=True)
+                            _rv_n_tr = _rv_stats["n_transitions"]
+                            with _rvk2:
+                                st.markdown(kpi_card(
+                                    "Transitions near a vol spike",
+                                    f"{_rv_stats['n_near']} of {_rv_n_tr}" if _rv_n_tr else "n/a",
+                                    delta_span(
+                                        f"{_rv_stats['observed_share']:.0%} within ±{_RV_PROX} trading days"
+                                        if _rv_n_tr else "no transitions in the scored window", "blue"),
+                                ), unsafe_allow_html=True)
+                            with _rvk3:
+                                st.markdown(kpi_card(
+                                    "Chance baseline", f"{_rv_stats['baseline_share']:.0%}",
+                                    delta_span(f"share of days within ±{_RV_PROX}d of a spike", "blue"),
+                                ), unsafe_allow_html=True)
+                            with _rvk4:
+                                _rv_p = _rv_stats["p_value"]
+                                _rv_lift_ok = _rv_n_tr > 0 and np.isfinite(_rv_stats["lift"])
+                                st.markdown(kpi_card(
+                                    "Lift vs chance",
+                                    f"{_rv_stats['lift']:.2f}×" if _rv_lift_ok else "n/a",
+                                    delta_span(
+                                        f"circular-shift p = {_rv_p:.3f}" if np.isfinite(_rv_p) else "p-value n/a",
+                                        "amber" if (np.isfinite(_rv_p) and _rv_p < 0.05) else "blue"),
+                                ), unsafe_allow_html=True)
+
+                            # Per-regime table
+                            _rv_rows = "".join(
+                                "<tr style='border-bottom:1px solid #21262d'>"
+                                f"<td style='padding:5px 10px;font-weight:600;color:{REGIME_COLORS.get(_r.regime, '#8b949e')}'>{_r.regime}</td>"
+                                f"<td style='padding:5px 10px;text-align:right;color:#8b949e'>{int(_r.days):,}</td>"
+                                f"<td style='padding:5px 10px;text-align:right;color:#8b949e'>{_r.share:.0%}</td>"
+                                f"<td style='padding:5px 10px;text-align:right;color:#e6edf3'>€{_r.mean_rv:.2f}</td>"
+                                f"<td style='padding:5px 10px;text-align:right;color:#e6edf3'>€{_r.median_rv:.2f}</td>"
+                                f"<td style='padding:5px 10px;text-align:right;color:#8b949e'>€{_r.mean_price:.1f}</td>"
+                                "</tr>"
+                                for _r in _rv_tbl.itertuples()
+                            )
+                            st.markdown(
+                                "<table style='width:100%;border-collapse:collapse;font-size:0.85rem;margin-top:6px'>"
+                                "<thead><tr style='border-bottom:2px solid #30363d;color:#8b949e;text-align:left'>"
+                                "<th style='padding:6px 10px'>Regime</th>"
+                                "<th style='padding:6px 10px;text-align:right'>Days</th>"
+                                "<th style='padding:6px 10px;text-align:right'>Share</th>"
+                                f"<th style='padding:6px 10px;text-align:right'>Mean {_RV_WIN}d vol (EUR/MWh)</th>"
+                                f"<th style='padding:6px 10px;text-align:right'>Median {_RV_WIN}d vol (EUR/MWh)</th>"
+                                "<th style='padding:6px 10px;text-align:right'>Mean NO2 (EUR/MWh)</th>"
+                                f"</tr></thead><tbody>{_rv_rows}</tbody></table>",
+                                unsafe_allow_html=True,
+                            )
+
+                            # Commentary: computed from the overlay statistics
+                            _rv_top, _rv_bot = _rv_tbl.iloc[0], _rv_tbl.iloc[-1]
+                            if len(_rv_tbl) > 1:
+                                _rv_text = (
+                                    f"Across {_rv_stats['n_days']} trading days with a defined {_RV_WIN}-day "
+                                    f"realised volatility, the {_rv_top.regime} regime was the most volatile "
+                                    f"(mean €{_rv_top.mean_rv:.2f}/MWh, median €{_rv_top.median_rv:.2f}/MWh) and "
+                                    f"{_rv_bot.regime} the least (mean €{_rv_bot.mean_rv:.2f}/MWh). "
+                                )
+                            else:
+                                _rv_text = (
+                                    f"All {_rv_stats['n_days']} scored trading days fall in the {_rv_top.regime} "
+                                    f"regime (mean realised volatility €{_rv_top.mean_rv:.2f}/MWh). "
+                                )
+                            if _rv_n_tr == 0:
+                                _rv_text += "No regime transitions occur on the scored days."
+                            else:
+                                _rv_text += (
+                                    f"Of {_rv_n_tr} regime transitions, {_rv_stats['n_near']} "
+                                    f"({_rv_stats['observed_share']:.0%}) fell within ±{_RV_PROX} trading days of a "
+                                    f"volatility spike (realised volatility above its {ordinal(_RV_PCTL)} percentile, "
+                                    f"€{_rv_thr:.2f}/MWh), against a chance baseline of {_rv_stats['baseline_share']:.0%}. "
+                                )
+                                if np.isfinite(_rv_p) and _rv_p < 0.05:
+                                    _rv_text += (
+                                        f"The excess is statistically significant (circular-shift p = {_rv_p:.3f}): "
+                                        "regime changes tend to coincide with volatility shocks."
+                                    )
+                                elif _rv_stats["observed_share"] > _rv_stats["baseline_share"]:
+                                    _rv_text += (
+                                        "The excess over chance is not statistically significant "
+                                        f"(circular-shift p = {_rv_p:.3f})."
+                                    )
+                                else:
+                                    _rv_text += (
+                                        "Transitions are no closer to volatility spikes than chance would imply "
+                                        f"(circular-shift p = {_rv_p:.3f})."
+                                    )
+                            st.markdown(
+                                commentary(_rv_text, "warn" if (np.isfinite(_rv_p) and _rv_p < 0.05) else "ok"),
+                                unsafe_allow_html=True,
+                            )
+
+                            with st.expander("Volatility overlay: methodology", expanded=False):
+                                st.markdown(f"""
+                                **Realised volatility:** rolling sample standard deviation (ddof = 1) of daily NO2
+                                day-ahead price changes, P(t) minus P(t-1) in EUR/MWh, over the last {_RV_WIN}
+                                trading days (a full window is required). The feature matrix is indexed on TTF trading
+                                days, so a Monday change spans the weekend auctions.
+
+                                **Why absolute rather than log changes:** Nordic day-ahead prices can approach zero and
+                                occasionally turn negative, which makes log changes undefined or explosive (a move from
+                                €1 to €5/MWh is a 161% log change). The HMM itself measures volatility in EUR/MWh
+                                (5-day standard deviation of NO2), so the overlay is on the same scale. Absolute
+                                volatility scales with the price level, hence the mean NO2 price column in the table.
+                                A log-change variant with non-positive prices excluded is implemented in
+                                `models/regime_volatility.py` (method "log").
+
+                                **Spikes and transitions:** a spike is a day with realised volatility above its
+                                in-sample {ordinal(_RV_PCTL)} percentile (€{_rv_thr:.2f}/MWh; {_rv_stats['n_spike_days']} days).
+                                A transition is a day whose Viterbi-decoded regime differs from the previous day's.
+                                Only days with a defined volatility are scored.
+
+                                **Chance baseline:** the share of scored days lying within ±{_RV_PROX} trading days of
+                                at least one spike day, i.e. the probability that a transition placed on a random scored
+                                day would count as near a spike. Lift = observed share divided by baseline.
+
+                                **Significance:** exact one-sided circular-shift test. The transition sequence is shifted
+                                cyclically against the fixed spike sequence by every lag of at least {2 * _RV_PROX + 1}
+                                days (shorter lags leave a transition inside its own neighbourhood), and
+                                p = (1 + shifts with at least the observed number of near-spike transitions) / (1 + shifts).
+                                Cyclic shifting preserves the clustering of both sequences.
+
+                                **Limitations:** the HMM observation vector includes a 5-day NO2 volatility z-score, so
+                                some association between regimes and volatility levels is built in; the transition test
+                                concerns timing. Viterbi decoding uses the full sample, so regime boundaries are smoothed
+                                with hindsight, and the spike threshold is in-sample. The statistics are descriptive and
+                                are not a trading signal.
+                                """)
+                    # ── end 3D: realised-volatility overlay ─────────────────────────────────
+
+            # ── 3D: explicit notice when the trained HMM cannot be applied ──────
+            if not _reg:
+                st.caption(
+                    "Regime classification unavailable: the saved HMM could not be loaded (for example a "
+                    "Git LFS pointer in place of the weights file) or the feature matrix lacks a trained "
+                    f"feature ({', '.join(_hm.get('feature_cols', [])) or 'n/a'}). The realised-volatility "
+                    "overlay appears once a regime history can be decoded."
+                )
+            # ── end 3D notice ───────────────────────────────────────────────────
 
             # Regime statistics
             if _hm.get("state_pcts"):
@@ -532,10 +784,10 @@ else:
     scored = sent["scored"]
 
     C = {
-        "bg": "#0d1117", "panel_bg": "#161b22",
-        "grid": "rgba(255,255,255,0.06)", "text": "#c9d1d9",
+        "bg": CHART["bg"], "panel_bg": CHART["panel_bg"],
+        "grid": CHART["grid"], "text": CHART["text"],
         "pos": "#3fb950", "neg": "#f85149",
-        "ma":  "#58a6ff", "zero": "rgba(255,255,255,0.2)",
+        "ma":  "#58a6ff", "zero": CHART["zero"],
     }
 
     # KPI row
@@ -596,7 +848,7 @@ else:
         fig_s.add_hline(y=0, line_dash="solid", line_color=C["zero"], line_width=0.8)
         fig_s.update_layout(
             title=dict(text="Daily Energy News Sentiment (FinBERT, net = positive − negative)", font=dict(size=12)),
-            template="plotly_dark",
+            template=PLOTLY_TEMPLATE,
             paper_bgcolor=C["bg"], plot_bgcolor=C["panel_bg"],
             font=dict(color=C["text"], size=12),
             margin=dict(l=10, r=10, t=40, b=10),
@@ -606,7 +858,7 @@ else:
             hovermode="x unified",
             height=260,
         )
-        st.plotly_chart(fig_s, use_container_width=True)
+        st.plotly_chart(fig_s, width="stretch")
 
     # Granger causality (requires ≥21 days)
     if not daily.empty and not ttf["prices"].empty and len(daily) >= 21:
@@ -652,7 +904,7 @@ else:
             ].copy()
             display["net_sentiment"] = display["net_sentiment"].round(3)
             display.columns = ["Date", "Source", "Net sentiment", "Headline"]
-            st.dataframe(display.set_index("Date"), use_container_width=True)
+            st.dataframe(display.set_index("Date"), width="stretch")
 
     if sent["fetched_at"]:
         st.caption(f"Last updated: {sent['fetched_at'].strftime('%Y-%m-%d %H:%M UTC')} · "
@@ -681,12 +933,6 @@ with st.expander("Feature pipeline and ENTSO-E data status", expanded=True):
     to include wind and hydro when those sources return.
     """)
 
-st.divider()
-st.markdown(
-    """<div style="color:#484f58;font-size:0.72rem;line-height:1.8;">
-    Built by Tobias Gudbjerg &nbsp;|&nbsp;
-    Frameworks: PyTorch &nbsp;·&nbsp; hmmlearn &nbsp;·&nbsp; Hugging Face Transformers (FinBERT)<br>
-    For informational purposes only. Not financial advice.
-    </div>""",
-    unsafe_allow_html=True,
-)
+page_footer([
+    ("Frameworks", "PyTorch · hmmlearn · Hugging Face Transformers (FinBERT)"),
+])

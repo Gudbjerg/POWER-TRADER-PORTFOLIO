@@ -29,6 +29,13 @@ BIDDING_ZONES = {
     "NO":  "10YNO-0--------C",
 }
 
+# ── ENTSO-E request policy ──────────────────────────────────────────────────
+# entsoe-py waits indefinitely by default. The Transparency Platform occasionally
+# accepts a connection and then never answers, which froze whole pages. Every
+# client is created with this read timeout (seconds) so a stalled request fails
+# and the panel degrades like any other unavailable source.
+ENTSOE_TIMEOUT_S = 30
+
 # ── Alert thresholds ────────────────────────────────────────────────────────
 TTF_SPIKE_PCT        = 10.0   # % single-day move flagged as spike
 SPREAD_WARN_EUR      = 25.0   # Nordic–Continental spread (EUR/MWh) to warn
@@ -111,3 +118,51 @@ LNG_COUNTRIES = {
     "GB": "Great Britain (S. Hook/Dragon)",
     "FR": "France (Dunkirk/Montoir)",
 }
+
+# ── FI minus IT-North spread (roadmap 3A, Layer 1 Prices tab) ────────────────
+IT_NORTH_EIC                 = "10Y1001A1001A73I"   # ENTSO-E EIC for the IT-North bidding zone
+FI_IT_HISTORY_DAYS           = 365    # delivery days of history requested for FI and IT-North
+FI_IT_AVG_WINDOW_DAYS        = 30     # trailing calendar-day window for the average-spread KPI
+FI_IT_Z_WINDOW_DAYS          = 365    # trailing calendar-day window for the spread z-score
+FI_IT_Z_MIN_OBS              = 60     # minimum daily observations before a z-score is reported
+FI_IT_MIN_DAY_COVERAGE       = 0.90   # minimum share of a delivery day's intervals for a valid daily mean
+ENERGY_CHARTS_MAX_CHUNK_DAYS = 90     # maximum delivery days per energy-charts.info request
+# ── end FI minus IT-North spread ─────────────────────────────────────────────
+
+# ── TTF vs JKM inter-basin LNG spread (roadmap 3B) ───────────────────────────
+LNG_HISTORY_DAYS      = 1125   # calendar days of TTF, JKM and EURUSD history (about 3 years)
+LNG_AVG_WINDOW_DAYS   = 30     # trailing calendar-day window for the average-spread KPI
+LNG_PCTL_WINDOW_DAYS  = 365    # trailing calendar-day window for the rolling percentile
+LNG_PCTL_MIN_OBS      = 120    # minimum settlements in the window before a percentile is reported
+LNG_FX_MAX_AGE_DAYS   = 3      # maximum age (calendar days) of the EURUSD close used for conversion
+# ── end TTF vs JKM ───────────────────────────────────────────────────────────
+
+# ── HMM regime volatility overlay (roadmap 3D, Layer 4) ──────────────────────
+REGIME_VOL_WINDOW         = 30     # trading days in the rolling realised-volatility window
+REGIME_VOL_SPIKE_PCTL     = 90.0   # in-sample percentile of realised volatility defining a spike
+REGIME_VOL_PROXIMITY_DAYS = 5      # +/- trading days around a regime transition
+REGIME_VOL_MIN_DAYS       = 60     # minimum aligned days before overlay statistics are reported
+# ── end HMM regime volatility overlay ────────────────────────────────────────
+
+# ── Rolling cointegration stability (deferred item D2_alt, Layer 2 scanner) ──
+COINT_ROLL_WINDOW    = 180    # observations (trading days) per rolling Engle-Granger window
+COINT_ROLL_STEP      = 21     # trading days between consecutive window end dates
+COINT_ROLL_ALPHA     = 0.05   # significance level for a cointegrated window
+COINT_STABLE_SHARE   = 0.75   # share of cointegrated windows labelled "Persistent"
+COINT_EPISODIC_SHARE = 0.25   # share labelled "Episodic" (below it "Rare", zero "Absent")
+# ── end rolling cointegration stability ──────────────────────────────────────
+
+# ── Energy Globe (3D infrastructure page) ─────────────────────────────────────
+# Live LNG terminal figures come from GIE ALSI, one request per facility in operation.
+# GIE allows 60 requests per minute per address and can ban repeat violators, so the
+# globe paces its own requests and caches a full pass for three hours (ALSI publishes
+# one figure per gas day).
+GLOBE_ALSI_TTL_S          = 3 * 60 * 60   # cache lifetime of one full ALSI pass (seconds)
+GLOBE_ALSI_TIMEOUT_S      = 20            # read timeout per ALSI request (seconds)
+GLOBE_ALSI_SPACING_S      = 0.25          # minimum gap between two ALSI request starts (seconds)
+GLOBE_ALSI_PER_MINUTE     = 50            # rolling per-minute request budget (GIE limit: 60)
+GLOBE_ALSI_WORKERS        = 4             # facility requests in flight at once
+GLOBE_ALSI_DEADLINE_S     = 75            # wall-clock budget for one full pass (seconds)
+GLOBE_ALSI_MIN_SHARE      = 0.5           # minimum share of facilities with data for a pass to count
+GLOBE_HEIGHT_PX           = 660           # height of the embedded globe (CSS pixels)
+# ── end Energy Globe ──────────────────────────────────────────────────────────

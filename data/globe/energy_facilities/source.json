@@ -1,0 +1,677 @@
+{
+  "id": "local-energy-facilities",
+  "name": "Energy Facilities",
+  "output": "facilities.geojsonl",
+  "output_sha256": "55533393f049a83e1d045082d789547e1b493cdfe92c3a0786ea5284ea064455",
+  "feature_count": 162,
+  "counts_by_category": {
+    "lng_import": 38,
+    "offshore_platform": 94,
+    "offshore_storage": 5,
+    "offshore_wind": 11,
+    "onshore": 14
+  },
+  "approximate_locations": [
+    "Alexandroupolis LNG Terminal",
+    "Brunsbuettel LNG Terminal 1",
+    "EemsEnergy LNG Terminal",
+    "Gulf of Saros FSRU",
+    "Hamina LNG Terminal",
+    "Inkoo LNG Terminal",
+    "Krk LNG Terminal",
+    "Mukran LNG Terminal",
+    "OLT Offshore LNG",
+    "Piombino LNG Terminal",
+    "Ravenna LNG Terminal",
+    "Wilhelmshaven LNG Terminal 1"
+  ],
+  "inputs": [
+    {
+      "key": "sodir-page-00",
+      "url": "https://factmaps.sodir.no/api/rest/services/Factmaps/FactMapsWGS84/MapServer/307/query?where=1%3D1&outFields=%2A&returnGeometry=true&outSR=4326&orderByFields=fclNpdidFacility&resultOffset=0&resultRecordCount=1000&f=geojson",
+      "retrieved_at": "2026-10-10T13:18:21+00:00",
+      "bytes": 1324450,
+      "sha256": "adb74def586812461f2ac36be1e12b2fa514060c7b1f4e49be7d5a7c429f6fc5",
+      "features": 1000
+    },
+    {
+      "key": "sodir-page-01",
+      "url": "https://factmaps.sodir.no/api/rest/services/Factmaps/FactMapsWGS84/MapServer/307/query?where=1%3D1&outFields=%2A&returnGeometry=true&outSR=4326&orderByFields=fclNpdidFacility&resultOffset=1000&resultRecordCount=1000&f=geojson",
+      "retrieved_at": "2026-10-10T13:18:21+00:00",
+      "bytes": 298440,
+      "sha256": "fc50f3137258c0876dd57b6dd7a36140010a8c0bc37aceeebbd3320a5ea65b5b",
+      "features": 229
+    },
+    {
+      "key": "gem",
+      "url": "https://data.pypsa.org/workflows/eur/gem_europe_gas_tracker/may-2024/Europe-Gas-Tracker-2024-05.xlsx",
+      "original_url": "https://globalenergymonitor.org/wp-content/uploads/2024/05/Europe-Gas-Tracker-2024-05.xlsx",
+      "retrieved_at": "2026-10-10T13:18:21+00:00",
+      "bytes": 1765290,
+      "sha256": "7ea7f3e96a2fce9b7c343220b6a007b8049e8ba3fdccbf7b8394461f29bec46e"
+    },
+    {
+      "key": "alsi",
+      "url": "https://alsi.gie.eu/api/about?show=listing",
+      "retrieved_at": "2026-10-10T13:18:21+00:00",
+      "bytes": 19243,
+      "sha256": "f373a2ec95985b8fed5b3e45a4275919340dcf15d4b1f4cb59f460e171b43d47"
+    }
+  ],
+  "licences": {
+    "Sodir FactMaps": "Norwegian Licence for Open Government Data (NLOD), https://data.norge.no/nlod/en",
+    "GEM GGIT": "CC BY 4.0. Global Energy Monitor, Global Gas Infrastructure Tracker, LNG Terminals, October 2023 release (Europe Gas Tracker 2024-05).",
+    "GIE ALSI": "Operational dates only, used to decide current operating status; source referral GIE ALSI."
+  },
+  "rules": {
+    "sodir": "FIXED surface facilities in phase IN SERVICE or INSTALLATION; onshore only in mainland Norway; virtual trading points excluded.",
+    "lng": "GEM import terminals in the European gas market; operating per ALSI where ALSI reports the terminal, otherwise per GEM with >= 1 bcm/y operating capacity.",
+    "colocated_radius_m": {
+      "onshore": 25.0,
+      "offshore": 10.0,
+      "lng": 25.0
+    }
+  },
+  "exclusions": [
+    {
+      "id": "gem-T1077",
+      "name": "Lubmin FSRU",
+      "reason": "Ceased operation per GIE ALSI (2024-05-05)"
+    },
+    {
+      "id": "gem-T1008",
+      "name": "Le Havre FSRU",
+      "reason": "Ceased operation per GIE ALSI (2026-01-22)"
+    },
+    {
+      "id": "sodir-364234",
+      "name": "EKOFISK M-BS",
+      "reason": "Co-located with EKOFISK M; merged into that marker"
+    },
+    {
+      "id": "sodir-440883",
+      "name": "KOLLSNES NÆRINGSPARK",
+      "reason": "Co-located with KOLLSNES; merged into that marker"
+    },
+    {
+      "id": "sodir-416822",
+      "name": "NATURGASS VEST",
+      "reason": "Co-located with KOLLSNES; merged into that marker"
+    },
+    {
+      "id": "sodir-416765",
+      "name": "KLAB",
+      "reason": "Co-located with KÅRSTØ; merged into that marker"
+    },
+    {
+      "id": "sodir-377181",
+      "name": "NATURKRAFT",
+      "reason": "Co-located with KÅRSTØ; merged into that marker"
+    },
+    {
+      "id": "sodir-417051",
+      "name": "ROGASS",
+      "reason": "Co-located with KÅRSTØ; merged into that marker"
+    },
+    {
+      "id": "sodir-287737",
+      "name": "NJORD STL",
+      "reason": "Co-located with NJORD BRAVO; merged into that marker"
+    },
+    {
+      "id": "sodir-441041",
+      "name": "NYHAMNA RESERVEKRAFTVERK",
+      "reason": "Co-located with NYHAMNA; merged into that marker"
+    },
+    {
+      "id": "sodir-278385",
+      "name": "VALHALL WP",
+      "reason": "Co-located with VALHALL IP; merged into that marker"
+    },
+    {
+      "id": "gem-T1097",
+      "name": "Wilhelmshaven LNG Terminal 2",
+      "reason": "Co-located with Wilhelmshaven LNG Terminal 1; merged into that marker"
+    },
+    {
+      "id": "sodir-412931",
+      "name": "HARALD A",
+      "reason": "No coordinates published by Sodir"
+    },
+    {
+      "id": "sodir-730319",
+      "name": "HAUGSNESET",
+      "reason": "No coordinates published by Sodir"
+    },
+    {
+      "id": "sodir-446925",
+      "name": "NBP",
+      "reason": "No coordinates published by Sodir"
+    },
+    {
+      "id": "sodir-784539",
+      "name": "STRAUM TRAFOSTASJON",
+      "reason": "No coordinates published by Sodir"
+    },
+    {
+      "id": "sodir-788150",
+      "name": "ÅRSKOG",
+      "reason": "No coordinates published by Sodir"
+    },
+    {
+      "id": "sodir-762250",
+      "name": "ØYGARDEN ENERGIPARK",
+      "reason": "No coordinates published by Sodir"
+    },
+    {
+      "id": "gem-T1086",
+      "name": "Stade FSRU",
+      "reason": "Not in operation per GIE ALSI"
+    },
+    {
+      "id": "gem-T0730",
+      "name": "Fredrikstad LNG Terminal",
+      "reason": "Small-scale terminal outside ALSI (0.14 bcm/y < 1)"
+    },
+    {
+      "id": "gem-T0440",
+      "name": "Pori LNG Terminal",
+      "reason": "Small-scale terminal outside ALSI (0.14 bcm/y < 1)"
+    },
+    {
+      "id": "gem-T0724",
+      "name": "HIGAS LNG Terminal",
+      "reason": "Small-scale terminal outside ALSI (0.27 bcm/y < 1)"
+    },
+    {
+      "id": "gem-T0687",
+      "name": "Lysekil LNG Terminal",
+      "reason": "Small-scale terminal outside ALSI (0.27 bcm/y < 1)"
+    },
+    {
+      "id": "gem-T1133",
+      "name": "Mowi LNG Terminal",
+      "reason": "Small-scale terminal outside ALSI (0.27 bcm/y < 1)"
+    },
+    {
+      "id": "gem-T0539",
+      "name": "Brunnsviksholme LNG Terminal",
+      "reason": "Small-scale terminal outside ALSI (0.54 bcm/y < 1)"
+    },
+    {
+      "id": "gem-T0733",
+      "name": "Mosjoen LNG Terminal",
+      "reason": "Small-scale terminal outside ALSI (0.54 bcm/y < 1)"
+    },
+    {
+      "id": "gem-T0444",
+      "name": "Tornio Manga LNG Terminal",
+      "reason": "Small-scale terminal outside ALSI (0.54 bcm/y < 1)"
+    },
+    {
+      "id": "gem-T0490",
+      "name": "Delimara FSRU",
+      "reason": "Small-scale terminal outside ALSI (0.68 bcm/y < 1)"
+    },
+    {
+      "id": "gem-T0683",
+      "name": "Ravenna LNG Terminal",
+      "reason": "Small-scale terminal outside ALSI (0.95 bcm/y < 1)"
+    },
+    {
+      "id": "sodir-416880",
+      "name": "NCG",
+      "reason": "Virtual trading point, not a physical site"
+    }
+  ],
+  "deferred_onshore_outside_norway": [
+    {
+      "id": "sodir-416994",
+      "name": "OBERKAPPEL",
+      "nation": "Austria",
+      "lat": 48.582297,
+      "lon": 13.768722,
+      "note": "Delivery point outside Norway; coordinates not verified"
+    },
+    {
+      "id": "sodir-416127",
+      "name": "BLAREGNIES",
+      "nation": "Belgium",
+      "lat": 50.355537,
+      "lon": 3.893171,
+      "note": "Delivery point outside Norway; coordinates not verified"
+    },
+    {
+      "id": "sodir-286281",
+      "name": "ZEEBRUGGE",
+      "nation": "Belgium",
+      "lat": 51.339448,
+      "lon": 3.176184,
+      "note": "Delivery point outside Norway; coordinates not verified"
+    },
+    {
+      "id": "sodir-286337",
+      "name": "ZEEPIPE TERMINAL",
+      "nation": "Belgium",
+      "lat": 51.339448,
+      "lon": 3.176462,
+      "note": "Delivery point outside Norway; coordinates not verified"
+    },
+    {
+      "id": "sodir-416595",
+      "name": "FREDERICIA",
+      "nation": "Denmark",
+      "lat": 55.575369,
+      "lon": 9.779271,
+      "note": "Delivery point outside Norway; coordinates not verified"
+    },
+    {
+      "id": "sodir-712365",
+      "name": "KALUNDBORG",
+      "nation": "Denmark",
+      "lat": 55.663404,
+      "lon": 11.094107,
+      "note": "Delivery point outside Norway; coordinates not verified"
+    },
+    {
+      "id": "sodir-416937",
+      "name": "NYBRO",
+      "nation": "Denmark",
+      "lat": 55.605287,
+      "lon": 8.212123,
+      "note": "Delivery point outside Norway; coordinates not verified"
+    },
+    {
+      "id": "sodir-286757",
+      "name": "DUNKERQUE",
+      "nation": "France",
+      "lat": 51.043593,
+      "lon": 2.460617,
+      "note": "Delivery point outside Norway; coordinates not verified"
+    },
+    {
+      "id": "sodir-416479",
+      "name": "DORNUM",
+      "nation": "Germany",
+      "lat": 53.647175,
+      "lon": 7.325992,
+      "note": "Delivery point outside Norway; coordinates not verified"
+    },
+    {
+      "id": "sodir-286141",
+      "name": "EMDEN",
+      "nation": "Germany",
+      "lat": 53.37622,
+      "lon": 7.217614,
+      "note": "Delivery point outside Norway; coordinates not verified"
+    },
+    {
+      "id": "sodir-416537",
+      "name": "EUROPIPE",
+      "nation": "Germany",
+      "lat": 53.668349,
+      "lon": 7.436503,
+      "note": "Source seconds field exceeds 60 (39'68.61\"); decimal value used by FactMaps is unverified"
+    },
+    {
+      "id": "sodir-416421",
+      "name": "DEN HELDER",
+      "nation": "Netherlands",
+      "lat": 52.952566,
+      "lon": 4.732004,
+      "note": "Delivery point outside Norway; coordinates not verified"
+    },
+    {
+      "id": "sodir-286113",
+      "name": "TEESSIDE",
+      "nation": "Norway",
+      "lat": 54.625057,
+      "lon": -1.297082,
+      "note": "Delivery point outside Norway; coordinates not verified"
+    },
+    {
+      "id": "sodir-449005",
+      "name": "GDANSK",
+      "nation": "Poland",
+      "lat": 54.348582,
+      "lon": 18.657364,
+      "note": "Delivery point outside Norway; coordinates not verified"
+    },
+    {
+      "id": "sodir-789353",
+      "name": "Niechorze-Pogorzelica, Polen",
+      "nation": "Poland",
+      "lat": 54.099933,
+      "lon": 15.080595,
+      "note": "Delivery point outside Norway; coordinates not verified"
+    },
+    {
+      "id": "sodir-416247",
+      "name": "COL DE LARRAU",
+      "nation": "Spain",
+      "lat": 43.015595,
+      "lon": 0.932157,
+      "note": "Longitude sign appears inverted (0.93 E; the Col de Larrau border point is near 0.95 W)"
+    },
+    {
+      "id": "sodir-403588",
+      "name": "BRAEFOOT BAY",
+      "nation": "United Kingdom",
+      "lat": 56.487932,
+      "lon": -2.762017,
+      "note": "Delivery point outside Norway; coordinates not verified"
+    },
+    {
+      "id": "sodir-416189",
+      "name": "CATS",
+      "nation": "United Kingdom",
+      "lat": 54.625054,
+      "lon": -1.353072,
+      "note": "Delivery point outside Norway; coordinates not verified"
+    },
+    {
+      "id": "sodir-416305",
+      "name": "CRUDEN BAY",
+      "nation": "United Kingdom",
+      "lat": 57.396257,
+      "lon": -1.846651,
+      "note": "Delivery point outside Norway; coordinates not verified"
+    },
+    {
+      "id": "sodir-416363",
+      "name": "DALMENY",
+      "nation": "United Kingdom",
+      "lat": 57.395754,
+      "lon": -1.847203,
+      "note": "Coordinates fall within 70 m of CRUDEN BAY; the Dalmeny terminal lies on the Firth of Forth"
+    },
+    {
+      "id": "sodir-369424",
+      "name": "EASINGTON",
+      "nation": "United Kingdom",
+      "lat": 53.640876,
+      "lon": 0.154098,
+      "note": "Delivery point outside Norway; coordinates not verified"
+    },
+    {
+      "id": "sodir-416651",
+      "name": "HOUND POINT",
+      "nation": "United Kingdom",
+      "lat": 56.235582,
+      "lon": -3.387808,
+      "note": "Delivery point outside Norway; coordinates not verified"
+    },
+    {
+      "id": "sodir-416708",
+      "name": "KINNEIL",
+      "nation": "United Kingdom",
+      "lat": 56.028408,
+      "lon": -3.65997,
+      "note": "Delivery point outside Norway; coordinates not verified"
+    },
+    {
+      "id": "sodir-286225",
+      "name": "ST.FERGUS",
+      "nation": "United Kingdom",
+      "lat": 57.552648,
+      "lon": -1.851658,
+      "note": "Delivery point outside Norway; coordinates not verified"
+    },
+    {
+      "id": "sodir-417165",
+      "name": "SULLOM VOE",
+      "nation": "United Kingdom",
+      "lat": 60.432282,
+      "lon": -1.278446,
+      "note": "Delivery point outside Norway; coordinates not verified"
+    }
+  ],
+  "alsi_crosswalk": [
+    {
+      "eic": "16WTGNL01------O",
+      "alsi_name": "Sines LNG Terminal",
+      "gem": "T0500",
+      "note": null
+    },
+    {
+      "eic": "18W000000000GVMT",
+      "alsi_name": "TVB (Virtual balancing LNG tank)",
+      "gem": null,
+      "note": "Virtual balancing tank, not a physical terminal"
+    },
+    {
+      "eic": "21W0000000000079",
+      "alsi_name": "Rotterdam Gate Terminal",
+      "gem": "T0492",
+      "note": null
+    },
+    {
+      "eic": "21W0000000000338",
+      "alsi_name": "Mugardos LNG Terminal",
+      "gem": "T0534",
+      "note": null
+    },
+    {
+      "eic": "21W0000000000346",
+      "alsi_name": "El Musel LNG Terminal",
+      "gem": "T0528",
+      "note": null
+    },
+    {
+      "eic": "21W0000000000354",
+      "alsi_name": "Sagunto LNG Terminal",
+      "gem": "T0536",
+      "note": null
+    },
+    {
+      "eic": "21W0000000000362",
+      "alsi_name": "Bilbao LNG Terminal",
+      "gem": "T0524",
+      "note": null
+    },
+    {
+      "eic": "21W0000000000370",
+      "alsi_name": "Huelva LNG Terminal",
+      "gem": "T0532",
+      "note": null
+    },
+    {
+      "eic": "21W000000000038Z",
+      "alsi_name": "Cartagena LNG Terminal",
+      "gem": "T0526",
+      "note": null
+    },
+    {
+      "eic": "21W000000000039X",
+      "alsi_name": "Barcelona LNG Terminal",
+      "gem": "T0522",
+      "note": null
+    },
+    {
+      "eic": "21W000000000040B",
+      "alsi_name": "Revythoussa LNG Terminal",
+      "gem": "T0462",
+      "note": null
+    },
+    {
+      "eic": "21W0000000000419",
+      "alsi_name": "South Hook LNG Terminal (Post-Brexit)",
+      "gem": null,
+      "note": "UK terminals stopped reporting to ALSI after Brexit; GEM status is used instead"
+    },
+    {
+      "eic": "21W0000000000419",
+      "alsi_name": "South Hook LNG Terminal",
+      "gem": null,
+      "note": "UK terminals stopped reporting to ALSI after Brexit; GEM status is used instead"
+    },
+    {
+      "eic": "21W0000000000443",
+      "alsi_name": "OLT Offshore LNG (FSRU Toscana)",
+      "gem": "T0474",
+      "note": null
+    },
+    {
+      "eic": "21W0000000000451",
+      "alsi_name": "Dunkerque LNG Terminal",
+      "gem": "T0446",
+      "note": null
+    },
+    {
+      "eic": "21W000000000082W",
+      "alsi_name": "Rovigo LNG Terminal",
+      "gem": "T0466",
+      "note": null
+    },
+    {
+      "eic": "21W000000000096L",
+      "alsi_name": "Świnoujście LNG Terminal",
+      "gem": "T0498",
+      "note": null
+    },
+    {
+      "eic": "21W000000000099F",
+      "alsi_name": "Isle of Grain LNG Terminal (Post-Brexit)",
+      "gem": null,
+      "note": "UK terminals stopped reporting to ALSI after Brexit; GEM status is used instead"
+    },
+    {
+      "eic": "21W000000000099F",
+      "alsi_name": "Isle of Grain LNG Terminal",
+      "gem": null,
+      "note": "UK terminals stopped reporting to ALSI after Brexit; GEM status is used instead"
+    },
+    {
+      "eic": "21W0000000001245",
+      "alsi_name": "Zeebrugge LNG Terminal",
+      "gem": "T0426",
+      "note": null
+    },
+    {
+      "eic": "21W0000000001253",
+      "alsi_name": "Klaipėda LNG Terminal (FSRU Independence)",
+      "gem": "T0488",
+      "note": null
+    },
+    {
+      "eic": "21W000000000129W",
+      "alsi_name": "Wilhelmshaven LNG Terminal 1 (FSRU Hoegh Esperanza)",
+      "gem": "T0458",
+      "note": null
+    },
+    {
+      "eic": "21W000000000130A",
+      "alsi_name": "Inkoo LNG Terminal (FSRU Exemplar)",
+      "gem": "T1064",
+      "note": null
+    },
+    {
+      "eic": "21W0000000001318",
+      "alsi_name": "Alexandroupolis LNG Terminal (FSRU Alexandroupolis)",
+      "gem": "T0681",
+      "note": null
+    },
+    {
+      "eic": "31W-0000-G-000-Z",
+      "alsi_name": "Krk LNG Terminal (FSRU LNG CROATIA)",
+      "gem": "T0430",
+      "note": null
+    },
+    {
+      "eic": "37W000000000106C",
+      "alsi_name": "Ostsee LNG Terminal / Lubmin (FSRU Neptune)",
+      "gem": "T1077",
+      "note": null
+    },
+    {
+      "eic": "37W000000000107A",
+      "alsi_name": "Brunsbuettel LNG Terminal 1 (FSRU Hoegh Gannet)",
+      "gem": "T0460",
+      "note": null
+    },
+    {
+      "eic": "37W000000000110L",
+      "alsi_name": "Stade LNG Terminal 1 (FSRU Energos Force)",
+      "gem": "T1086",
+      "note": null
+    },
+    {
+      "eic": "37W000000000111J",
+      "alsi_name": "Wilhelmshaven LNG Terminal 2 (FSRU Excelerate Excelsior)",
+      "gem": "T1097",
+      "note": null
+    },
+    {
+      "eic": "37W000000000114D",
+      "alsi_name": "Mukran LNG Terminal (FSRU Neptune / FSRU Energos Power)",
+      "gem": "T1141",
+      "note": null
+    },
+    {
+      "eic": "52W000000000001W",
+      "alsi_name": "EemsEnergy LNG Terminal (FSRU Eemshaven LNG)",
+      "gem": "T0997",
+      "note": null
+    },
+    {
+      "eic": "59W0000000000011",
+      "alsi_name": "Panigaglia LNG Terminal (Historical data prior to 1 March 2025)",
+      "gem": "T0476",
+      "note": null
+    },
+    {
+      "eic": "59W0000000000011",
+      "alsi_name": "Panigaglia LNG Terminal",
+      "gem": "T0476",
+      "note": null
+    },
+    {
+      "eic": "59WBWSINGAPORERX",
+      "alsi_name": "Ravenna LNG Terminal (FSRU BW Singapore)",
+      "gem": "T1095",
+      "note": null
+    },
+    {
+      "eic": "59WFSRUGOLARTUNH",
+      "alsi_name": "Piombino LNG Terminal (FSRU Golar Tundra)",
+      "gem": "T1096",
+      "note": null
+    },
+    {
+      "eic": "63W179356656691A",
+      "alsi_name": "Fos Tonkin LNG Terminal",
+      "gem": "T0452",
+      "note": null
+    },
+    {
+      "eic": "63W631527814486R",
+      "alsi_name": "Montoir de Bretagne LNG Terminal",
+      "gem": "T0456",
+      "note": null
+    },
+    {
+      "eic": "63W835858561887S",
+      "alsi_name": "Le Havre LNG Terminal (FSRU Cape Ann)",
+      "gem": "T1008",
+      "note": null
+    },
+    {
+      "eic": "63W943693783886F",
+      "alsi_name": "Fos Cavaou LNG Terminal",
+      "gem": "T0448",
+      "note": null
+    },
+    {
+      "eic": "66W000000000001U",
+      "alsi_name": "Hamina LNG Terminal",
+      "gem": "T0438",
+      "note": null
+    },
+    {
+      "eic": "PRIOR_MUSEL_0001",
+      "alsi_name": "El Musel LNG Terminal (Prior to 29/09/2023)",
+      "gem": "T0528",
+      "note": null
+    }
+  ]
+}
