@@ -103,7 +103,7 @@ Platform at outreach cut: 5 pages · 14 Layer 2 tabs · 4 Layer 3 tabs · Mispri
 
 ## Shipped features
 
-Everything confirmed live on HuggingFace Space and `origin/main`, with these exceptions: rows labelled **Q4** and **v2** were merged into `origin/main` on 2026-10-11 from branch `feat/platform-v2` (the HF Space follows with the next close-of-session deploy), and the D4 and Phase E rows were moved here from the deferred table because both pages are on `origin/main` (their live status on the Space was not re-checked).
+Everything confirmed live on HuggingFace Space and `origin/main`, with these exceptions: rows labelled **Q4** and **v2** were merged into `origin/main` from branch `feat/platform-v2` and deployed to the HF Space on 2026-10-11, and the D4 and Phase E rows were moved here from the deferred table because both pages are on `origin/main` (their live status on the Space was not re-checked).
 
 | Phase / Item | Layer | Description |
 |---|---|---|
