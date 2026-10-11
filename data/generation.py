@@ -5,8 +5,18 @@ German power generation by fuel type via ENTSO-E A75
 Returns quarterly hard coal and lignite generation in TWh from 2019,
 plus a 90-day daily series for the recent trend chart.
 
-Disk cache: data/generation_cache.csv — persists across app restarts.
-Only fetches quarters not already in the cache on subsequent calls.
+ENTSO-E reports this series as average power (MW) over each 15-minute interval. Energy is
+the hourly mean power summed over the hours of each UTC day, so the GWh and TWh figures are
+energy whatever the reporting resolution.
+
+Disk cache: generation_cache_v2.csv, one row per UTC day, kept in DATA_PERSIST_DIR when
+that is set and next to this module otherwise. Later calls fetch only the days after the
+last cached day, with a seven-day overlap that picks up late revisions. When the cache is
+missing, the copy bundled next to this module is used as the starting point; the
+deployment branch ships one, so a fresh server does not have to fetch the history from
+2019 before the Live Monitor can render. Version 1 of the cache (generation_cache.csv)
+summed the 15-minute readings as if they were hourly energy, which overstated every figure
+fourfold; it is no longer read.
 """
 from __future__ import annotations
 
@@ -26,9 +36,14 @@ except ImportError:
 
 DE_EIC     = "10Y1001A1001A83F"
 START_YEAR = 2019
-_PERSIST_DIR = os.getenv("DATA_PERSIST_DIR", os.path.dirname(os.path.abspath(__file__)))
-_CACHE_CSV   = os.path.join(_PERSIST_DIR, "generation_cache.csv")
+_BUNDLED_DIR = os.path.dirname(os.path.abspath(__file__))
+_PERSIST_DIR = os.getenv("DATA_PERSIST_DIR", _BUNDLED_DIR)
+_CACHE_NAME  = "generation_cache_v2.csv"
+_CACHE_CSV   = os.path.join(_PERSIST_DIR, _CACHE_NAME)
+_SEED_CSV    = os.path.join(_BUNDLED_DIR, _CACHE_NAME)   # copy shipped with a deployment
+_CACHE_COLUMNS = ["date", "hard_coal_gwh", "lignite_gwh"]
 _CHUNK_TIMEOUT = 90   # seconds per quarterly ENTSO-E chunk before giving up
+_MIN_HOURS_PER_DAY = 23   # hourly readings needed before a day counts as published
 
 HARD_COAL_NAMES = {"Fossil Hard coal", "Hard coal"}
 LIGNITE_NAMES   = {"Fossil Brown coal/Lignite", "Brown coal/Lignite", "Lignite"}
@@ -82,12 +97,16 @@ def _fetch_chunk_with_timeout(client, chunk_start, chunk_end) -> pd.DataFrame | 
 
 
 def _load_cache() -> pd.DataFrame:
-    try:
-        if os.path.exists(_CACHE_CSV):
-            df = pd.read_csv(_CACHE_CSV, parse_dates=["date"])
-            return df
-    except Exception:
-        pass
+    """Read the disk cache, or the bundled copy when the disk cache does not exist yet."""
+    for path in dict.fromkeys((_CACHE_CSV, _SEED_CSV)):
+        try:
+            if not os.path.exists(path):
+                continue
+            df = pd.read_csv(path, parse_dates=["date"])
+            if not df.empty and set(_CACHE_COLUMNS) <= set(df.columns):
+                return df[_CACHE_COLUMNS]
+        except Exception:
+            continue
     return pd.DataFrame()
 
 
@@ -101,8 +120,34 @@ def _save_cache(df: pd.DataFrame) -> None:
         pass
 
 
+def _daily_energy_gwh(power_mw: pd.DataFrame) -> pd.DataFrame:
+    """Turn power readings in MW into energy per UTC day in GWh.
+
+    ``power_mw`` has a tz-aware index and the columns ``hard_coal_mw`` and ``lignite_mw``.
+    Each reading is the average power over its interval, so averaging to hourly power and
+    summing the hours gives energy at any resolution; summing 15-minute readings directly
+    would count every hour four times. Days with fewer than ``_MIN_HOURS_PER_DAY`` hourly
+    readings (typically the current day) are left out, so they are fetched again later
+    instead of being stored as low output.
+    """
+    if power_mw.empty:
+        return pd.DataFrame(columns=_CACHE_COLUMNS)
+    power = power_mw.copy()
+    power.index = power.index.tz_convert("UTC")
+    hourly = power.resample("h").mean()
+    hours_reported = hourly.notna().any(axis=1).resample("D").sum()
+    daily = hourly.resample("D").sum(min_count=1) / 1_000
+    daily = daily[hours_reported.reindex(daily.index, fill_value=0) >= _MIN_HOURS_PER_DAY]
+    daily = daily.fillna(0.0).round(2)
+    return pd.DataFrame({
+        "date":          daily.index.tz_localize(None),
+        "hard_coal_gwh": daily["hard_coal_mw"].to_numpy(),
+        "lignite_gwh":   daily["lignite_mw"].to_numpy(),
+    })
+
+
 def _build_hourly_from_entsoe(client, fetch_from: pd.Timestamp, fetch_to: pd.Timestamp) -> pd.DataFrame:
-    """Fetch hourly coal generation from ENTSO-E in annual chunks."""
+    """Fetch coal generation from ENTSO-E in quarterly chunks; return daily energy in GWh."""
     rows: list[pd.DataFrame] = []
     chunk_start = fetch_from
     while chunk_start < fetch_to:
@@ -111,8 +156,8 @@ def _build_hourly_from_entsoe(client, fetch_from: pd.Timestamp, fetch_to: pd.Tim
         if raw is not None and not raw.empty:
             hard_coal, lignite = _extract_coal_columns(raw)
             chunk_df = pd.DataFrame(index=raw.index)
-            chunk_df["hard_coal_mwh"] = hard_coal if hard_coal is not None else 0.0
-            chunk_df["lignite_mwh"]   = lignite   if lignite   is not None else 0.0
+            chunk_df["hard_coal_mw"] = hard_coal if hard_coal is not None else 0.0
+            chunk_df["lignite_mw"]   = lignite   if lignite   is not None else 0.0
             rows.append(chunk_df)
         chunk_start = chunk_end
 
@@ -121,23 +166,15 @@ def _build_hourly_from_entsoe(client, fetch_from: pd.Timestamp, fetch_to: pd.Tim
 
     full = pd.concat(rows)
     full = full[~full.index.duplicated(keep="last")].sort_index()
-    full.index = full.index.tz_convert("UTC")
-
-    # Resample to daily GWh
-    daily = full.resample("D").sum()
-    daily["hard_coal_gwh"] = (daily["hard_coal_mwh"] / 1_000).round(2)
-    daily["lignite_gwh"]   = (daily["lignite_mwh"]   / 1_000).round(2)
-    daily = daily[["hard_coal_gwh", "lignite_gwh"]].reset_index()
-    daily.columns = ["date", "hard_coal_gwh", "lignite_gwh"]
-    daily["date"] = daily["date"].dt.tz_localize(None)
-    return daily
+    daily = _daily_energy_gwh(full)
+    return daily if not daily.empty else pd.DataFrame()
 
 
 @st.cache_data(ttl=21600)
 def fetch_coal_generation() -> dict:
     """
     Fetch German hard coal and lignite generation from ENTSO-E A75.
-    Uses disk cache — only fetches dates not already cached.
+    Uses the disk cache and fetches only the days after the last cached day.
     """
     client = _client()
     empty = {"quarterly": pd.DataFrame(), "daily_90d": pd.DataFrame(),
@@ -163,11 +200,13 @@ def fetch_coal_generation() -> dict:
 
     if not new_data.empty:
         if not cached.empty:
+            # Deduplicate before sorting: keep="last" must refer to the concatenation
+            # order (fresh rows after cached ones), which an unstable sort would not keep.
             combined = pd.concat([cached, new_data], ignore_index=True)
             combined = (
                 combined
-                .sort_values("date")
                 .drop_duplicates(subset=["date"], keep="last")
+                .sort_values("date")
                 .reset_index(drop=True)
             )
         else:

@@ -64,12 +64,20 @@ are deployed. Layers 1–3 are fully unaffected.
 
 ## Cache refresh (monthly)
 
+`hf-deploy` ships `data/generation_cache_v2.csv` (German coal generation since 2019) so a
+fresh Space only fetches the days since the cache ends instead of the whole history. The
+file is ignored on `main`, where the local app keeps it up to date. Commit it from a
+separate worktree: checking out `main` again in the main checkout would delete the ignored
+local copy, because `hf-deploy` tracks it.
+
 ```bash
-# Push updated disk cache files to hf-deploy
-git checkout hf-deploy
-git add data/generation_cache.csv  # or any other accumulated cache files
-git commit -m "Refresh disk cache for HF cold-start"
-# Then run the close-of-session checklist above
+git worktree add ../hf-deploy-wt hf-deploy
+cp data/generation_cache_v2.csv ../hf-deploy-wt/data/
+git -C ../hf-deploy-wt add data/generation_cache_v2.csv
+git -C ../hf-deploy-wt commit -m "Refresh the bundled coal generation cache"
+git -C ../hf-deploy-wt push origin hf-deploy
+git worktree remove ../hf-deploy-wt
+# Then run step 3 of the close-of-session checklist above
 ```
 
 ---
@@ -131,6 +139,7 @@ Everything confirmed live on HuggingFace Space and `origin/main`, with these exc
 | v2 · Interface | All pages | `app.py` router with grouped top navigation (`st.navigation`), page modules in `views/` with fixed URL paths, design system in `utils/theme.py` (tokens, global stylesheet, page header, KPI card, callout, chip, ticker strip, layer card, footer, Plotly template `ptp`), redesigned overview page with a delayed market snapshot strip and data-source status |
 | v2 · Data fixes | Layers 1 to 5 | ENTSO-E clients time out after 30 s instead of hanging; DE-LU bidding zone for German day-ahead prices; no disk-persisted caches for market data; ALSI send-out labelled GWh/d; season-aware storage commentary and refill pace against the 5-year norm; NaN-safe ordinals and EUA handling in the Mispricing Dashboard |
 | v2 · Energy Globe | Page 8 | CesiumJS 3D globe embedded in the platform (`views/8_Energy_Globe.py`): Norwegian shelf facilities and export pipelines (Sodir, NLOD), 38 European LNG import terminals (GEM, CC BY 4.0) with live GIE ALSI send-out, utilisation and tank stocks per gas day, 10 maritime chokepoints with EIA flows; curated views linked from the overview, Layer 1, Layer 3 and the Risk Dashboard (`data/energy_globe.py`, `components/energy_globe.py`, `data/globe/`) |
+| v2.1 · Coal generation | Layer 1 | German hard coal and lignite are energy from hourly mean power: the 15-minute ENTSO-E A75 readings had been summed as if they were hourly MWh, which overstated every coal figure fourfold. The disk cache moved to `generation_cache_v2.csv` (version 1 is no longer read), fresh rows replace cached ones in the seven-day overlap, days still being published are left out, and `hf-deploy` ships the cache so the Live Monitor renders on a fresh Space without fetching the history since 2019 first |
 
 ---
 
