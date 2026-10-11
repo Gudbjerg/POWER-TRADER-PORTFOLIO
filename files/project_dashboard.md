@@ -1,8 +1,8 @@
-# Project Dashboard — European Power & Gas Platform
+# Project Dashboard: European Gas and Power Platform
 
 ## Close-of-session checklist
 
-Run these commands **in order** at the end of every session. "Synced" means ALL three pushes have been confirmed — none alone counts.
+Run these commands **in order** at the end of every session. "Synced" means all three pushes have been confirmed; none counts alone.
 
 ```bash
 # 1. Push code to GitHub main
@@ -14,41 +14,48 @@ git checkout hf-deploy
 git merge main --no-edit
 git push origin hf-deploy
 
-# 3. Push to HuggingFace Space (REQUIRED — this is the live deploy)
-#    hf-deploy contains binary files excluded by HF's Xet policy, so we use
-#    a squash branch that omits them. Run this every time there are new commits.
-git checkout -b hf-squash-$(date +%Y%m%d) $(git ls-remote hf HEAD | cut -f1)
-git merge --squash hf-deploy
-git commit -m "Deploy <phase/description> to HuggingFace Space (squashed)"
-git push hf HEAD:main
-git checkout hf-deploy
-# Optional cleanup:
-git branch -d hf-squash-$(date +%Y%m%d) 2>/dev/null || true
+# 3. Deploy to the HuggingFace Space (required: this is the live deploy)
+#    HF rejects binary files that are not stored through Xet, and hf-deploy carries
+#    the README screenshots. Commit the hf-deploy tree without its binary files as one
+#    new commit on top of the Space's current head. No checkout is needed.
+git fetch origin hf-deploy
+git fetch hf main                       # FETCH_HEAD is now the Space's head
+HF_HEAD=$(git rev-parse FETCH_HEAD)
+SRC=$(git rev-parse origin/hf-deploy)
+IDX=$(mktemp)
+GIT_INDEX_FILE=$IDX git read-tree "$SRC"
+git diff --numstat 4b825dc642cb6eb9a060e54bf8d69288fbee4904 "$SRC" \
+  | awk '$1 == "-" {print $3}' \
+  | while read -r f; do GIT_INDEX_FILE=$IDX git rm --cached -q -- "$f"; done
+TREE=$(GIT_INDEX_FILE=$IDX git write-tree); rm -f "$IDX"
+C=$(git commit-tree "$TREE" -p "$HF_HEAD" -m "Deploy <description> to HuggingFace Space (squashed, no binaries)")
+git branch "hf-squash-$(date +%Y%m%d%H%M)" "$C"
+git push hf "${C}:refs/heads/main"      # braces matter in zsh: $C:r is a modifier
 ```
 
 **Verify the push landed:**
 ```bash
-git ls-remote hf
-# HEAD should match the squash commit you just created
+git ls-remote hf refs/heads/main
+# should print the commit you just created; the Space rebuilds within a few minutes
 ```
 
 ---
 
 ## Why the squash is needed (HF Xet policy)
 
-HuggingFace Spaces now requires binary files (`.pt`, `.joblib`) to go through their
-Xet storage system. The `hf-deploy` branch history contains commit `82f9a59` which
-adds model weights as Git LFS objects. HF's pre-receive hook scans every commit in
-the push range and rejects any that contain LFS-tracked binaries, **even if a later
-commit deletes them**.
+HuggingFace Spaces require binary files to go through their Xet storage system, and
+the pre-receive hook rejects a push if any commit in the range contains a binary file
+that is not, even if a later commit deletes it. The `hf-deploy` history contains such
+files: model weights (commit `82f9a59`) and the PNG screenshots the README shows on
+GitHub.
 
-The squash approach creates a single new commit whose net tree matches `hf-deploy`
-tip but never passes through an intermediate state where the binaries are present.
-The `.gitattributes` on `hf-deploy` already removes `*.pt`/`*.joblib` LFS tracking;
-the `models/weights/*.pt` and `*.joblib` files are in `.gitignore` on that branch.
+The deploy therefore pushes one new commit whose tree is the `hf-deploy` tree minus
+every binary file, on top of the Space's previous head, so no pushed commit ever
+contains a binary. The Space needs none of them: the screenshots are for GitHub, and
+the `models/weights/*.pt` and `*.joblib` files are in `.gitignore` on `hf-deploy`.
 
-Layer 4 (LSTM/HMM) will show "Ready to train" on the live Space since no weights
-are deployed. Layers 1–3 are fully unaffected.
+Layer 4 (LSTM/HMM) shows "Ready to train" on the live Space because no weights are
+deployed. Layers 1 to 3 are unaffected.
 
 ---
 
@@ -56,9 +63,9 @@ are deployed. Layers 1–3 are fully unaffected.
 
 | Branch | Remote | Purpose |
 |--------|--------|---------|
-| `main` | `origin/main` (GitHub) | Primary dev, Streamlit Community Cloud deploy |
-| `hf-deploy` | `origin/hf-deploy` (GitHub) | Mirror of main + HF-specific config, no binary weights |
-| `hf-squash-*` | `hf/main` (HuggingFace) | Ephemeral squash branch for each HF deploy |
+| `main` | `origin/main` (GitHub) | Primary development; a Streamlit Community Cloud app also builds from it (sign-in required, not linked publicly) |
+| `hf-deploy` | `origin/hf-deploy` (GitHub) | Mirror of `main` plus HF-only files: warm-start caches and HF config, no model weights |
+| `hf-squash-*` | `hf/main` (HuggingFace) | Local record of each HF deploy commit |
 
 ---
 
@@ -95,27 +102,18 @@ git worktree remove ../hf-deploy-wt
 ## GitHub repository
 
 - URL: https://github.com/Gudbjerg/POWER-TRADER-PORTFOLIO
-- Streamlit Community Cloud: auto-deploys from `origin/main`
-
----
-
-## Outreach status
-
-**Outreach-ready as of 2026-05-19.**
-
-Lead link: https://huggingface.co/spaces/TobGud/power-trader-portfolio
-
-Platform at outreach cut: 5 pages · 14 Layer 2 tabs · 4 Layer 3 tabs · Mispricing Dashboard (8 signals) · HF commit `0b9a1f6`
+- Streamlit Community Cloud: builds from `origin/main` (sign-in required; the public link is the HF Space)
+- CI: `.github/workflows/tests.yml` runs the offline tests on every push to `main`
 
 ---
 
 ## Shipped features
 
-Everything confirmed live on HuggingFace Space and `origin/main`, with these exceptions: rows labelled **Q4** and **v2** were merged into `origin/main` from branch `feat/platform-v2` and deployed to the HF Space on 2026-10-11, and the D4 and Phase E rows were moved here from the deferred table because both pages are on `origin/main` (their live status on the Space was not re-checked).
+Everything confirmed live on HuggingFace Space and `origin/main`. Rows labelled **Q4** and **v2** were merged into `origin/main` from branch `feat/platform-v2` and deployed to the HF Space on 2026-10-11, and the **v2.1** rows followed the same day. All eight pages, including D4 (Page 6) and Phase E (Page 7), were opened on the Space on 2026-10-11 and rendered without errors.
 
 | Phase / Item | Layer | Description |
 |---|---|---|
-| Phase 0 | — | Project scaffold: Streamlit multi-page setup, dual-branch deploy (main / hf-deploy), .env secrets, dark theme |
+| Phase 0 | All pages | Project scaffold: Streamlit multi-page setup, dual-branch deploy (main / hf-deploy), .env secrets, dark theme |
 | Phase A1 | Layer 1 | Live Monitor: EU/DE gas storage, TTF gas price + spike detector, LNG terminal sendout, Nord Pool day-ahead prices, ENTSO-E cross-border flows, solar output, Norwegian hydro reservoir levels |
 | Phase A2 | Layer 2 | First quant tabs: Monte Carlo price simulation, Gas-Power OLS regression (TTF → DE baseload), spike detector, seasonal backtest |
 | Phase A3 | Layer 2 | Additional tabs: Supply Stack model, Nordic hydro decomposition, wind forecast error tracker, Granger causality TTF↔Brent |
@@ -148,5 +146,5 @@ Everything confirmed live on HuggingFace Space and `origin/main`, with these exc
 
 | Item | Description |
 |------|-------------|
-| Phase C-arch | **Render migration: deferred indefinitely** — artifacts in repo (`Dockerfile`, `render.yaml`) for future self-host or paid migration. Current production: HF Spaces. 15-min MTU granularity and DataSourceRegistry abstraction also deferred. |
+| Phase C-arch | **Render migration: deferred indefinitely.** Artifacts in repo (`Dockerfile`, `render.yaml`) for future self-host or paid migration. Current production: HF Spaces. 15-min MTU granularity and DataSourceRegistry abstraction also deferred. |
 | D5 | Scope TBD |
