@@ -1,5 +1,6 @@
 ---
-title: European Power and Gas Analysis Platform
+title: European Gas and Power Market Intelligence Platform
+short_description: Quantitative analytics for physical energy traders
 emoji: ⚡
 colorFrom: blue
 colorTo: green
@@ -14,6 +15,7 @@ pinned: false
 **A five-layer quantitative analytics platform built to mirror the analytical workflow of a European physical energy trader.**
 
 [![Live Demo](https://img.shields.io/badge/Live%20Demo-HuggingFace%20Spaces-orange)](https://huggingface.co/spaces/TobGud/power-trader-portfolio)
+[![Tests](https://github.com/Gudbjerg/POWER-TRADER-PORTFOLIO/actions/workflows/tests.yml/badge.svg)](https://github.com/Gudbjerg/POWER-TRADER-PORTFOLIO/actions/workflows/tests.yml)
 [![Python](https://img.shields.io/badge/Python-3.11%2B-blue)](https://www.python.org/)
 ![Pages](https://img.shields.io/badge/8%20pages-36%20analytical%20modules-lightgrey)
 ![Sources](https://img.shields.io/badge/9%20data%20sources-live%20feeds-green)
@@ -24,7 +26,7 @@ The platform integrates live fundamental data from ENTSO-E Transparency, GIE AGS
 
 ## Headline Results
 
-The following are representative outputs from the platform as computed on current market data. All figures are reproducible by running the platform against live feeds; the underlying methodology is verifiable in the linked source files.
+Representative outputs from runs between June and October 2026. Live values move with the market; the methodology behind each figure is in the linked source file.
 
 | Module | Result | Source |
 |--------|--------|--------|
@@ -43,7 +45,7 @@ The following are representative outputs from the platform as computed on curren
 
 **Primary deployment:** [huggingface.co/spaces/TobGud/power-trader-portfolio](https://huggingface.co/spaces/TobGud/power-trader-portfolio)
 
-The HuggingFace Space builds from the `hf-deploy` branch. Cold-start on an idle Space takes approximately 90 seconds while the container builds and live data fetches complete. All panels degrade gracefully without API keys: the TTF price, Nord Pool spot prices, forward curve, and commodity correlations load without credentials. Gas storage, ENTSO-E flows, hydro, solar, and generation data require free API keys from GIE and ENTSO-E (the overview page shows which sources are active, and each affected panel names the key it needs).
+The HuggingFace Space builds from the `hf-deploy` branch. A Space that has gone to sleep takes about a minute to wake. After a restart, the first visit to a data-heavy page (Live Monitor, Quant Analysis) fetches live data for two to four minutes; later visits are served from cache. All panels degrade gracefully without API keys: the TTF price, Nord Pool spot prices, forward curve, and commodity correlations load without credentials. Gas storage, ENTSO-E flows, hydro, solar, and generation data require free API keys from GIE and ENTSO-E (the overview page shows which sources are active, and each affected panel names the key it needs).
 
 A [Dockerfile](Dockerfile) and [render.yaml](render.yaml) are included for self-hosted or Render deployment.
 
@@ -157,17 +159,17 @@ The visual language lives in [utils/theme.py](utils/theme.py): design tokens (da
 
 ```
                     ┌─────────────────────────────────────────────────────┐
-                    │  DATA LAYER                                          │
+                    │  DATA LAYER                                         │
                     │  ENTSO-E A44/A65/A69/A75/B09/B16/B19/B31            │
-                    │  GIE AGSI+ · GIE ALSI · Nord Pool · ICE/Yahoo        │
-                    │  Fraunhofer ISE (incl. SMARD data) · FinBERT RSS     │
+                    │  GIE AGSI+ · GIE ALSI · Nord Pool · ICE/Yahoo       │
+                    │  Fraunhofer ISE (incl. SMARD data) · FinBERT RSS    │
                     └───────────────────────┬─────────────────────────────┘
                                             │
           ┌─────────────────────────────────▼──────────────────────────────────┐
-          │  Layer 1: Live Market Monitor                                       │
+          │  Layer 1: Live Market Monitor                                      │
           │  EU/DE gas storage · LNG sendout · TTF spot + forward strip        │
           │  Nord Pool day-ahead · Norwegian hydro · Cross-border flows        │
-          │  German solar duck curve · Coal dispatch (fuel switching)           │
+          │  German solar duck curve · Coal dispatch (fuel switching)          │
           │  FI minus IT-North day-ahead spread (Nordic vs gas-marginal Italy) │
           │  TTF minus JKM card on the LNG send-out tab                        │
           └─────────────────────────────────┬──────────────────────────────────┘
@@ -184,8 +186,8 @@ The visual language lives in [utils/theme.py](utils/theme.py): design tokens (da
                                             │
           ┌─────────────────────────────────▼──────────────────────────────────┐
           │  Layer 3: Geopolitical and Macro Signals  (5 panels)               │
-          │  TTF + 28-event geopolitical timeline · EU supply mix 2020-2026   │
-          │  Gas-fertiliser-food spillover chain · 7x7 cross-commodity grid   │
+          │  TTF + 28-event geopolitical timeline · EU supply mix 2020-2026    │
+          │  Gas-fertiliser-food spillover chain · 7x7 cross-commodity grid    │
           │  TTF vs JKM inter-basin LNG spread (EUR/MWh, 1-year percentile)    │
           └─────────────────────────────────┬──────────────────────────────────┘
                                             │
@@ -199,20 +201,28 @@ The visual language lives in [utils/theme.py](utils/theme.py): design tokens (da
                                             │
           ┌─────────────────────────────────▼──────────────────────────────────┐
           │  Layer 5: Mispricing Dashboard  (8-signal composite scorecard)     │
-          │  TTF seasonal · EU storage · NO2/NL spread · Gas-power residual   │
-          │  Clean spark spread · Norwegian hydro · TTF vs storage · Fuel sw. │
+          │  TTF seasonal · EU storage · NO2/NL spread · Gas-power residual    │
+          │  Clean spark spread · Norwegian hydro · TTF vs storage · Fuel sw.  │
           └─────────────────────────────────┬──────────────────────────────────┘
-                              ┌─────────────┴─────────────────────────┐
-                              │                                       │
+                              ┌─────────────┴───────────────────────────────────┐
+                              │                                                 │
           ┌───────────────────▼────────────────────────────┐  ┌─────────────────▼───────────────┐
           │  Page 6: Risk Dashboard                        │  │  Page 7: BESS Optimiser         │
           │  VaR/ES bootstrap (1,000 paths)                │  │  DAM + FCR-N/D revenue          │
           │  4 named stress scenarios                      │  │  NPV / IRR / payback            │
           │  Rolling correlation matrix                    │  │  ±20% sensitivity table         │
           └────────────────────────────────────────────────┘  └─────────────────────────────────┘
+
+          ┌────────────────────────────────────────────────────────────────────┐
+          │  Page 8: Energy Globe  (3D physical infrastructure, CesiumJS)      │
+          │  Norwegian shelf facilities and export pipelines (Sodir)           │
+          │  38 European LNG terminals with live GIE ALSI send-out and stocks  │
+          │  10 maritime chokepoints with EIA oil and LNG flows                │
+          │  Curated views linked from Layers 1 and 3 and the Risk Dashboard   │
+          └────────────────────────────────────────────────────────────────────┘
 ```
 
-The layered model reflects how a physical desk processes information: raw observation (Layer 1) feeds quantitative model estimation (Layer 2), which contextualises within the macro and geopolitical regime (Layer 3), cross-validates against statistical learning signals (Layer 4), and synthesises into a ranked composite view (Layer 5). Pages 6 and 7 apply that signal infrastructure to portfolio risk and project evaluation respectively.
+The layered model reflects how a physical desk processes information: raw observation (Layer 1) feeds quantitative model estimation (Layer 2), which contextualises within the macro and geopolitical regime (Layer 3), cross-validates against statistical learning signals (Layer 4), and synthesises into a ranked composite view (Layer 5). Pages 6 and 7 apply that signal infrastructure to portfolio risk and project evaluation respectively, and Page 8 maps the physical system behind the prices.
 
 ---
 
@@ -220,7 +230,7 @@ The layered model reflects how a physical desk processes information: raw observ
 
 | Module | Layer / Page | Methodology | Citation / File |
 |--------|-------------|-------------|-----------------|
-| Gas Storage Monitor | Layer 1 | GIE AGSI+ EU/DE fill vs 5-year seasonal band (min/mean/max/P10/P90) | [data/gas_storage.py](data/gas_storage.py) |
+| Gas Storage Monitor | Layer 1 | GIE AGSI+ EU/DE fill vs 5-year seasonal band (min/mean/max/P10/P90); fetched through a shared GIE client that retries rate limits and never returns a partial history | [data/gas_storage.py](data/gas_storage.py), [data/gie.py](data/gie.py) |
 | LNG Terminal Sendout | Layer 1 | GIE ALSI daily sendout aggregation across Zeebrugge, Gate, South Hook, Dunkirk; WoW change alert at -15% | [data/lng_terminals.py](data/lng_terminals.py) |
 | TTF Spot + Forward Strip | Layer 1 | ICE TTF front-month via Yahoo Finance; MA30/MA90; synthetic M+1-M+18 strip from historical seasonal index | [data/prices.py](data/prices.py), [data/forward_curve.py](data/forward_curve.py) |
 | Nordic Day-Ahead Prices | Layer 1 | Nord Pool public API; NO1/NO2/SE3/NL/FI; 365-day request (the public endpoint returns roughly the latest two months); NL-NO2 spread; Norwegian zonal (NO1-NO5 vs SYS) | [data/spot_prices.py](data/spot_prices.py) |
@@ -228,7 +238,7 @@ The layered model reflects how a physical desk processes information: raw observ
 | Norwegian Hydro Reservoirs | Layer 1 | ENTSO-E B31 weekly aggregate for Norway (EIC: 10YNO-0--------C); P10/P50/P90 percentile bands | [data/hydro.py](data/hydro.py) |
 | Nordic Cross-Border Flows | Layer 1 | ENTSO-E B09/B10 physical flows: NordLink (1,400 MW), NorNed (700 MW), NSN (1,400 MW), Skagerrak (1,700 MW); daily utilisation % | [data/power_flows.py](data/power_flows.py) |
 | German Solar Duck Curve | Layer 1 | ENTSO-E B16 (primary); Fraunhofer ISE energy-charts.info (fallback); hourly mean over 14-day window; cannibalisation signal | [data/solar.py](data/solar.py) |
-| German Coal Generation | Layer 1 | ENTSO-E A75; hard coal + lignite quarterly TWh and 90-day daily trend; fuel-switching indicator at TTF > 50 EUR/MWh | [data/generation.py](data/generation.py) |
+| German Coal Generation | Layer 1 | ENTSO-E A75 average power per 15-minute interval converted to energy (hourly mean MW summed per UTC day); hard coal and lignite quarterly TWh and 90-day daily trend; incremental daily cache with a seven-day revision overlap, shipped with the Space; fuel-switching indicator at TTF > 50 EUR/MWh | [data/generation.py](data/generation.py) |
 | Storage Refill Monte Carlo | Layer 2 | Empirical bootstrap, 1,000 paths; daily injection draws by calendar month from 5-year AGSI history (no look-ahead); P10/P25/P50/P75/P90 fan chart | [models/storage_monte_carlo.py](models/storage_monte_carlo.py) |
 | Gas-to-Power OLS Regression | Layer 2 | OLS of NL day-ahead on TTF; expanding-window residual z-score; R² as regime indicator (low R² = renewables-marginal) | [models/gas_power_regression.py](models/gas_power_regression.py) |
 | Price Spike Detector | Layer 2 | Rolling 30-day z-score across NO1/NO2/SE3/NL/FI; alert threshold |z| > 2.5, warning |z| > 1.5 | [models/spike_detector.py](models/spike_detector.py) |
@@ -286,7 +296,7 @@ The layered model reflects how a physical desk processes information: raw observ
 | ProsusAI FinBERT | HuggingFace Transformers | On-demand | Energy headline classification: positive/negative/neutral |
 | RSS News Feeds | BBC Business, Guardian Energy, LNG World News, Energy Monitor | 6-hourly cache | Raw headline text for FinBERT pipeline |
 
-**Notes on data availability.** Gas storage (GIE), ENTSO-E flows, hydro, wind, solar, and generation all require free API keys. The platform degrades gracefully without them: all Nord Pool spot, energy-charts.info (IT-North) and yfinance data loads without credentials, covering approximately 15 of the 36 modules (the Energy Globe's static layers need no key). The public Nord Pool endpoint only serves roughly the latest two months of delivery days (older dates return HTTP 401), so keyless histories built on it (the FI leg of the FI minus IT-North spread, and the feature matrix fallback used by Layers 2 and 4) are limited to that window until `ENTSOE_API_KEY` is set. API2 Rotterdam coal futures (formerly MTF=F on Yahoo Finance) are not currently available via the free Yahoo Finance tier; the 7x7 correlation grid displays a "Coal unavailable" caption when the ticker returns no data.
+**Notes on data availability.** Gas storage (GIE), ENTSO-E flows, hydro, wind, solar, and generation all require free API keys. The platform degrades gracefully without them: all Nord Pool spot, energy-charts.info (IT-North) and yfinance data loads without credentials, covering approximately 15 of the 36 modules (the Energy Globe's static layers need no key). The public Nord Pool endpoint only serves roughly the latest two months of delivery days (older dates return HTTP 401), so keyless histories built on it (the FI leg of the FI minus IT-North spread, and the feature matrix fallback used by Layers 2 and 4) are limited to that window until `ENTSOE_API_KEY` is set. API2 Rotterdam coal futures (formerly MTF=F on Yahoo Finance) are not currently available via the free Yahoo Finance tier; the 7x7 correlation grid displays a "Coal unavailable" caption when the ticker returns no data. GIE allows 60 requests per minute per address, and the Hugging Face Space shares its outbound address with other tenants, so a GIE request can be refused: [data/gie.py](data/gie.py) retries rate limits and gateway errors, and a fetch that still fails is retried within five minutes instead of being cached for an hour.
 
 ---
 
@@ -356,6 +366,21 @@ A full P0/P1/P2/P3 pre-deployment audit was conducted and documented in [files/A
 
 **ML honesty.** The LSTM forecaster displays a banner if its test-set MAE exceeds the naïve persistence baseline, explicitly distinguishing "the model trains" from "the model adds forecasting value."
 
+**October 2026 review (v2.1).** A source check of the Live Monitor found German coal generation four times too high: ENTSO-E reports average power per 15-minute interval, and the daily totals had summed those readings as if they were hourly energy. Energy is now the hourly mean summed over each day, and the corrected series matches published figures (2024 lignite 71.0 TWh against 71.1 TWh from Fraunhofer ISE). The same review stopped failed GIE requests from being cached for an hour, which had shown "AGSI key required" and a partial LNG total on the live Space although the key was set.
+
+---
+
+## How It Was Built
+
+The platform is a one-person project developed with an AI coding agent, Claude Code. The agent writes most of the code, and most commits on `main` carry its `Co-Authored-By` trailer. The author decides what to build and why, frames each model in trading terms, reviews the work and the checks behind it, and decides what ships.
+
+- **Phased scope.** Work is planned as numbered phases and roadmap items, each with a written brief, and logged in [files/project_dashboard.md](files/project_dashboard.md) when it ships.
+- **Verification before trust.** A figure is not accepted because the code runs. Outputs are compared with published data before release; the October 2026 review above is an example.
+- **Tests and a release checklist.** Over 200 automated tests, offline unit tests plus live-API smoke tests of every page, run before a merge. Releases follow a fixed checklist (live-key smoke run, data checks against sources, documentation), and the live Space is updated only after explicit sign-off.
+- **Disclosed limits.** Model-derived series, simplifying assumptions and missing data are labelled in the app rather than hidden.
+
+AI shortens the path from an idea to a working feature; it does not replace checking the result, which is where most of the review effort goes.
+
 ---
 
 ## Running Locally
@@ -387,7 +412,7 @@ pytest -m "not network"   # unit tests for the pure model and data helpers (offl
 pytest                    # adds Streamlit AppTest smoke tests for the router and every page (live data, several minutes)
 ```
 
-The smoke tests assert that each changed page runs end to end without raising; missing ENTSO-E or GIE keys are treated as an expected, gracefully degraded state.
+The offline suite runs on every push to `main` ([.github/workflows/tests.yml](.github/workflows/tests.yml)). The smoke tests assert that each page runs end to end without raising; missing ENTSO-E or GIE keys are treated as an expected, gracefully degraded state.
 
 ---
 
@@ -423,4 +448,4 @@ Pole, A. (2007). *Statistical Arbitrage: Algorithmic Trading Insights and Techni
 
 ## Licence
 
-MIT License. The code is shared for portfolio review purposes. Data fetched at runtime remains subject to the terms of the original providers: ENTSO-E Transparency Platform, Gas Infrastructure Europe (GIE), Nord Pool Group, Yahoo Finance, and Bundesnetzagentur | SMARD.de (IT-North prices via energy-charts.info, CC BY 4.0). No data is redistributed or stored beyond ephemeral runtime caching.
+Code: MIT License (see [LICENSE](LICENSE)), shared for portfolio review. Data fetched at runtime remains subject to the terms of the original providers: ENTSO-E Transparency Platform, Gas Infrastructure Europe (GIE), Nord Pool Group, Yahoo Finance, and Bundesnetzagentur | SMARD.de (IT-North prices via energy-charts.info, CC BY 4.0). The Energy Globe bundles static datasets under their own licences: Sodir FactMaps (NLOD), Global Energy Monitor GGIT (CC BY 4.0) and U.S. EIA (public domain); attribution is shown on the page and in [data/globe/README.md](data/globe/README.md). The Hugging Face deployment also ships cached snapshots of fetched data (German coal generation from ENTSO-E, the model feature matrix and the headline sentiment history) so that a fresh Space starts warm.

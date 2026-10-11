@@ -1,0 +1,27 @@
+name: tests
+
+# Offline test suite (unit tests for the model and data helpers, the router layout and
+# the Energy Globe component). The live smoke tests need API keys and are run before
+# releases instead (pytest -m network).
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  offline:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: pip
+      - name: Install dependencies
+        run: pip install -r requirements.txt pytest
+      - name: Run offline tests
+        run: pytest -m "not network" -q
