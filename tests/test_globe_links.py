@@ -39,6 +39,25 @@ def test_resolve_view_accepts_only_curated_views(value, expected):
     assert globe.resolve_view(value) == expected
 
 
+def test_link_is_left_out_when_a_page_runs_without_the_router(tmp_path, monkeypatch):
+    """Page smoke tests run a view module on its own; the globe link must not break it."""
+    from streamlit.testing.v1 import AppTest
+
+    script = tmp_path / "standalone_page.py"
+    script.write_text(
+        "import streamlit as st\n"
+        "from utils.globe import globe_link\n"
+        "globe_link('hormuz', 'Strait of Hormuz')\n"
+        "st.write('rendered after the link')\n",
+        encoding="utf-8",
+    )
+    monkeypatch.chdir(ROOT)
+    monkeypatch.syspath_prepend(str(ROOT))
+    at = AppTest.from_file(str(script), default_timeout=60).run()
+    assert not at.exception, [str(getattr(e, "value", e)) for e in at.exception]
+    assert any("rendered after the link" in m.value for m in at.markdown)
+
+
 def test_globe_page_is_registered_in_the_router():
     router = (ROOT / "app.py").read_text(encoding="utf-8")
     assert f'st.Page("{globe.GLOBE_PAGE}"' in router

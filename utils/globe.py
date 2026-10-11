@@ -18,6 +18,7 @@ import os
 from urllib.parse import urlencode, urlsplit
 
 import streamlit as st
+from streamlit.errors import StreamlitAPIException
 
 GLOBE_PAGE = "views/8_Energy_Globe.py"
 
@@ -80,15 +81,25 @@ def resolve_view(value: object) -> str:
 
 
 def globe_link(view: str = DEFAULT_VIEW, label: str = "View on the 3D globe") -> None:
-    """Render a button that opens the Energy Globe page on ``view``."""
+    """Render a button that opens the Energy Globe page on ``view``.
+
+    Through ``app.py`` the page is always registered and the link renders. A page module
+    run on its own (``streamlit run views/...`` or the page smoke tests) has no router, so
+    the Energy Globe page does not exist there and Streamlit cannot build the link: it
+    raises ``KeyError`` (1.56) or ``StreamlitPageNotFoundError``. The link is then left
+    out instead of failing the page.
+    """
     view = resolve_view(view)
-    st.page_link(
-        GLOBE_PAGE,
-        label=label,
-        icon=":material/public:",
-        help=GLOBE_VIEWS[view]["title"],
-        query_params={"view": view},
-    )
+    try:
+        st.page_link(
+            GLOBE_PAGE,
+            label=label,
+            icon=":material/public:",
+            help=GLOBE_VIEWS[view]["title"],
+            query_params={"view": view},
+        )
+    except (KeyError, StreamlitAPIException):
+        return
 
 
 def globe_base_url() -> str | None:
