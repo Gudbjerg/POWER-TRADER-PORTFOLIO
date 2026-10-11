@@ -169,7 +169,7 @@ with st.container(horizontal=True, gap="small", key="ptp_globe_links"):
 with st.expander("About this platform", expanded=False):
     render(
         "<div class='ptp-about'>"
-        "Built by <strong>Tobias Gudbjerg</strong>, currently in equity sales at ABG Sundal Collier, "
+        "Built by <strong>Tobias Gudbjerg</strong>, Equity Sales Trader at Fearnley Securities in Oslo, "
         "to apply commodity markets and quantitative methods to European gas and power trading. "
         "The analytical framework draws on coursework from Bayes Business School: "
         "SMM591 Commodity Derivatives &amp; Trading, SMM284 Applied Machine Learning, "

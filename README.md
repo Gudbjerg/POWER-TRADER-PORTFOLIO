@@ -393,7 +393,7 @@ The smoke tests assert that each changed page runs end to end without raising; m
 
 ## Author
 
-Built by **Tobias Gudbjerg**, MSc Mathematical Trading and Finance candidate at Bayes Business School, City, University of London (graduating summer 2026 with Distinction). Equity Sales and Data Engineer at ABG Sundal Collier; joining Fearnley Securities as Equity Trader in Oslo.
+Built by **Tobias Gudbjerg**, Equity Sales Trader at Fearnley Securities in Oslo. MSc Mathematical Trading and Finance, Bayes Business School, City St George's, University of London (2026). Previously almost three years at ABG Sundal Collier in Copenhagen and London.
 
 [LinkedIn](https://www.linkedin.com/in/tobias-gudbjerg/) | gudbjerg.tobias@gmail.com
 
