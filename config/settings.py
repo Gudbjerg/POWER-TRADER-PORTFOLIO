@@ -36,6 +36,19 @@ BIDDING_ZONES = {
 # and the panel degrades like any other unavailable source.
 ENTSOE_TIMEOUT_S = 30
 
+# ── GIE AGSI+ / ALSI request policy ─────────────────────────────────────────
+# GIE allows 60 requests per minute per address. On shared cloud egress (the Hugging
+# Face Space) other tenants count against the same limit, so HTTP 429 and gateway
+# errors are ordinary, transient answers. They are retried with a short wait (the
+# server's Retry-After when it sends one, capped); a read timeout is not retried, so a
+# stalled server costs one timeout, as before. A fetch that still fails is cached only
+# for GIE_FAILURE_TTL_S, so one bad minute does not blank a panel for an hour, and a
+# failure part-way through a paginated history never yields a partial series.
+GIE_TIMEOUT_S         = 30          # read timeout per request (seconds)
+GIE_RETRY_WAITS_S     = (2.0, 5.0)  # waits before the second and third attempt
+GIE_MAX_RETRY_AFTER_S = 15.0        # cap on a Retry-After header (seconds)
+GIE_FAILURE_TTL_S     = 300         # how long a failed fetch is remembered (seconds)
+
 # ── Alert thresholds ────────────────────────────────────────────────────────
 TTF_SPIKE_PCT        = 10.0   # % single-day move flagged as spike
 SPREAD_WARN_EUR      = 25.0   # Nordic–Continental spread (EUR/MWh) to warn

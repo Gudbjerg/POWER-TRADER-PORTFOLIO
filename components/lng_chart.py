@@ -5,6 +5,8 @@ Data source: GIE ALSI (same API key as AGSI).
 import plotly.graph_objects as go
 import streamlit as st
 import pandas as pd
+from config.settings import GIE_FAILURE_TTL_S, LNG_COUNTRIES
+from utils.helpers import has_agsi_key
 from utils.theme import CHART, PLOTLY_TEMPLATE
 
 COUNTRY_COLORS = {
@@ -29,14 +31,19 @@ def render_lng_chart(lng_data: dict):
     wow_change = lng_data.get("wow_change_pct")
     alert      = lng_data.get("alert", False)
     fetched_at = lng_data.get("fetched_at")
+    unavailable = lng_data.get("unavailable") or []
+    retry_note = f"The panel retries within {max(GIE_FAILURE_TTL_S // 60, 1)} minutes."
 
     st.subheader("NW European LNG Terminal Sendout (GWh/day)")
 
     if df.empty:
-        st.warning(
-            "LNG terminal data unavailable. "
-            "Add AGSI_API_KEY to .env (same key as gas storage, free registration at agsi.gie.eu)."
-        )
+        if has_agsi_key():
+            st.warning(f"LNG terminal data unavailable: GIE ALSI did not answer. {retry_note}")
+        else:
+            st.warning(
+                "LNG terminal data unavailable. "
+                "Add AGSI_API_KEY to .env (same key as gas storage, free registration at agsi.gie.eu)."
+            )
         if fetched_at:
             st.caption(f"Last updated: {fetched_at.strftime('%Y-%m-%d %H:%M UTC')}")
         st.caption("Source: Gas Infrastructure Europe (GIE), ALSI | alsi.gie.eu")
@@ -60,7 +67,8 @@ def render_lng_chart(lng_data: dict):
             .dropna(subset=["sendOut"])
         )
         if subset.empty:
-            missing_countries.append(label)
+            if country not in unavailable:   # failed fetches are reported below
+                missing_countries.append(label)
             continue
         fig.add_trace(go.Bar(
             x=subset["gasDayStart"],
@@ -95,6 +103,13 @@ def render_lng_chart(lng_data: dict):
     )
 
     st.plotly_chart(fig, width="stretch")
+
+    if unavailable:
+        names = ", ".join(LNG_COUNTRIES.get(c, c) for c in unavailable)
+        st.warning(
+            f"GIE ALSI did not answer for {names}. The chart and the NW European total leave "
+            f"them out until the next successful fetch. {retry_note}"
+        )
 
     if missing_countries:
         _gb_missing = any("Great Britain" in c or c == "GB" for c in missing_countries)

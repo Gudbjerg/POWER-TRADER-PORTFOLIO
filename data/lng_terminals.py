@@ -1,47 +1,20 @@
 """
 GIE ALSI LNG terminal sendout fetcher.
 Covers NW European import terminals: BE (Zeebrugge), NL (Gate), GB (South Hook/Dragon), FR (Dunkirk/Montoir).
-Uses the same AGSI_API_KEY — register free at agsi.gie.eu.
+Uses the same AGSI_API_KEY (free registration at agsi.gie.eu).
+
+Requests go through data/gie.py (rate limits and gateway errors are retried). A country
+whose fetch fails is reported in ``unavailable`` rather than silently left out of the
+NW European total, and the failure is remembered for GIE_FAILURE_TTL_S only.
 """
 import os
-import requests
 import pandas as pd
 import streamlit as st
 from datetime import datetime, timedelta
-from config.settings import LNG_COUNTRIES, LNG_SENDOUT_DROP_PCT
+from config.settings import GIE_FAILURE_TTL_S, LNG_COUNTRIES, LNG_SENDOUT_DROP_PCT
+from data.gie import GieUnavailable, fetch_all_pages
 
 ALSI_BASE = "https://alsi.gie.eu/api"
-
-
-def _headers() -> dict:
-    return {"x-key": os.getenv("AGSI_API_KEY", "")}
-
-
-def _fetch_pages(params: dict) -> list[dict]:
-    records = []
-    page = 1
-    while True:
-        try:
-            resp = requests.get(ALSI_BASE, params={**params, "page": page}, headers=_headers(), timeout=30)
-            resp.raise_for_status()
-            data = resp.json()
-        except Exception:
-            break
-
-        if data.get("error") == "access denied":
-            break
-
-        batch = data.get("data", [])
-        if not batch:
-            break
-        records.extend(batch)
-
-        last_page = data.get("last_page", 1)
-        if page >= last_page:
-            break
-        page += 1
-
-    return records
 
 
 def _to_df(records: list[dict], country: str) -> pd.DataFrame:
@@ -59,12 +32,22 @@ def _to_df(records: list[dict], country: str) -> pd.DataFrame:
     return df
 
 
-@st.cache_data(ttl=3600)
-def fetch_lng_country(country: str, date_from: str, date_to: str) -> pd.DataFrame:
-    if not os.getenv("AGSI_API_KEY", ""):
-        return pd.DataFrame()
-    records = _fetch_pages({"country": country, "from": date_from, "to": date_to, "size": 300})
+@st.cache_data(ttl=3600, show_spinner=False)
+def _lng_history(country: str, date_from: str, date_to: str) -> pd.DataFrame:
+    """Complete send-out history for one country; raises GieUnavailable (never cached)."""
+    records = fetch_all_pages(ALSI_BASE, {"country": country, "from": date_from, "to": date_to, "size": 300})
     return _to_df(records, country)
+
+
+@st.cache_data(ttl=GIE_FAILURE_TTL_S)
+def fetch_lng_country(country: str, date_from: str, date_to: str) -> pd.DataFrame | None:
+    """Send-out history for one country: empty without a key, None when GIE failed."""
+    if not os.getenv("AGSI_API_KEY", "").strip():
+        return pd.DataFrame()
+    try:
+        return _lng_history(country, date_from, date_to)
+    except GieUnavailable:
+        return None
 
 
 def get_lng_data() -> dict:
@@ -74,6 +57,7 @@ def get_lng_data() -> dict:
       'totals'       : DataFrame: date, total_sendout (GWh/d, as published by ALSI), ma7
       'wow_change_pct': float or None — week-on-week % change in total sendout
       'alert'        : bool — True if sendout dropped > LNG_SENDOUT_DROP_PCT
+      'unavailable'  : list of LNG_COUNTRIES codes whose fetch failed (totals exclude them)
       'fetched_at'   : datetime
     """
     today     = datetime.utcnow().date()
@@ -81,9 +65,12 @@ def get_lng_data() -> dict:
     date_to   = today.strftime("%Y-%m-%d")
 
     frames = []
+    unavailable = []
     for country in LNG_COUNTRIES:
         df = fetch_lng_country(country, date_from, date_to)
-        if not df.empty:
+        if df is None:
+            unavailable.append(country)
+        elif not df.empty:
             frames.append(df)
 
     if not frames:
@@ -92,6 +79,7 @@ def get_lng_data() -> dict:
             "totals": pd.DataFrame(),
             "wow_change_pct": None,
             "alert": False,
+            "unavailable": unavailable,
             "fetched_at": datetime.utcnow(),
         }
 
@@ -123,5 +111,6 @@ def get_lng_data() -> dict:
         "totals": totals,
         "wow_change_pct": wow_change_pct,
         "alert": alert,
+        "unavailable": unavailable,
         "fetched_at": datetime.utcnow(),
     }

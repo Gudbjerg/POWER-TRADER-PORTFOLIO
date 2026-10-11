@@ -222,6 +222,11 @@ if missing:
 
 
 # ── KPI bar ────────────────────────────────────────────────────────────────
+# GIE-backed cards say why a figure is missing: no key, or a fetch that failed and is
+# retried within GIE_FAILURE_TTL_S (data/gie.py).
+_gie_note = "AGSI key required" if not has_agsi_key() else "GIE unavailable, retrying shortly"
+_lng_unavailable = lng.get("unavailable") or []
+
 k1, k2, k3, k4, k5, k6 = st.columns(6)
 
 with k1:
@@ -233,7 +238,7 @@ with k1:
             d = delta_span(f"{eu_pct:.1f}%, bands unavailable", color)
         st.markdown(kpi_card("EU Gas Storage", f"{eu_pct:.1f}%", d), unsafe_allow_html=True)
     else:
-        st.markdown(kpi_card("EU Gas Storage", "n/a", delta_span("AGSI key required", "amber")), unsafe_allow_html=True)
+        st.markdown(kpi_card("EU Gas Storage", "n/a", delta_span(_gie_note, "amber")), unsafe_allow_html=True)
 
 with k2:
     if de_pct is not None:
@@ -244,7 +249,7 @@ with k2:
             d = delta_span(f"{de_pct:.1f}%, bands unavailable", color)
         st.markdown(kpi_card("DE Gas Storage", f"{de_pct:.1f}%", d), unsafe_allow_html=True)
     else:
-        st.markdown(kpi_card("DE Gas Storage", "n/a", delta_span("AGSI key required", "amber")), unsafe_allow_html=True)
+        st.markdown(kpi_card("DE Gas Storage", "n/a", delta_span(_gie_note, "amber")), unsafe_allow_html=True)
 
 with k3:
     if ttf_price is not None:
@@ -277,12 +282,18 @@ with k5:
         st.markdown(kpi_card("N-C Spread (EUR/MWh)", "n/a", ""), unsafe_allow_html=True)
 
 with k6:
-    if lng_total_today is not None:
+    if _lng_unavailable:
+        # A total without one of the four countries is not the NW European total.
+        _missing = ", ".join(_lng_unavailable)
+        st.markdown(kpi_card("NW EU LNG Sendout", "n/a",
+                             delta_span(f"GIE ALSI unavailable for {_missing}, retrying shortly", "amber")),
+                    unsafe_allow_html=True)
+    elif lng_total_today is not None:
         color = "red" if lng_alert else ("amber" if lng_wow is not None and lng_wow < -7 else "green")
         d = delta_span(f"{lng_wow:+.1f}% vs prior 7d" if lng_wow is not None else "calculating", color)
         st.markdown(kpi_card("NW EU LNG Sendout", f"{lng_total_today:,.0f} GWh/d", d), unsafe_allow_html=True)
     else:
-        st.markdown(kpi_card("NW EU LNG Sendout", "n/a", delta_span("AGSI key required", "amber")), unsafe_allow_html=True)
+        st.markdown(kpi_card("NW EU LNG Sendout", "n/a", delta_span(_gie_note, "amber")), unsafe_allow_html=True)
 
 st.divider()
 
@@ -395,9 +406,13 @@ with tab_overview:
                 + _lng_note
             )
         else:
+            _storage_hint = (
+                "Add AGSI_API_KEY to see current storage level." if not has_agsi_key()
+                else "Current storage level unavailable: GIE AGSI+ did not answer; retrying shortly."
+            )
             st.caption(
                 f"EU regulation requires 90% fill by November 1. "
-                f"{_days_to_nov} days remaining. Add AGSI_API_KEY to see current storage level."
+                f"{_days_to_nov} days remaining. {_storage_hint}"
             )
     with w2:
         st.markdown("**LNG supply and Iran risk**")

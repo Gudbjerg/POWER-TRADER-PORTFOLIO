@@ -4,68 +4,50 @@ GIE AGSI+ gas storage data fetcher.
 EU aggregate:  GET https://agsi.gie.eu/api/data/eu   (paginated)
 Country level: GET https://agsi.gie.eu/api?country=DE (paginated)
 
-Requires AGSI_API_KEY — register free at https://agsi.gie.eu
+Requires AGSI_API_KEY (free registration at https://agsi.gie.eu). Requests go through
+data/gie.py: rate limits and gateway errors are retried, and a history that could not be
+fetched completely is not returned at all. A complete history is cached for an hour; a
+failed fetch returns an empty frame that is remembered for GIE_FAILURE_TTL_S only, so the
+panel recovers on the next visit after a transient failure instead of an hour later.
 """
 import os
-import requests
 import pandas as pd
 from datetime import datetime, timedelta
 import streamlit as st
+
+from config.settings import GIE_FAILURE_TTL_S
+from data.gie import GieUnavailable, fetch_all_pages
 
 AGSI_BASE = "https://agsi.gie.eu/api"
 AGSI_EU   = "https://agsi.gie.eu/api/data/eu"
 
 
-def _headers() -> dict:
-    return {"x-key": os.getenv("AGSI_API_KEY", "")}
+@st.cache_data(ttl=3600, show_spinner=False)
+def _storage_history(url: str, params: tuple) -> pd.DataFrame:
+    """Complete history from one AGSI+ endpoint; raises GieUnavailable (never cached)."""
+    return _to_df(fetch_all_pages(url, dict(params)))
 
 
-def _fetch_pages(url: str, params: dict) -> list[dict]:
-    """Fetch all pages from an AGSI+ paginated endpoint."""
-    records = []
-    page = 1
-    while True:
-        try:
-            resp = requests.get(url, params={**params, "page": page}, headers=_headers(), timeout=30)
-            resp.raise_for_status()
-            data = resp.json()
-        except Exception:
-            # Network error or timeout — return whatever was fetched so far.
-            # Components will display contextual messages if data is insufficient.
-            break
-
-        if data.get("error") == "access denied":
-            break
-
-        batch = data.get("data", [])
-        if not batch:
-            break
-        records.extend(batch)
-
-        last_page = data.get("last_page", 1)
-        if page >= last_page:
-            break
-        page += 1
-
-    return records
+def _storage_or_empty(url: str, params: dict) -> pd.DataFrame:
+    if not os.getenv("AGSI_API_KEY", "").strip():
+        return pd.DataFrame()
+    try:
+        return _storage_history(url, tuple(sorted(params.items())))
+    except GieUnavailable:
+        return pd.DataFrame()
 
 
-@st.cache_data(ttl=3600)
+@st.cache_data(ttl=GIE_FAILURE_TTL_S)
 def fetch_storage_eu(date_from: str, date_to: str) -> pd.DataFrame:
-    """Fetch EU aggregate gas storage history."""
-    if not os.getenv("AGSI_API_KEY", ""):
-        return pd.DataFrame()
-    records = _fetch_pages(AGSI_EU, {"from": date_from, "to": date_to, "size": 300})
-    return _to_df(records)
+    """Fetch EU aggregate gas storage history (empty without a key or when GIE fails)."""
+    return _storage_or_empty(AGSI_EU, {"from": date_from, "to": date_to, "size": 300})
 
 
-@st.cache_data(ttl=3600)
+@st.cache_data(ttl=GIE_FAILURE_TTL_S)
 def fetch_storage_country(country: str, date_from: str, date_to: str) -> pd.DataFrame:
-    """Fetch country-level gas storage history (e.g. country='DE')."""
-    if not os.getenv("AGSI_API_KEY", ""):
-        return pd.DataFrame()
-    records = _fetch_pages(AGSI_BASE, {"country": country, "from": date_from, "to": date_to, "size": 300})
-    return _to_df(records)
+    """Fetch country-level gas storage history, e.g. country='DE' (empty on failure)."""
+    return _storage_or_empty(
+        AGSI_BASE, {"country": country, "from": date_from, "to": date_to, "size": 300})
 
 
 def _to_df(records: list[dict]) -> pd.DataFrame:
