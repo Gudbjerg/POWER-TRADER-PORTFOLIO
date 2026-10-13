@@ -16,6 +16,7 @@ import pandas as pd
 import streamlit as st
 
 from config.settings import ENTSOE_TIMEOUT_S
+from data.deadline import call_with_deadline
 from data.energy_units import MIN_HOURS_PER_DAY, hourly_power
 
 try:
@@ -101,7 +102,7 @@ def corridor_daily(export_mw: pd.Series, import_mw: pd.Series, label: str) -> pd
 
 def _directional(client, frm: str, to: str, start, end) -> pd.Series:
     try:
-        s = client.query_crossborder_flows(ZONES[frm], ZONES[to], start=start, end=end)
+        s = call_with_deadline(client.query_crossborder_flows, ZONES[frm], ZONES[to], start=start, end=end)
     except Exception as exc:
         import sys
         print(f"[flows] ENTSO-E {frm}->{to} unavailable: {type(exc).__name__}", file=sys.stderr)

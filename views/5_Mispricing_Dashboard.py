@@ -357,7 +357,8 @@ def _get_mispricing_signals() -> list[dict]:
                     for _q8, _lbl8 in ((_cl8.query_load_forecast, "ENTSO-E day-ahead load forecast"),
                                        (_cl8.query_load, "ENTSO-E actual load")):
                         try:
-                            _ser8 = _q8("10Y1001A1001A83F", start=_s8, end=_s8 + pd.Timedelta(days=1))
+                            from data.deadline import call_with_deadline as _dl8
+                            _ser8 = _dl8(_q8, "10Y1001A1001A83F", start=_s8, end=_s8 + pd.Timedelta(days=1), seconds=30)
                         except Exception:
                             continue
                         if isinstance(_ser8, pd.DataFrame):

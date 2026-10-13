@@ -10,6 +10,7 @@ Returns daily GWh totals per country. ENTSO-E reports wind as average power per
 (data/energy_units.py), so the totals are energy whatever the resolution.
 """
 from config.settings import ENTSOE_TIMEOUT_S
+from data.deadline import call_with_deadline
 from data.energy_units import daily_energy
 import os
 import pandas as pd
@@ -52,7 +53,7 @@ def _entsoe_wind(client, eic: str, start, end) -> pd.Series:
         while chunk_start < end:
             chunk_end = min(chunk_start + pd.Timedelta(days=_WIND_CHUNK_DAYS), end)
             try:
-                gen = client.query_generation(eic, start=chunk_start, end=chunk_end, psr_type=psr)
+                gen = call_with_deadline(client.query_generation, eic, start=chunk_start, end=chunk_end, psr_type=psr)
                 if isinstance(gen, pd.DataFrame):
                     if isinstance(gen.columns, pd.MultiIndex):
                         gen.columns = ["_".join(str(c) for c in col).strip() for col in gen.columns]
@@ -181,8 +182,8 @@ def _entsoe_wind_forecast(client, eic: str, start, end) -> pd.Series:
     parts = []
     for psr in ("B19", "B18"):
         try:
-            fc = client.query_wind_and_solar_forecast(
-                eic, start=start, end=end, psr_type=psr,
+            fc = call_with_deadline(
+                client.query_wind_and_solar_forecast, eic, start=start, end=end, psr_type=psr,
             )
             if fc is None or (hasattr(fc, "empty") and fc.empty):
                 continue
@@ -253,7 +254,8 @@ def fetch_de_renewables_today() -> dict:
         return {}
     start = pd.Timestamp.now(tz="Europe/Berlin").normalize()
     try:
-        fc = client.query_wind_and_solar_forecast(DE_EIC, start=start, end=start + pd.Timedelta(days=1))
+        fc = call_with_deadline(client.query_wind_and_solar_forecast, DE_EIC, start=start,
+                                end=start + pd.Timedelta(days=1))
     except Exception:
         return {}
     if fc is None or fc.empty:

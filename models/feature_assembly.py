@@ -34,6 +34,7 @@ from datetime import datetime
 import pandas as pd
 
 from config.settings import ENTSOE_TIMEOUT_S
+from data.deadline import call_with_deadline
 from data.energy_units import daily_mean
 
 # Lazy Streamlit import: this module can be imported outside Streamlit too
@@ -151,7 +152,7 @@ def _load_spot_entsoe(start: pd.Timestamp, end: pd.Timestamp) -> pd.DataFrame:
         while chunk_start < end:
             chunk_end = min(chunk_start + pd.Timedelta(days=90), end)   # long 15-minute requests time out
             try:
-                s = client.query_day_ahead_prices(eic, start=chunk_start, end=chunk_end)
+                s = call_with_deadline(client.query_day_ahead_prices, eic, start=chunk_start, end=chunk_end)
                 if s is not None and not s.empty:
                     chunks.append(s)
             except Exception:

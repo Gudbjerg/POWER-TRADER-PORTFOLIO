@@ -28,6 +28,7 @@ import requests
 import streamlit as st
 
 from config.settings import ENTSOE_TIMEOUT_S
+from data.deadline import call_with_deadline
 from data.energy_units import daily_mean
 
 NORDPOOL_URL = "https://dataportal-api.nordpoolgroup.com/api/DayAheadPrices"
@@ -38,6 +39,7 @@ _NORDPOOL_WORKERS = 4
 _NORDPOOL_RETRY_WAITS = (1.5, 4.0)   # seconds before the second and third attempt
 NORDPOOL_MAX_DAYS = 90               # the public portal serves roughly the last two months
 _ENTSOE_CHUNK_DAYS = 90              # a year of 15-minute prices in one request can time out
+_ENTSOE_WORKERS = 6                  # chunk requests in flight at once (ENTSO-E allows 400 per minute)
 
 ENTSOE_ZONES = {
     "NO1":   "10YNO-1--------2",
@@ -126,24 +128,33 @@ def fetch_entsoe_daily(zones: tuple[str, ...], days: int) -> pd.DataFrame:
     client = EntsoePandasClient(api_key=key, timeout=ENTSOE_TIMEOUT_S)
     end = pd.Timestamp.now(tz=DELIVERY_TZ).normalize() + pd.DateOffset(days=2)
     start = (end - pd.Timedelta(days=days + 2)).normalize()
-    frames = []
+    tasks = []
     for zone in zones:
-        chunks = []
         chunk_start = start
         while chunk_start < end:
             chunk_end = min(chunk_start + pd.Timedelta(days=_ENTSOE_CHUNK_DAYS), end)
-            try:
-                s = client.query_day_ahead_prices(ENTSOE_ZONES[zone], start=chunk_start, end=chunk_end)
-                if s is not None and not s.empty:
-                    chunks.append(s)
-            except Exception:
-                pass
+            tasks.append((zone, chunk_start, chunk_end))
             chunk_start = chunk_end
-        if not chunks:
-            continue
+
+    def _one(task):
+        zone, c_start, c_end = task
+        try:
+            s = call_with_deadline(client.query_day_ahead_prices, ENTSOE_ZONES[zone], start=c_start, end=c_end)
+            return zone, s if s is not None and not s.empty else None
+        except Exception:
+            return zone, None
+
+    by_zone: dict[str, list] = {}
+    with ThreadPoolExecutor(max_workers=_ENTSOE_WORKERS) as ex:
+        for zone, s in ex.map(_one, tasks):
+            if s is not None:
+                by_zone.setdefault(zone, []).append(s)
+
+    frames = []
+    for zone, chunks in by_zone.items():
         prices = pd.concat(chunks)
         prices = pd.to_numeric(prices[~prices.index.duplicated(keep="last")], errors="coerce").dropna()
-        daily = daily_mean(prices, tz=DELIVERY_TZ)
+        daily = daily_mean(prices.sort_index(), tz=DELIVERY_TZ)
         if daily.empty:
             continue
         frames.append(pd.DataFrame({"date": daily.index.date, "zone": zone,

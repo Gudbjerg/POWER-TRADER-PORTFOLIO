@@ -9,6 +9,7 @@ Fallback: energy-charts.info (Fraunhofer ISE) — public REST API, no key needed
 Returns hourly averages (hour 0-23) of day-ahead price and solar generation
 averaged over the last `days` days for Germany.
 """
+from data.deadline import call_with_deadline
 from config.settings import ENTSOE_TIMEOUT_S
 import os
 import pandas as pd
@@ -46,14 +47,14 @@ def _fetch_entsoe(days: int) -> pd.DataFrame:
     solar_df = pd.DataFrame()
 
     try:
-        prices = client.query_day_ahead_prices(DE_LU_EIC, start=start, end=today)
+        prices = call_with_deadline(client.query_day_ahead_prices, DE_LU_EIC, start=start, end=today)
         prices = prices.tz_convert("Europe/Berlin")
         price_df = pd.DataFrame({"price": prices.values}, index=prices.index)
     except Exception:
         pass
 
     try:
-        gen = client.query_generation(DE_EIC, start=start, end=today, psr_type="B16")
+        gen = call_with_deadline(client.query_generation, DE_EIC, start=start, end=today, psr_type="B16")
         gen = gen.tz_convert("Europe/Berlin")
         if isinstance(gen.columns, pd.MultiIndex):
             gen.columns = ["_".join(c).strip() for c in gen.columns]

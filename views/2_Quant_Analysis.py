@@ -49,6 +49,7 @@ from models.wind_forecast_error import (
 )
 from data.wind import fetch_wind_daily, fetch_wind_forecast, fetch_de_renewables_today
 from data.energy_units import daily_mean
+from data.deadline import call_with_deadline
 from data.sentiment import get_sentiment_data
 
 apply_dark_theme()
@@ -229,7 +230,7 @@ def _get_scanner_prices(years: int = 3) -> pd.DataFrame:
                 while _cs < _end:
                     _ce = min(_cs + pd.Timedelta(days=90), _end)   # long 15-minute requests time out
                     try:
-                        _s = _cli.query_day_ahead_prices(_eic, start=_cs, end=_ce)
+                        _s = call_with_deadline(_cli.query_day_ahead_prices, _eic, start=_cs, end=_ce)
                         if _s is not None and not _s.empty:
                             _chunks.append(_s)
                     except Exception:
@@ -367,7 +368,7 @@ def _get_de_live_load_gw() -> tuple:
     for _query, _day, _label in _attempts:
         for _area in ("10Y1001A1001A82H", "10Y1001A1001A83F"):
             try:
-                _ser = _query(_area, start=_day, end=_day + pd.Timedelta(days=1))
+                _ser = call_with_deadline(_query, _area, start=_day, end=_day + pd.Timedelta(days=1), seconds=30)
             except Exception:
                 continue
             if isinstance(_ser, pd.DataFrame):
