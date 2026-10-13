@@ -99,3 +99,15 @@ def ordinal(value) -> str:
     tail = abs(n) % 100
     suffix = "th" if 10 <= tail <= 20 else {1: "st", 2: "nd", 3: "rd"}.get(abs(n) % 10, "th")
     return f"{n}{suffix}"
+
+
+def eur(value: float, signed: bool = False, decimals: int = 0) -> str:
+    """Euro amount with the sign in front of the symbol: -€36,707, +€4,544,085."""
+    try:
+        v = float(value)
+    except (TypeError, ValueError):
+        return "n/a"
+    if v != v:
+        return "n/a"
+    sign = "-" if v < 0 else ("+" if signed and v > 0 else "")
+    return f"{sign}€{abs(v):,.{decimals}f}"

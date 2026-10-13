@@ -19,7 +19,7 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
-from utils.helpers import apply_dark_theme, kpi_card, delta_span
+from utils.helpers import apply_dark_theme, kpi_card, delta_span, eur
 from utils.globe import globe_link
 from utils.theme import ACCENTS, CHART, PLOTLY_TEMPLATE, callout, page_header, page_footer, render
 from models.feature_assembly import load_feature_matrix
@@ -390,7 +390,7 @@ with _k3:
     if _n_active > 0 and len(_combined) > 0:
         _cum = float(_combined.sum())
         st.markdown(
-            kpi_card("Simulated cum. P&L", f"€{_cum:+,.0f}",
+            kpi_card("Simulated cum. P&L", eur(_cum, signed=True),
                      delta_span("full history", "green" if _cum > 0 else "red")),
             unsafe_allow_html=True,
         )
@@ -442,7 +442,7 @@ else:
     _fig_eq.add_trace(go.Scatter(
         x=_feat["date"], y=_pnl_df["combined"].fillna(0).cumsum(),
         name="Combined portfolio",
-        line=dict(color="#ffffff", width=2.5),
+        line=dict(color="#132f38", width=2.5),
         hovertemplate="Combined: €%{y:,.0f}<extra></extra>",
     ))
     _fig_eq.add_hline(y=0, line=dict(color=CHART["zero"], width=1))
@@ -473,11 +473,11 @@ else:
         _dd      = float((_cum_v - _cum_v.expanding().max()).min())
         _rows.append({
             "Signal":       _SIG_BY_ID[_sid]["label"],
-            "Cum. P&L":     f"€{float(_sp.sum()):+,.0f}",
+            "Cum. P&L":     eur(float(_sp.sum()), signed=True),
             "Daily σ":      f"€{_std:,.0f}",
             "Ann. Sharpe":  f"{_sharpe:+.2f}",
             "95% VaR":      f"€{_sv:,.0f}" if not np.isnan(_sv) else "n/a",
-            "Max Drawdown": f"€{_dd:,.0f}",
+            "Max Drawdown": eur(_dd),
         })
     if _rows:
         st.dataframe(pd.DataFrame(_rows), width="stretch", hide_index=True)
@@ -548,7 +548,7 @@ else:
     _kurt = float(pd.Series(_arr).kurtosis())
     st.caption(
         f"{len(_arr):,} daily observations · "
-        f"Mean: €{float(_arr.mean()):+,.0f} · Std: €{float(_arr.std()):,.0f} · "
+        f"Mean: {eur(float(_arr.mean()), signed=True)}, std: €{float(_arr.std()):,.0f}, "
         f"Skew: {_skew:.2f} · Excess kurtosis: {_kurt:.2f}"
         + (". Fat tails present; parametric VaR would understate risk." if _kurt > 1.0 else "")
     )

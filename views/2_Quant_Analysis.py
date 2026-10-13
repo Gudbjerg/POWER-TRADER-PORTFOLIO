@@ -445,27 +445,19 @@ st.divider()
 
 # ── Quant Signal Scorecard ────────────────────────────────────────────────────
 _PILL = {
-    "up":      "<span style='background:#f6e3df;color:#c2391f;border-radius:4px;"
-               "padding:2px 7px;font-size:0.78rem;font-weight:600;'>↑ UPSIDE</span>",
-    "down":    "<span style='background:#e2efe6;color:#2f7a47;border-radius:4px;"
-               "padding:2px 7px;font-size:0.78rem;font-weight:600;'>↓ DOWNSIDE</span>",
-    "neutral": "<span style='background:#e6ebef;color:#2f45c6;border-radius:4px;"
-               "padding:2px 7px;font-size:0.78rem;font-weight:600;'>→ NEUTRAL</span>",
-    "na":      "<span style='background:#132f38;color:#93a3a8;border-radius:4px;"
-               "padding:2px 7px;font-size:0.78rem;font-weight:600;'>⊘ N/A</span>",
+    "up":      "<span class='pill-critical'>Upside</span>",
+    "down":    "<span class='pill-good'>Downside</span>",
+    "neutral": "<span class='pill-ok'>Neutral</span>",
+    "na":      "<span class='pill-ok' style='color:#93a3a8'>Not available</span>",
 }
 
 def _score_card_html(name: str, value: str, direction: str, note: str) -> str:
-    pill = _PILL[direction]
+    """One scorecard reading drawn as a meter (see utils/theme.py)."""
     return (
-        f"<div style='background:#f5f7f4;border:1px solid #c5cfca;border-radius:3px;"
-        f"padding:14px 16px;height:100%;'>"
-        f"<div style='color:#667b83;font-size:0.74rem;margin-bottom:4px;'>{name}</div>"
-        f"<div style='font-size:1.05rem;font-weight:700;color:#132f38;"
-        f"margin-bottom:6px;'>{value}</div>"
-        f"{pill}"
-        f"<div style='color:#667b83;font-size:0.74rem;margin-top:6px;line-height:1.3;'>{note}</div>"
-        f"</div>"
+        f"<div class='ptp-kpi'><div class='ptp-kpi__label'>{name}</div>"
+        f"<div class='ptp-kpi__body'><div class='ptp-kpi__value' style='font-size:1.9rem'>{value}</div></div>"
+        f"<div style='margin-top:0.35rem'>{_PILL[direction]}</div>"
+        f"<div class='ptp-kpi__delta'>{note}</div></div>"
     )
 
 _sc_signals: list[dict] = []
@@ -649,8 +641,8 @@ with st.expander("Quant Signal Scorecard", expanded=True):
     st.markdown(
         f"<div style='margin-bottom:10px;font-size:0.85rem;color:#667b83;'>"
         f"Aggregate: {_agg_label}"
-        f"<span style='color:#93a3a8;margin-left:12px;font-size:0.72rem;'>"
-        f"Hydro loads after first Nordic Decomp visit · Sentiment accumulates over time</span></div>",
+        f"<span style='color:#667b83;margin-left:12px;font-size:0.8rem;'>"
+        f"Upside and downside refer to the direction of pressure on TTF and power prices.</span></div>",
         unsafe_allow_html=True,
     )
     _sc_cols = st.columns(5)
@@ -1130,9 +1122,9 @@ with tab_spike:
                 "SE3": "SE3 (Stockholm)", "NL": "NL (Netherlands)", "FI": "FI (Finland)",
             }
             SIG_PILL = {
-                "alert":  '<span class="pill-critical">ALERT</span>',
-                "warn":   '<span class="pill-warn">WARN</span>',
-                "normal": '<span class="pill-ok">NORMAL</span>',
+                "alert":  '<span class="pill-critical">Alert</span>',
+                "warn":   '<span class="pill-warn">Watch</span>',
+                "normal": '<span class="pill-ok">Normal</span>',
             }
             for _, row in latest_z.iterrows():
                 zone   = row["zone"]
