@@ -452,7 +452,7 @@ _wf_measure += ["relative", "relative", "total"]
 _wf_colors = ["#2f7a47"]  # Revenue
 for _lab in _wf_labels[1:-3]:
     _wf_colors.append(_C.get(_lab.lower().replace(" ", "_").replace("-", "_"), "#2f45c6"))
-_wf_colors += [_C["opex"], _C["depr"], "#ffffff"]
+_wf_colors += [_C["opex"], _C["depr"], "#132f38"]
 
 _fig_wf = go.Figure(go.Waterfall(
     orientation="v",

@@ -672,11 +672,11 @@ with tab_spill:
 
             _latest_stress = float(_stress.iloc[-1])
             if _latest_stress >= ALUM_STRESS_CRITICAL:
-                _stress_label, _stress_color = "CRITICAL", "red"
+                _stress_label, _stress_color = "Critical", "red"
             elif _latest_stress >= ALUM_STRESS_ELEVATED:
-                _stress_label, _stress_color = "ELEVATED", "amber"
+                _stress_label, _stress_color = "Elevated", "amber"
             else:
-                _stress_label, _stress_color = "NORMAL", "green"
+                _stress_label, _stress_color = "Normal", "green"
 
             # Stress time series chart
             _fig_al = go.Figure()
