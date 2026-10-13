@@ -22,14 +22,14 @@ st.set_page_config(
     initial_sidebar_state="collapsed",
 )
 
-from utils.helpers import ordinal, apply_dark_theme, kpi_card, delta_span, commentary
+from utils.helpers import ordinal, apply_dark_theme, kpi_card, delta_span, commentary, has_entsoe_key
 from utils.theme import ACCENTS, CHART, PLOTLY_TEMPLATE, page_header, page_footer
 from config.settings import (
     SCORE_RISK_PREMIUM_EUR, SCORE_SEASONAL_HI_PCT, SCORE_SEASONAL_LO_PCT,
     COINT_ENTRY_Z, COINT_MIN_OBS, COINT_MIN_MATCH, HYDRO_MAX_LAG,
     PCA_STORAGE_ALPHA, PCA_STORAGE_DECAY_TAU, PCA_ENTRY_Z, PCA_LOOKBACK_DAYS,
 )
-from data.gas_storage import get_storage_data
+from data.gas_storage import get_storage_data, calendar_doy
 from data.prices import get_ttf_data
 from data.spot_prices import fetch_spot_prices
 from models.storage_monte_carlo import compute_monthly_stats, run_monte_carlo
@@ -41,21 +41,20 @@ from models.nordic_decomp import (
     run_rolling_decomposition, current_contributions, dominant_driver,
     make_beta_chart, make_contribution_bar, FACTOR_LABELS,
 )
-from models.feature_assembly import assemble_features, get_available_feature_sets
+from models.feature_assembly import load_feature_matrix, get_available_feature_sets
 from models.wind_forecast_error import (
     compute_errors, compute_rolling_rmse, compute_price_correlation,
     make_error_bar_chart, make_rmse_chart, make_correlation_scatter,
     ZONE_LABELS as WIND_ZONE_LABELS,
 )
-from data.wind import fetch_wind_daily, fetch_wind_forecast
+from data.wind import fetch_wind_daily, fetch_wind_forecast, fetch_de_renewables_today
 from data.sentiment import get_sentiment_data
 
 apply_dark_theme()
 
 # ── Load data ────────────────────────────────────────────────────────────────
-@st.cache_data(ttl=3600, show_spinner=False)
 def _get_features_l2():
-    return assemble_features(years=3)
+    return load_feature_matrix(years=3)
 
 @st.cache_data(ttl=3600, show_spinner=False)
 def _run_decomp_cached(df: pd.DataFrame, window: int = 90):
@@ -65,7 +64,7 @@ def _run_decomp_cached(df: pd.DataFrame, window: int = 90):
 def _run_ols_cached(reg_df: pd.DataFrame):
     return run_full_ols(reg_df)
 
-@st.cache_data(ttl=21600, show_spinner=False)
+@st.cache_data(ttl=1800, show_spinner=False)
 def _get_sentiment_l2():
     return get_sentiment_data()
 
@@ -133,7 +132,7 @@ def _build_ttf_pca_panel(eu_storage: pd.DataFrame) -> tuple[pd.DataFrame, str]:
             and "full" in eu_storage.columns):
         _st2 = eu_storage.copy()
         _st2["date"] = pd.to_datetime(_st2["gasDayStart"]).dt.normalize()
-        _st2["doy"]  = _st2["date"].dt.dayofyear
+        _st2["doy"]  = calendar_doy(_st2["date"])
         _st2["year"] = _st2["date"].dt.year
         _cur_yr = pd.Timestamp.now().year
         _doy_stats = (
@@ -345,37 +344,36 @@ def _run_coint_scanner(price_df: pd.DataFrame) -> list[dict]:
 @st.cache_data(ttl=1800, show_spinner=False)
 def _get_de_live_load_gw() -> tuple:
     """
-    Fetch today's German total load from ENTSO-E A65.
+    Today's mean German load in GW from ENTSO-E.
+    Tries the day-ahead load forecast (covers the whole day), then actual load, for the
+    DE-LU bidding zone and then the German control area; falls back to yesterday's actuals.
     Returns (load_gw: float | None, source_label: str).
-    Falls back to yesterday if today's data not yet published.
     """
     _key = os.getenv("ENTSOE_API_KEY", "")
     if not _key:
-        return None, "key not configured"
+        return None, "ENTSO-E key not configured"
     try:
         from entsoe import EntsoePandasClient
-        import pytz
-        from datetime import datetime as _dt
-        _tz  = pytz.timezone("Europe/Berlin")
-        _now = _dt.now(_tz)
-        _start = pd.Timestamp(_now.date(), tz="Europe/Berlin")
-        _end   = _start + pd.Timedelta(days=1)
         _client_a65 = EntsoePandasClient(api_key=_key, timeout=ENTSOE_TIMEOUT_S)
-        try:
-            _ser = _client_a65.query_load("10Y1001A1001A83F", start=_start, end=_end)
-        except Exception:
-            _ser = None
-        if _ser is None or (hasattr(_ser, "empty") and _ser.empty):
-            _start -= pd.Timedelta(days=1)
-            _end   -= pd.Timedelta(days=1)
-            _ser    = _client_a65.query_load("10Y1001A1001A83F", start=_start, end=_end)
-        if _ser is not None and not (hasattr(_ser, "empty") and _ser.empty):
-            _vals = _ser.iloc[:, 0] if isinstance(_ser, pd.DataFrame) else _ser
-            _gw = float(_vals.mean()) / 1000.0
-            return _gw, f"ENTSO-E A65 ({_start.date()})"
-        return None, "no data today"
-    except Exception as _exc:
-        return None, f"A65 error: {str(_exc)[:60]}"
+    except Exception:
+        return None, "ENTSO-E client unavailable"
+    _today = pd.Timestamp.now(tz="Europe/Berlin").normalize()
+    _attempts = [
+        (_client_a65.query_load_forecast, _today, "day-ahead load forecast"),
+        (_client_a65.query_load, _today, "actual load"),
+        (_client_a65.query_load, _today - pd.Timedelta(days=1), "actual load"),
+    ]
+    for _query, _day, _label in _attempts:
+        for _area in ("10Y1001A1001A82H", "10Y1001A1001A83F"):
+            try:
+                _ser = _query(_area, start=_day, end=_day + pd.Timedelta(days=1))
+            except Exception:
+                continue
+            if isinstance(_ser, pd.DataFrame):
+                _ser = _ser.iloc[:, 0]
+            if _ser is not None and not _ser.dropna().empty:
+                return float(_ser.mean()) / 1000.0, f"ENTSO-E {_label}, {_day.date()}"
+    return None, "ENTSO-E load not published yet"
 
 with st.spinner(""):
     storage = get_storage_data()
@@ -406,13 +404,12 @@ with st.sidebar:
         st.caption(f"Spot prices: through {_spot_latest}")
     else:
         st.caption("Spot prices: unavailable")
-    _fm = st.session_state.get("features_l2")
+    _fm = _get_features_l2()
     if _fm is not None and not _fm.empty:
         _fm_latest = pd.to_datetime(_fm["date"]).max().strftime("%Y-%m-%d")
-        st.caption(f"Feature matrix: {len(_fm)} rows through {_fm_latest}")
+        st.caption(f"Feature matrix: {len(_fm)} trading days through {_fm_latest}")
     else:
-        st.caption("Feature matrix: loads on first visit to Nordic Decomp or Wind tab")
-    st.divider()
+        st.caption("Feature matrix: unavailable")
     st.divider()
 
 # ── Header ───────────────────────────────────────────────────────────────────
@@ -543,7 +540,9 @@ try:
         float(np.clip(round(_sc_live_load), 30, 90))
         if _sc_live_load is not None else 60.0
     )
-    _sc_stack  = build_stack(_sc_ttf_latest, _sc_eua)
+    _sc_ren    = fetch_de_renewables_today()
+    _sc_stack  = build_stack(_sc_ttf_latest, _sc_eua,
+                             {k: _sc_ren[k] for k in ("wind", "solar") if k in _sc_ren})
     _sc_marg   = identify_marginal_fuel(_sc_stack, _sc_ref_demand)
     _sc_fuel   = _sc_marg["fuel"]
     _sc_dir = ("up" if _sc_fuel in ("gas", "oil")
@@ -560,7 +559,7 @@ try:
         "biomass": "Biomass-marginal: mid-stack clearing",
     }.get(_sc_fuel, f"{_sc_fuel} marginal")
     if _sc_live_load is None:
-        _sc_fuel_note += f" · A65 n/a: {_sc_load_src}"
+        _sc_fuel_note += f" · reference demand ({_sc_load_src})"
     _sc_demand_label = (
         f"{_sc_ref_demand:.0f} GW live"
         if _sc_live_load is not None
@@ -573,9 +572,9 @@ except Exception:
     _sc_signals.append({"name": "Marginal Fuel", "value": "n/a",
                          "direction": "na", "note": "Computation error"})
 
-# Signal 4: Hydro level vs 90-day mean (session_state — only after Nordic Decomp/Wind visit)
+# Signal 4: Hydro level vs 90-day mean (shared feature matrix, cached for an hour)
 try:
-    _sc_fm = st.session_state.get("features_l2")
+    _sc_fm = _get_features_l2()
     if _sc_fm is not None and not _sc_fm.empty and "hydro_pct" in _sc_fm.columns:
         _sc_hydro_ser = _sc_fm["hydro_pct"].dropna()
         if len(_sc_hydro_ser) >= 30:
@@ -590,10 +589,10 @@ try:
                                  "direction": _sc_dir, "note": _sc_note})
         else:
             _sc_signals.append({"name": "Hydro Level", "value": "n/a",
-                                 "direction": "na", "note": "Visit Nordic Decomp tab to load"})
+                                 "direction": "na", "note": "Too little hydro history (ENTSO-E B31)"})
     else:
         _sc_signals.append({"name": "Hydro Level", "value": "n/a",
-                             "direction": "na", "note": "Visit Nordic Decomp tab to load"})
+                             "direction": "na", "note": "Hydro data unavailable (ENTSO-E B31)"})
 except Exception:
     _sc_signals.append({"name": "Hydro Level", "value": "n/a",
                          "direction": "na", "note": "Computation error"})
@@ -628,7 +627,7 @@ try:
                                  "direction": "na", "note": f"Need 21 aligned days ({len(_sc_gc_merged)} so far)"})
     else:
         _sc_signals.append({"name": "Sentiment → TTF", "value": "n/a",
-                             "direction": "na", "note": "Sentiment pipeline unavailable"})
+                             "direction": "na", "note": "No scored headlines available"})
 except ImportError:
     _sc_signals.append({"name": "Sentiment → TTF", "value": "n/a",
                          "direction": "na", "note": "statsmodels not available"})
@@ -738,15 +737,15 @@ with tab_mc:
         with k1:
             color = "green" if p_reach_90 >= 70 else ("amber" if p_reach_90 >= 40 else "red")
             st.markdown(
-                kpi_card("Prob(reach 90%, EU mandate)", f"{p_reach_90:.0f}%",
+                kpi_card("Prob(reach 90%, EU target)", f"{p_reach_90:.0f}%",
                          delta_span(f"at {rate_multiplier:.2f}x injection rate", color)),
                 unsafe_allow_html=True,
             )
         with k2:
             color = "green" if p_reach_80 >= 80 else ("amber" if p_reach_80 >= 55 else "red")
             st.markdown(
-                kpi_card("Prob(reach 80%, min threshold)", f"{p_reach_80:.0f}%",
-                         delta_span("original 2022 emergency target", color)),
+                kpi_card("Prob(reach 80%)", f"{p_reach_80:.0f}%",
+                         delta_span("target less the 10 pp flexibility", color)),
                 unsafe_allow_html=True,
             )
         with k3:
@@ -797,10 +796,10 @@ with tab_mc:
                                  line=dict(color=C["median"], width=2.2),
                                  hovertemplate="P50: %{y:.1f}%<extra></extra>"))
         fig.add_hline(y=90, line_dash="dash", line_color=C["target"], line_width=1.5,
-                      annotation_text="90% EU mandate (Nov 1)", annotation_position="right",
+                      annotation_text="90% EU target", annotation_position="right",
                       annotation_font=dict(color=C["target"], size=11))
         fig.add_hline(y=80, line_dash="dot", line_color=C["mandate"], line_width=1.0,
-                      annotation_text="80% (2022 original)", annotation_position="right",
+                      annotation_text="80% (with 10 pp flexibility)", annotation_position="right",
                       annotation_font=dict(color=C["mandate"], size=10))
         fig.update_layout(
             template=PLOTLY_TEMPLATE, paper_bgcolor=C["bg"], plot_bgcolor=C["panel_bg"],
@@ -838,11 +837,12 @@ with tab_mc:
             The random seed is fixed per multiplier value for reproducible scenario comparisons.
 
             **Reference levels:**
-            - **90% (green dashed):** Current EU mandate. The original 2022 emergency regulation (EU 2022/1032)
-              set 80%, but subsequent extensions raised the target to 90% by November 1 for the 2023–2025+
-              period. In 2025, EU storage reached 83% by October 1 and met the 90% mandate by November 1.
-            - **80% (gold dotted):** The original 2022 emergency target under EU Regulation 2022/1032.
-              Shown for historical reference.
+            - **90% (green dashed):** EU filling target. Regulation (EU) 2022/1032 required 90% by
+              1 November; the 2025 amendment allows the target to be met on any day between 1 October and
+              1 December and extends the rules to the end of 2027. The simulation ends on 1 November, the
+              usual end of net injections, so its terminal level is close to the season's peak.
+            - **80% (gold dotted):** The target less the 10 percentage points of deviation the amended
+              regulation allows in difficult market conditions.
 
             **Percentile bands:** Outer band (P10-P90) contains 80% of paths. Inner band (P25-P75) is the
             interquartile range. The blue line is the P50 median path.
@@ -1497,7 +1497,7 @@ with tab_stack:
             "Modelled demand (GW)",
             min_value=30.0, max_value=90.0, value=_default_demand, step=1.0,
             help=(
-                "Default set to today's ENTSO-E A65 German actual load average. "
+                "Default set to today's mean German load from ENTSO-E (day-ahead forecast, else actuals). "
                 "German grid load varies from ~35 GW (summer weekend night) to ~85 GW "
                 "(cold winter peak). Slide to override."
             ),
@@ -1519,7 +1519,9 @@ with tab_stack:
 
     # ── Fetch EUA, build stack ────────────────────────────────────────────────
     eua_price, eua_source = _get_eua()
-    stack_df  = build_stack(ttf_latest, eua_price)
+    _ren_today = fetch_de_renewables_today()
+    stack_df  = build_stack(ttf_latest, eua_price,
+                            {k: _ren_today[k] for k in ("wind", "solar") if k in _ren_today})
     marginal  = identify_marginal_fuel(stack_df, demand_gw)
 
     # ── KPI row ──────────────────────────────────────────────────────────────
@@ -1646,12 +1648,15 @@ with tab_stack:
         **Dynamic inputs:**
         - Gas CCGT SRMC = TTF ÷ 0.55 + EUA × 0.37 (live TTF: **€{ttf_latest:.1f}/MWh**, EUA: **€{eua_price:.0f}/t**)
         - Hard coal SRMC = 11 EUR/MWh_th ÷ 0.40 + EUA × 0.85 ≈ **€{coal_srmc:.1f}/MWh** at current EUA
-        - Demand default: **{_default_demand:.0f} GW**, from {"ENTSO-E A65 today's average (" + _load_src + ")" if _live_load_gw is not None else "static 60 GW fallback (" + _load_src + ")"}
+        - Demand default: **{_default_demand:.0f} GW**, from {"today's mean load (" + _load_src + ")" if _live_load_gw is not None else "a 60 GW reference (" + _load_src + ")"}
+        - Wind and solar availability: {("today's ENTSO-E day-ahead forecast, wind " + str(_ren_today.get("wind", "n/a")) + " GW and solar " + str(_ren_today.get("solar", "n/a")) + " GW (daily mean)") if _ren_today else "average capacity factors (wind 25%, solar 11%) because no forecast was available"}
 
-        **Static inputs (Bundesnetzagentur 2024):**
-        - Wind: 66 GW installed | Solar: 73 GW | Hydro: 4.5 GW | Biomass: 8.5 GW
+        **Static inputs (Bundesnetzagentur 2024, installed):**
+        - Wind: 66 GW | Solar: 73 GW | Hydro: 4.5 GW | Biomass: 8.5 GW
         - Lignite: 17 GW (€20/MWh) | Hard coal: 23 GW | Gas CCGT/OCGT: 30 GW | Oil peakers: 2.5 GW
         - Nuclear: 0 GW (all plants retired April 2023)
+        - Each block is drawn at its available capacity: thermal plant at 85-90% availability,
+          run-of-river hydro at 45%, biomass at 70%
 
         **EUA source:** {eua_source}
 
@@ -1692,11 +1697,9 @@ with tab_decomp:
         "are directly comparable across drivers."
     )
 
-    # Lazy-load feature matrix: only assembled when this tab is first visited
-    if "features_l2" not in st.session_state:
-        with st.spinner("Assembling feature matrix (first visit; subsequent loads are instant)…"):
-            st.session_state["features_l2"] = _get_features_l2()
-    features_df = st.session_state["features_l2"]
+    # Shared feature matrix (cached for an hour across pages)
+    with st.spinner("Loading the feature matrix…"):
+        features_df = _get_features_l2()
 
     _avail_l2 = get_available_feature_sets(features_df)
     _n_rows_l2 = len(features_df)
@@ -1874,10 +1877,8 @@ with tab_wind:
     )
 
     # ── Load feature matrix (lazy — only when this tab is visited) ───────────
-    if "features_l2" not in st.session_state:
-        with st.spinner("Assembling feature matrix (first visit; subsequent loads are instant)…"):
-            st.session_state["features_l2"] = _get_features_l2()
-    features_df = st.session_state["features_l2"]
+    with st.spinner("Loading the feature matrix…"):
+        features_df = _get_features_l2()
 
     # ── Load wind data ────────────────────────────────────────────────────────
     @st.cache_data(ttl=3600, show_spinner=False)
@@ -1900,10 +1901,8 @@ with tab_wind:
     # ── Source banners ────────────────────────────────────────────────────────
     if fc_source == "unavailable":
         st.warning(
-            "Wind forecast data (ENTSO-E A69) is unavailable. "
-            "Possible causes: no ENTSOE_API_KEY set, or ENTSO-E server instability "
-            "(A69 wind forecast endpoint may be affected by the ongoing platform issues "
-            "also affecting B16/B19 actual generation). Check API key in settings.",
+            "Wind forecast data (ENTSO-E A69) is unavailable right now"
+            + ("." if has_entsoe_key() else ": no ENTSOE_API_KEY is configured."),
             icon="⚠️",
         )
     else:
@@ -1917,8 +1916,7 @@ with tab_wind:
     if fc_df.empty or act_df.empty or not fc_zones:
         st.info(
             "Both forecast (ENTSO-E A69) and actual (ENTSO-E B18/B19 or Fraunhofer ISE) "
-            "data are required for error computation. Actual DE wind is available via "
-            "Fraunhofer ISE fallback: forecast data requires an active ENTSO-E API key.",
+            "data are required for error computation; one of them is unavailable right now.",
             icon="ℹ️",
         )
     else:
@@ -2069,9 +2067,8 @@ with tab_granger:
 
     if _sent_error and _daily_sent.empty:
         st.warning(
-            f"Sentiment pipeline unavailable: {_sent_error} "
-            "This tab requires the FinBERT model (HuggingFace Spaces deployment) and "
-            "at least 21 days of scored headlines.",
+            f"{_sent_error} The test needs FinBERT scores for at least 21 trading days "
+            "of energy headlines.",
             icon="⚠️",
         )
     else:
@@ -2081,8 +2078,8 @@ with tab_granger:
             st.warning("TTF price data unavailable: cannot compute Granger test.", icon="⚠️")
         elif _daily_sent.empty:
             st.info(
-                "No sentiment history yet. Granger test requires at least 21 days of scored headlines. "
-                "History accumulates automatically on each page load.",
+                "No sentiment history yet. The Granger test needs at least 21 days of scored headlines; "
+                "older headlines are being collected from the news archives in the background.",
                 icon="ℹ️",
             )
         else:
@@ -2107,7 +2104,7 @@ with tab_granger:
                     f"Granger test requires {_MIN_DAYS} aligned trading days with both sentiment "
                     f"and TTF return data. Currently have **{_n_merged}**; "
                     f"**{_days_needed} more** needed before the test can run. "
-                    "Sentiment history accumulates automatically.",
+                    "Older headlines are collected from the news archives in the background.",
                     icon="ℹ️",
                 )
                 # Show what we have so far
@@ -2639,19 +2636,16 @@ with tab_hydro_lag:
         "how far ahead hydro fundamentals lead the spot market."
     )
 
-    # Lazy-load feature matrix
-    if "features_l2" not in st.session_state:
-        with st.spinner("Assembling feature matrix (first visit; subsequent loads are instant)…"):
-            st.session_state["features_l2"] = _get_features_l2()
-    _hydro_feat_df = st.session_state["features_l2"]
+    # Shared feature matrix (cached for an hour across pages)
+    with st.spinner("Loading the feature matrix…"):
+        _hydro_feat_df = _get_features_l2()
 
     if _hydro_feat_df.empty:
-        st.warning("Feature matrix unavailable. Check ENTSO-E API key.", icon="⚠️")
+        st.warning("The feature matrix is unavailable right now: the price sources did not answer.", icon="⚠️")
     elif "hydro_pct" not in _hydro_feat_df.columns or _hydro_feat_df["hydro_pct"].notna().sum() < 60:
         st.info(
-            "Norwegian hydro reservoir data is not available in the current feature set. "
-            "This requires an active ENTSO-E API key (ENTSOE_API_KEY in .env). "
-            "Without hydro data, the lead/lag analysis cannot run.",
+            "Norwegian hydro reservoir data (ENTSO-E B31) is not available right now, "
+            "so the lead/lag analysis cannot run.",
             icon="ℹ️",
         )
     else:
@@ -3138,16 +3132,14 @@ with tab_coint:
         "Entry/exit z-score thresholds define a rules-based spread trading signal."
     )
 
-    # Lazy-load feature matrix
-    if "features_l2" not in st.session_state:
-        with st.spinner("Assembling feature matrix (first visit; subsequent loads are instant)…"):
-            st.session_state["features_l2"] = _get_features_l2()
-    _coint_feat = st.session_state["features_l2"]
+    # Shared feature matrix (cached for an hour across pages)
+    with st.spinner("Loading the feature matrix…"):
+        _coint_feat = _get_features_l2()
 
     if _coint_feat.empty:
-        st.warning("Feature matrix unavailable. Check ENTSO-E API key.", icon="⚠️")
+        st.warning("The feature matrix is unavailable right now: the price sources did not answer.", icon="⚠️")
     elif "no2" not in _coint_feat.columns or "nl" not in _coint_feat.columns:
-        st.warning("NO2 and NL price series required. Check ENTSO-E A44 API key.", icon="⚠️")
+        st.warning("NO2 and NL day-ahead prices are unavailable right now.", icon="⚠️")
     else:
         _ci_df = _coint_feat[["date", "no2", "nl"]].dropna().copy()
         _ci_df["date"] = pd.to_datetime(_ci_df["date"])
@@ -3445,7 +3437,7 @@ with tab_scanner:
 
     if _scan_px.empty or len(_scan_cols) < 2:
         st.warning(
-            "Scanner requires at least 2 price series. Check ENTSO-E API key for DE and FR data.",
+            "The scanner needs at least two price series; the price sources did not answer.",
             icon="⚠️",
         )
     else:

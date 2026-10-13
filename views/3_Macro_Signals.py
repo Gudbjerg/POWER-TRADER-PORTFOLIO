@@ -42,7 +42,7 @@ def _mom_delta(v: float) -> str:
 _TICKERS_7X7 = {
     "TTF":    "TTF=F",   # ICE TTF front-month gas (EUR/MWh)
     "Brent":  "BZ=F",    # ICE Brent crude (USD/bbl)
-    "Coal":   "MTF=F",   # ICE Rotterdam coal / API2 proxy (USD/t)
+    "HH":     "NG=F",    # NYMEX Henry Hub natural gas (USD/MMBtu); Yahoo no longer serves API2 coal
     "EUA":    "CO2.L",   # EU carbon allowances (ICE, EUR/t)
     "Copper": "HG=F",    # COMEX copper (USD/lb, LME proxy)
     "Alum":   "ALI=F",   # COMEX aluminium (USD/t, LME proxy)
@@ -776,7 +776,7 @@ with tab_grid:
     st.markdown("### 7×7 Cross-Commodity Correlation Grid")
     st.caption(
         "90-day rolling Pearson correlations of daily log-returns across TTF gas, Brent crude, "
-        "API2 coal, EU carbon (EUA), copper, aluminium, and the Baltic Dry Index. "
+        "Henry Hub gas, EU carbon (EUA), copper, aluminium, and the Baltic Dry Index. "
         "All data via Yahoo Finance. Signals update on page load."
     )
 
@@ -963,7 +963,7 @@ with tab_grid:
             |--------|---------|-------------|
             | TTF    | TTF=F   | ICE TTF Natural Gas front-month (EUR/MWh) |
             | Brent  | BZ=F    | ICE Brent Crude Oil front-month (USD/bbl) |
-            | Coal   | MTF=F   | ICE Rotterdam API2 Coal front-month (USD/t) |
+            | HH     | NG=F    | NYMEX Henry Hub natural gas front-month (USD/MMBtu); replaces API2 coal (MTF=F), which Yahoo Finance no longer serves |
             | EUA    | CO2.L   | EU Emission Allowance, ICE EUA Dec (EUR/tCO₂) |
             | Copper | HG=F    | COMEX High-Grade Copper (USD/lb, LME proxy) |
             | Alum   | ALI=F   | COMEX Aluminium (USD/t, LME proxy) |
@@ -982,10 +982,10 @@ with tab_grid:
             Positive τ means A leads B by τ days. A signal is flagged as actionable when
             |ρ| ≥ 0.4 and τ ≠ 0.
 
-            **Positioning relevance (Statkraft context)**
+            **Positioning relevance**
 
             Cross-commodity correlations are most useful for:
-            - **Calendar spreading**: gas/carbon/coal correlations drive clean dark/spark spread compression
+            - **Calendar spreading**: gas/carbon correlations drive clean spark spread compression; TTF/Henry Hub co-movement reflects the US LNG export link
             - **Macro hedging**: copper and aluminium lead demand signals for European industrial load
             - **Baltic Dry as leading indicator**: shipping costs often lead energy demand by 4–8 weeks
 
@@ -994,7 +994,7 @@ with tab_grid:
             """)
 
     st.caption(
-        "Sources: Yahoo Finance (TTF=F, BZ=F, MTF=F, CO2.L, HG=F, ALI=F, BDRY) | "
+        "Sources: Yahoo Finance (TTF=F, BZ=F, NG=F, CO2.L, HG=F, ALI=F, BDRY) | "
         "90-day rolling window | Updated on page load"
     )
 

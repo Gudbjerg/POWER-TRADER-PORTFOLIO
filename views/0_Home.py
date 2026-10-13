@@ -193,7 +193,7 @@ with st.expander("About this platform", expanded=False):
             "<div class='ptp-about-stack__title'>Data &amp; Infrastructure</div>"
             "Python 3.11+ &nbsp;·&nbsp; Streamlit &nbsp;·&nbsp; Plotly<br>"
             "Pandas &nbsp;·&nbsp; NumPy &nbsp;·&nbsp; yfinance &nbsp;·&nbsp; entsoe-py<br>"
-            "Deployed on Render (EU Frankfurt) · HuggingFace Spaces (backup)"
+            "Hosted on Hugging Face Spaces &nbsp;·&nbsp; tested with pytest and GitHub Actions"
             "</div>"
         )
 
@@ -210,7 +210,7 @@ _strip_slot.markdown(
     ticker_strip(
         _strip["items"],
         note=f"Day-over-day change. Futures, carbon and FX: last daily bar via Yahoo Finance. "
-             f"Power: Nord Pool day-ahead daily average, change in EUR/MWh. "
+             f"Power: day-ahead daily average (ENTSO-E, Nord Pool), change in EUR/MWh. "
              f"Last fetch {_strip['fetched_at']:%Y-%m-%d %H:%M} UTC.",
     ),
     unsafe_allow_html=True,

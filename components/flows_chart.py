@@ -9,12 +9,10 @@ from utils.theme import CHART, PLOTLY_TEMPLATE
 
 PAIR_COLORS = {
     "NO1->SE3": "#4cc9f0",
-    "NO2->SE3": "#4361ee",
-    "NO2->DK1": "#3a0ca3",
-    "NO2->DE":  "#7209b7",
+    "NO2->DK1": "#4361ee",
+    "NO2->DE":  "#b5179e",
     "NO2->NL":  "#c1666b",
-    "NO2->GB":  "#f4a261",   # NSN cable — highlighted for handelsbalanse context
-    "NO1->GB":  "#2a9d8f",
+    "NO2->GB":  "#f4a261",   # North Sea Link
 }
 
 COLORS = {
@@ -29,7 +27,7 @@ def render_flows_chart(flow_data: dict):
     df         = flow_data.get("flows", pd.DataFrame())
     fetched_at = flow_data.get("fetched_at")
 
-    st.subheader("Nordic Cross-Border Power Flows (Net MWh/day)")
+    st.subheader("Norwegian Cross-Border Power Flows (net GWh per day)")
 
     if df.empty:
         from utils.helpers import has_entsoe_key
@@ -53,10 +51,10 @@ def render_flows_chart(flow_data: dict):
         color = PAIR_COLORS.get(pair, "#888888")
         fig.add_trace(go.Bar(
             x=subset["date"],
-            y=subset["net_flow_mwh"],
-            name=pair,
+            y=subset["net_flow_mwh"] / 1_000,
+            name=pair.replace("->", " → "),
             marker_color=color,
-            hovertemplate=f"{pair}: %{{y:,.0f}} MWh<extra></extra>",
+            hovertemplate=f"{pair.replace('->', ' → ')}: %{{y:,.1f}} GWh<extra></extra>",
         ))
 
     fig.update_layout(
@@ -69,7 +67,7 @@ def render_flows_chart(flow_data: dict):
         legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
         xaxis=dict(showgrid=True, gridcolor=COLORS["grid"], title=None),
         yaxis=dict(
-            title="Net MWh/day (positive = import into Norway, negative = export)",
+            title="Net GWh/day (positive = import into Norway)",
             showgrid=True,
             gridcolor=COLORS["grid"],
         ),
@@ -78,25 +76,19 @@ def render_flows_chart(flow_data: dict):
 
     st.plotly_chart(fig, width="stretch")
 
-    # NO2→GB handelsbalanse metric (year-to-date export/import ratio)
-    no2_gb = df[df["pair"] == "NO2->GB"].copy()
-    if not no2_gb.empty:
-        no2_gb["date"] = pd.to_datetime(no2_gb["date"])
-        ytd = no2_gb[no2_gb["date"].dt.year == date.today().year]
-        if not ytd.empty:
-            export_days = (ytd["net_flow_mwh"] < 0).sum()   # negative = Norway exporting
-            import_days = (ytd["net_flow_mwh"] > 0).sum()
-            total_days  = len(ytd)
-            export_pct  = export_days / total_days * 100 if total_days > 0 else 0
-            import_pct  = 100 - export_pct
-            gross_exp   = ytd[ytd["net_flow_mwh"] < 0]["net_flow_mwh"].abs().sum() / 1_000_000  # TWh
-            gross_imp   = ytd[ytd["net_flow_mwh"] > 0]["net_flow_mwh"].sum() / 1_000_000
-            st.info(
-                f"NO2 to GB trade balance (year to date {date.today().year}): "
-                f"{export_pct:.0f}% export days / {import_pct:.0f}% import days. "
-                f"Gross export: {gross_exp:.2f} TWh. Gross import: {gross_imp:.2f} TWh. "
-                f"Historical norm is approximately 95% export / 5% import."
-            )
+    # North Sea Link balance over the fetched window
+    nsl = df[df["pair"] == "NO2->GB"].dropna(subset=["net_flow_mwh"])
+    if not nsl.empty:
+        export_days = int((nsl["net_flow_mwh"] < 0).sum())   # negative = Norway exporting
+        import_days = int((nsl["net_flow_mwh"] > 0).sum())
+        n_days = len(nsl)
+        gross_exp = float(nsl["export_mwh"].sum()) / 1_000 if "export_mwh" in nsl else float("nan")
+        gross_imp = float(nsl["import_mwh"].sum()) / 1_000 if "import_mwh" in nsl else float("nan")
+        st.info(
+            f"North Sea Link (NO2 to GB), last {n_days} days: net export on {export_days} days, "
+            f"net import on {import_days} days. Gross flow {gross_exp:,.0f} GWh to Britain and "
+            f"{gross_imp:,.0f} GWh to Norway."
+        )
 
     # 7-day dominant corridor insight
     if not df.empty:
@@ -107,8 +99,8 @@ def render_flows_chart(flow_data: dict):
             val      = avg_net[dominant]
             direction = "net importing" if val > 0 else "net exporting"
             st.caption(
-                f"Last 7 days: the {dominant} corridor is {direction} "
-                f"({abs(val):,.0f} MWh/day average)."
+                f"Last 7 days: the {dominant.replace('->', ' → ')} corridor is {direction} "
+                f"({abs(val) / 1_000:,.1f} GWh/day on average)."
             )
 
     if fetched_at:

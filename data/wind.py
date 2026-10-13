@@ -5,9 +5,12 @@ Primary:  ENTSO-E B18 (Wind Offshore) + B19 (Wind Onshore). Requires ENTSOE_API_
 Fallback: energy-charts.info (Fraunhofer ISE) for DE — no key required.
           No fallback for NO (Norway wind is a minor generation source anyway).
 
-Returns daily GWh totals per country.
+Returns daily GWh totals per country. ENTSO-E reports wind as average power per
+15 minutes for Germany; every source is averaged to hourly power before the daily sum
+(data/energy_units.py), so the totals are energy whatever the resolution.
 """
 from config.settings import ENTSOE_TIMEOUT_S
+from data.energy_units import daily_energy
 import os
 import pandas as pd
 import streamlit as st
@@ -37,19 +40,18 @@ def _entsoe_wind(client, eic: str, start, end) -> pd.Series:
     for psr in ("B19", "B18"):
         try:
             gen = client.query_generation(eic, start=start, end=end, psr_type=psr)
-            gen = gen.tz_convert("UTC")
-            if isinstance(gen.columns, pd.MultiIndex):
-                gen.columns = ["_".join(str(c) for c in col).strip() for col in gen.columns]
-            series = pd.to_numeric(gen.iloc[:, 0], errors="coerce")
-            daily  = series.resample("D").sum() / 1000   # MWh → GWh
+            if isinstance(gen, pd.DataFrame):
+                if isinstance(gen.columns, pd.MultiIndex):
+                    gen.columns = ["_".join(str(c) for c in col).strip() for col in gen.columns]
+                gen = gen.iloc[:, 0]
+            series = pd.to_numeric(gen, errors="coerce").dropna()
+            daily  = daily_energy(series, tz="UTC") / 1000   # hourly-mean MW summed → GWh
             parts.append(daily)
         except Exception:
             continue
     if not parts:
         return pd.Series(dtype=float)
-    total = pd.concat(parts, axis=1).sum(axis=1)
-    total.index = total.index.tz_localize(None)
-    return total
+    return pd.concat(parts, axis=1).sum(axis=1, min_count=1).dropna()
 
 
 def _energy_charts_wind(days: int) -> pd.Series:
@@ -75,16 +77,16 @@ def _energy_charts_wind(days: int) -> pd.Series:
             )
             r.raise_for_status()
             data = r.json()
-            ts     = pd.to_datetime(data["unix_seconds"], unit="s", utc=True).tz_localize(None)
-            series = pd.Series(data["power"], index=ts, dtype=float)  # MW hourly
-            daily  = series.resample("D").sum() / 1000  # MWh sum → GWh
+            ts     = pd.to_datetime(data["unix_seconds"], unit="s", utc=True)
+            series = pd.Series(data["power"], index=ts, dtype=float).dropna()  # MW
+            daily  = daily_energy(series, tz="UTC") / 1000  # GWh per UTC day
             parts.append(daily)
         except Exception:
             continue
 
     if not parts:
         return pd.Series(dtype=float)
-    return pd.concat(parts, axis=1).sum(axis=1)
+    return pd.concat(parts, axis=1).sum(axis=1, min_count=1).dropna()
 
 
 @st.cache_data(ttl=3600)
@@ -169,16 +171,14 @@ def _entsoe_wind_forecast(client, eic: str, start, end) -> pd.Series:
                 series = fc.iloc[:, 0]
             else:
                 series = fc
-            series = pd.to_numeric(series, errors="coerce").tz_convert("UTC")
-            daily  = series.resample("D").sum() / 1000   # MWh → GWh
+            series = pd.to_numeric(series, errors="coerce").dropna()
+            daily  = daily_energy(series, tz="UTC") / 1000   # GWh per UTC day
             parts.append(daily)
         except Exception:
             continue
     if not parts:
         return pd.Series(dtype=float)
-    total = pd.concat(parts, axis=1).sum(axis=1)
-    total.index = total.index.tz_localize(None)
-    return total
+    return pd.concat(parts, axis=1).sum(axis=1, min_count=1).dropna()
 
 
 @st.cache_data(ttl=3600)
@@ -221,3 +221,32 @@ def fetch_wind_forecast(days: int = 90) -> dict:
         "zones":    list(results.keys()),
         "source":   "ENTSO-E A69",
     }
+
+
+@st.cache_data(ttl=3600)
+def fetch_de_renewables_today() -> dict:
+    """Today's mean German wind and solar output expected by ENTSO-E (A69 day-ahead), in GW.
+
+    Returns {"wind": GW, "solar": GW, "date": "YYYY-MM-DD"} or {} without a key or data.
+    """
+    client = _client()
+    if client is None:
+        return {}
+    start = pd.Timestamp.now(tz="Europe/Berlin").normalize()
+    try:
+        fc = client.query_wind_and_solar_forecast(DE_EIC, start=start, end=start + pd.Timedelta(days=1))
+    except Exception:
+        return {}
+    if fc is None or fc.empty:
+        return {}
+    if isinstance(fc, pd.Series):
+        fc = fc.to_frame()
+    cols = {str(c).lower(): c for c in fc.columns}
+    wind = [c for k, c in cols.items() if "wind" in k]
+    solar = [c for k, c in cols.items() if "solar" in k]
+    out = {"date": str(start.date())}
+    if wind:
+        out["wind"] = round(float(fc[wind].apply(pd.to_numeric, errors="coerce").sum(axis=1, min_count=1).mean()) / 1000, 1)
+    if solar:
+        out["solar"] = round(float(pd.to_numeric(fc[solar[0]], errors="coerce").mean()) / 1000, 1)
+    return out if len(out) > 1 else {}

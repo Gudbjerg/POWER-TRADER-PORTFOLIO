@@ -11,7 +11,9 @@ Architecture: Gaussian HMM with 4 hidden states (hmmlearn).
 States are unsupervised — regime labels are assigned post-hoc by inspecting
 the mean feature vector (centroid) of each state.
 
-Weights are saved to models/weights/hmm_model.joblib.
+Parameters are saved to models/weights/hmm_params.json (start probabilities, transition
+matrix, state means and full covariances), a text format that deploys without binary
+file storage and round-trips exactly.
 """
 from __future__ import annotations
 
@@ -24,7 +26,7 @@ from datetime import datetime
 _WEIGHTS_DIR = os.path.join(os.path.dirname(__file__), "weights")
 os.makedirs(_WEIGHTS_DIR, exist_ok=True)
 
-_MODEL_PATH = os.path.join(_WEIGHTS_DIR, "hmm_model.joblib")
+_MODEL_PATH = os.path.join(_WEIGHTS_DIR, "hmm_params.json")
 _META_PATH  = os.path.join(_WEIGHTS_DIR, "hmm_meta.json")
 
 N_STATES    = 4
@@ -54,22 +56,64 @@ def load_meta() -> dict:
         return {}
 
 
+_JSON_COVARIANCE_TYPES = ("full", "diag", "tied")   # spherical: hmmlearn's full-matrix view is unreliable
+
+
+def _params_to_json(model) -> dict:
+    """Fitted GaussianHMM parameters as plain lists (exact float round trip)."""
+    if model.covariance_type not in _JSON_COVARIANCE_TYPES:
+        raise ValueError(f"covariance type {model.covariance_type!r} is not supported")
+    return {
+        "n_components":    int(model.n_components),
+        "covariance_type": model.covariance_type,
+        "startprob":       np.asarray(model.startprob_, dtype=float).tolist(),
+        "transmat":        np.asarray(model.transmat_, dtype=float).tolist(),
+        "means":           np.asarray(model.means_, dtype=float).tolist(),
+        "covars_full":     np.asarray(model.covars_, dtype=float).tolist(),   # (n, d, d) for every type
+    }
+
+
+def _params_from_json(obj: dict):
+    """Rebuild a GaussianHMM from _params_to_json output."""
+    from hmmlearn.hmm import GaussianHMM
+    ctype = obj["covariance_type"]
+    model = GaussianHMM(n_components=int(obj["n_components"]), covariance_type=ctype)
+    means = np.asarray(obj["means"], dtype=float)
+    full  = np.asarray(obj["covars_full"], dtype=float)
+    model.n_features = means.shape[1]
+    model.startprob_ = np.asarray(obj["startprob"], dtype=float)
+    model.transmat_  = np.asarray(obj["transmat"], dtype=float)
+    model.means_     = means
+    if ctype == "full":
+        model.covars_ = full
+    elif ctype == "diag":
+        model.covars_ = np.array([np.diag(c) for c in full])
+    elif ctype == "tied":
+        model.covars_ = full[0]
+    else:
+        raise ValueError(f"unknown covariance type: {ctype!r}")
+    return model
+
+
+def _write_json(path: str, obj: dict, **kwargs) -> None:
+    """Write JSON atomically, so a reader never sees a half-written file."""
+    tmp = f"{path}.tmp"
+    with open(tmp, "w") as f:
+        json.dump(obj, f, **kwargs)
+    os.replace(tmp, path)
+
+
 def _save(model, meta: dict) -> None:
-    try:
-        import joblib
-        joblib.dump(model, _MODEL_PATH)
-    except Exception:
-        pass
-    with open(_META_PATH, "w") as f:
-        json.dump(meta, f, indent=2)
+    _write_json(_MODEL_PATH, _params_to_json(model))
+    _write_json(_META_PATH, meta, indent=2)
 
 
 def _load():
     try:
-        import joblib
         if not os.path.exists(_MODEL_PATH):
             return None
-        return joblib.load(_MODEL_PATH)
+        with open(_MODEL_PATH) as f:
+            return _params_from_json(json.load(f))
     except Exception:
         return None
 

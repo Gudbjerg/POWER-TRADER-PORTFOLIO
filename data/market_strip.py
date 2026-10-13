@@ -3,14 +3,13 @@ Landing-page market strip: delayed quotes for gas, LNG, oil, carbon, FX and
 Nordic/Continental day-ahead power.
 
 Futures, carbon and FX come from Yahoo Finance daily bars (the latest bar can be
-intraday while a market is open). Power is the day-ahead daily average from the Nord
-Pool Data Portal via the existing ``data.spot_prices`` day fetcher. Every instrument
-fails independently: an unavailable quote is returned with ``value=None`` and is
-rendered as a middle dot.
+intraday while a market is open). Power is the day-ahead daily average from
+``data.spot_prices.fetch_dayahead`` (ENTSO-E A44, Nord Pool for days ENTSO-E lacks).
+Every instrument fails independently: an unavailable quote is returned with
+``value=None`` and is rendered as a middle dot.
 
-DE-LU day-ahead prices are not published on the Nord Pool Data Portal (EPEX
-licensing), so the Continental slot falls back to NL, the continental reference used
-throughout the platform, and is labelled accordingly.
+DE-LU is only available from ENTSO-E (the Nord Pool Data Portal does not publish it), so
+without an ENTSO-E answer the Continental slot falls back to NL and says so.
 """
 from __future__ import annotations
 
@@ -21,7 +20,7 @@ from datetime import datetime, timedelta, timezone
 import pandas as pd
 import streamlit as st
 
-from data.spot_prices import _fetch_day as _fetch_nordpool_day
+from data.spot_prices import fetch_dayahead
 
 try:
     import yfinance as yf
@@ -42,7 +41,7 @@ YF_INSTRUMENTS: list[tuple[str, str, str, str, int, tuple[float, float]]] = [
 # descriptor when the fallback is used)
 NORDPOOL_SLOTS: list[tuple[str, str | None, str, str]] = [
     ("NO2",   None, "Day-ahead avg", "Day-ahead avg"),
-    ("DE-LU", "NL", "Day-ahead avg", "Day-ahead, DE-LU n/a"),
+    ("DE-LU", "NL", "Day-ahead avg", "Day-ahead (NL; DE-LU unavailable)"),
 ]
 _NORDPOOL_DAYS = 8          # history for the sparkline and the day-over-day change
 _YF_PERIOD = "1mo"          # daily bars for the sparkline and the day-over-day change
@@ -112,15 +111,11 @@ def _yf_items(closes: pd.DataFrame) -> list[dict]:
 
 def _nordpool_history(days: int = _NORDPOOL_DAYS) -> pd.DataFrame:
     """Daily average day-ahead prices for the last ``days`` delivery days (long format)."""
-    today = datetime.now(timezone.utc).date()
-    dates = [(today - timedelta(days=i)).strftime("%Y-%m-%d") for i in range(days)]
-    records: list[dict] = []
-    with ThreadPoolExecutor(max_workers=8) as ex:
-        for rows in ex.map(_fetch_nordpool_day, dates):
-            records.extend(rows)
-    if not records:
+    zones = tuple(dict.fromkeys(z for slot in NORDPOOL_SLOTS for z in slot[:2] if z))
+    df = fetch_dayahead(zones, days)
+    if df.empty:
         return pd.DataFrame(columns=["date", "zone", "price_eur_mwh"])
-    df = pd.DataFrame(records)
+    df = df.copy()
     df["date"] = pd.to_datetime(df["date"])
     df["price_eur_mwh"] = pd.to_numeric(df["price_eur_mwh"], errors="coerce")
     return df.dropna(subset=["price_eur_mwh"]).sort_values("date")
@@ -134,9 +129,9 @@ def _nordpool_items(df: pd.DataFrame) -> list[dict]:
         if series.empty and fallback:
             chosen, label_sub = fallback, fallback_sub
             series = df[df["zone"] == fallback].set_index("date")["price_eur_mwh"] if not df.empty else pd.Series(dtype=float)
-        title = f"{chosen} day-ahead daily average via Nord Pool"
+        title = f"{chosen} day-ahead daily average (ENTSO-E / Nord Pool)"
         if chosen != zone:
-            title += f" ({zone} is not published on the Nord Pool Data Portal; {chosen} shown as the continental reference)"
+            title += f" ({zone} unavailable from ENTSO-E right now; {chosen} shown as the continental reference)"
         item = _empty_item(chosen, label_sub, "EUR/MWh", 2, title)
         series = series.sort_index()
         if not series.empty:

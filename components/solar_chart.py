@@ -1,6 +1,6 @@
 """
 Solar cannibalisation (duck curve) chart for Germany.
-Average intraday day-ahead price versus average solar generation by hour of day.
+Average day-ahead price by hour of day versus average solar generation by hour of day.
 """
 import plotly.graph_objects as go
 import streamlit as st
@@ -22,7 +22,7 @@ def render_solar_chart(solar_data: dict):
     fetched_at = solar_data.get("fetched_at")
     source     = solar_data.get("source")
 
-    st.subheader("Solar Cannibalisation: Germany Intraday Price vs Solar Output (14-day average)")
+    st.subheader("Solar Cannibalisation: German Day-Ahead Price by Hour vs Solar Output (14-day average)")
 
     if df.empty:
         from utils.helpers import has_entsoe_key

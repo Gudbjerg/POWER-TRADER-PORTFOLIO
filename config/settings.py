@@ -59,27 +59,16 @@ STORAGE_CRIT_GAP_PP  = 15.0   # pp below 5-year mean to critical-warn
 # ── Nord Pool spot price zones ──────────────────────────────────────────────
 NORDPOOL_SPOT_ZONES = ["NO1", "NO2", "SE3", "DE-LU", "NL", "FI"]
 
-# ── Cross-border flow pairs for Nordic monitor ──────────────────────────────
-FLOW_PAIRS = [
-    ("NO1", "SE3"),
-    ("NO2", "SE3"),
-    ("NO2", "DK1"),
-    ("NO2", "DE"),
-    ("NO2", "NL"),
-    ("NO1", "GB"),
-]
-
-# ── Interconnector capacity constants (MW, rounded from operator data) ─────
-# Sources: Statnett, TenneT, National Grid, Energinet, Svenska Kraftnät.
-# Used for utilisation % display in Layer 1 Flows tab.
-# Key format matches FLOW_PAIRS arrow notation: "FROM->TO"
+# ── Interconnector ratings for the Layer 1 Flows tab ────────────────────────
+# HVDC links with a fixed rating (MW), used for the utilisation cards. NO1-SE3 is an AC
+# border whose capacity has come from Nordic flow-based capacity calculation since
+# October 2024, so it has no fixed rating and its card shows the flow only. Keys match the
+# corridor labels in data/power_flows.py with "->" in place of the arrow.
 INTERCONNECTOR_CAPACITY_MW: dict[str, float] = {
-    "NO2->DE":  1400.0,   # NordLink (Statnett / TenneT, commissioned 2020)
-    "NO2->NL":   700.0,   # NorNed (Statnett / TenneT, commissioned 2008)
-    "NO1->GB":  1400.0,   # NSN / North Sea Link (Statnett / National Grid, commissioned 2021)
-    "NO2->DK1": 1700.0,   # Skagerrak cables 1-4 combined (Statnett / Energinet)
-    "NO2->SE3":  2095.0,  # Sydvestlänken (Statnett / SvK, approximate thermal limit)
-    "NO1->SE3":   500.0,  # NO1-SE3 (approximate, varies seasonally)
+    "NO2->DE":  1400.0,   # NordLink (Statnett / TenneT)
+    "NO2->GB":  1400.0,   # North Sea Link (Statnett / National Grid)
+    "NO2->DK1": 1640.0,   # Skagerrak 1-4: 500 + 440 + 700 MW (Statnett / Energinet)
+    "NO2->NL":   700.0,   # NorNed (Statnett / TenneT)
 }
 
 # ── Scorecard signal thresholds ─────────────────────────────────────────────
@@ -125,12 +114,15 @@ BESS_OPEX_PCT_CAPEX        = 0.01       # annual OPEX as fraction of CAPEX
 BESS_DEFAULT_DISCOUNT_PCT  = 8.0        # default NPV discount rate (%)
 
 # ── LNG countries (GIE ALSI) ────────────────────────────────────────────────
+# Great Britain's terminals (South Hook, Dragon, Isle of Grain) have not reported send-out
+# to ALSI since the end of 2020 (the end of the Brexit transition period): the API still
+# lists GB but every value since 1 January 2021 is "-". They are therefore not requested.
 LNG_COUNTRIES = {
     "BE": "Belgium (Zeebrugge)",
     "NL": "Netherlands (Gate LNG)",
-    "GB": "Great Britain (S. Hook/Dragon)",
     "FR": "France (Dunkirk/Montoir)",
 }
+LNG_GB_LAST_REPORTED = "30 December 2020"
 
 # ── FI minus IT-North spread (roadmap 3A, Layer 1 Prices tab) ────────────────
 IT_NORTH_EIC                 = "10Y1001A1001A73I"   # ENTSO-E EIC for the IT-North bidding zone

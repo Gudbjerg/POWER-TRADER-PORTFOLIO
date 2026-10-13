@@ -17,7 +17,7 @@ st.set_page_config(
 )
 
 # ── Imports ────────────────────────────────────────────────────────────────
-from data.gas_storage     import get_storage_data, build_seasonal_bands
+from data.gas_storage     import get_storage_data, build_seasonal_bands, calendar_doy, EU_TARGET_SENTENCE
 from data.prices          import get_ttf_data
 from data.power_flows     import get_flow_data
 from data.spot_prices     import get_spot_price_data, fetch_spot_prices
@@ -76,47 +76,10 @@ _NO_ZONE_COLORS = {
 }
 
 
-@st.cache_data(ttl=3600, show_spinner=False)
 def _fetch_norwegian_zonal(days: int = 90) -> pd.DataFrame:
-    """Day-ahead prices for NO1/NO2/NO3/NO4/NO5 + SYS via Nord Pool API."""
-    import requests as _req
-    from concurrent.futures import ThreadPoolExecutor as _TPE, as_completed as _acf
-    from datetime import datetime as _dt, timedelta as _td
-    _NORDPOOL_URL = "https://dataportal-api.nordpoolgroup.com/api/DayAheadPrices"
-    _HEADERS = {"Referer": "https://www.nordpoolgroup.com/"}
-    today = _dt.utcnow().date()
-    dates = [(today - _td(days=i)).strftime("%Y-%m-%d") for i in range(days + 1)]
-
-    def _fetch_day_no(date_str):
-        try:
-            r = _req.get(
-                _NORDPOOL_URL,
-                params={"currency": "EUR", "market": "DayAhead",
-                        "deliveryArea": ",".join(_NO_ZONES_ZONAL), "date": date_str},
-                headers=_HEADERS, timeout=10,
-            )
-            if r.status_code == 204:
-                return []
-            r.raise_for_status()
-            rows = []
-            for entry in r.json().get("areaAverages", []):
-                if entry.get("price") is not None and entry["areaCode"] in _NO_ZONES_ZONAL:
-                    rows.append({"date": date_str, "zone": entry["areaCode"],
-                                 "price_eur_mwh": entry["price"]})
-            return rows
-        except Exception:
-            return []
-
-    records = []
-    with _TPE(max_workers=8) as ex:
-        for fut in _acf({ex.submit(_fetch_day_no, d): d for d in dates}):
-            records.extend(fut.result())
-
-    if not records:
-        return pd.DataFrame()
-    df = pd.DataFrame(records)
-    df["date"] = pd.to_datetime(df["date"]).dt.date
-    return df.sort_values("date").reset_index(drop=True)
+    """Day-ahead daily averages for NO1 to NO5 (ENTSO-E, Nord Pool fallback) and SYS (Nord Pool)."""
+    from data.spot_prices import fetch_dayahead
+    return fetch_dayahead(tuple(_NO_ZONES_ZONAL), days)
 
 
 # ── Load all data (cached) ─────────────────────────────────────────────────
@@ -145,7 +108,7 @@ def _latest_storage(df):
     if df.empty:
         return None, None, None, None
     row = df.iloc[-1]
-    doy = row["gasDayStart"].dayofyear
+    doy = calendar_doy(row["gasDayStart"])
     bands = build_seasonal_bands(df)
     if bands.empty:
         return float(row["full"]), None, None, doy
@@ -165,13 +128,19 @@ ttf_spike_pct = ttf["spike_pct"]
 
 # Nordic-Continental spread
 nordic_avg = continental_avg = None
+continental_label = "Continental"
 if not spot_df.empty:
-    latest_date = spot_df["date"].max()
-    latest = spot_df[spot_df["date"] == latest_date].set_index("zone")["price_eur_mwh"]
-    n_zones = [z for z in ["NO1", "NO2"] if z in latest.index]
-    c_zones = [z for z in ["DE-LU", "NL"] if z in latest.index]
-    if n_zones: nordic_avg      = float(latest[n_zones].mean())
-    if c_zones: continental_avg = float(latest[c_zones].mean())
+    # Latest delivery day with both a Nordic and a Continental price (tomorrow's auction
+    # result can arrive from one source before the other)
+    for latest_date in sorted(spot_df["date"].unique(), reverse=True):
+        latest = spot_df[spot_df["date"] == latest_date].set_index("zone")["price_eur_mwh"]
+        n_zones = [z for z in ["NO1", "NO2"] if z in latest.index]
+        c_zones = [z for z in ["DE-LU", "NL"] if z in latest.index]
+        if n_zones and c_zones:
+            nordic_avg      = float(latest[n_zones].mean())
+            continental_avg = float(latest[c_zones].mean())
+            continental_label = "/".join(c_zones)
+            break
 
 # LNG KPI
 lng_total_today = None
@@ -193,7 +162,7 @@ ttf_stat, ttf_headline, ttf_detail = (
     if ttf_price is not None else ("ok", "", "")
 )
 sp_stat, sp_headline, sp_detail = (
-    spread_status(nordic_avg, continental_avg)
+    spread_status(nordic_avg, continental_avg, continental_label)
     if nordic_avg is not None and continental_avg is not None else ("ok", "No spot data", "")
 )
 lng_stat, lng_headline, lng_detail = lng_status(lng_wow)
@@ -261,7 +230,7 @@ with k3:
 
 with k4:
     if nordic_avg is not None:
-        d = delta_span(f"NO avg €{nordic_avg:.0f}, NL €{continental_avg:.0f}", "blue")
+        d = delta_span(f"NO1/NO2 €{nordic_avg:.0f}, {continental_label} €{continental_avg:.0f}", "blue")
         st.markdown(kpi_card("Nordic Spot (EUR/MWh)", f"€{nordic_avg:.0f}", d), unsafe_allow_html=True)
     else:
         st.markdown(kpi_card("Nordic Spot (EUR/MWh)", "n/a", ""), unsafe_allow_html=True)
@@ -271,7 +240,7 @@ with k5:
         spread = continental_avg - nordic_avg
         color = "amber" if abs(spread) > 15 else "green"
         if spread > 0:
-            sub = "NL premium, export incentive"
+            sub = f"{continental_label} premium, export incentive"
         elif spread < 0:
             sub = "Nordic premium, import signal"
         else:
@@ -322,7 +291,7 @@ with tab_overview:
             eu_pct, eu_min, eu_mean,
             de_pct, de_min, de_mean,
             ttf_price, ttf_ma30,
-            nordic_avg, continental_avg,
+            nordic_avg, continental_avg, continental_label,
         )
         st.markdown(commentary(summary, eu_status), unsafe_allow_html=True)
 
@@ -401,7 +370,7 @@ with tab_overview:
                     f"({_pace_info['required_per_day']:.2f}pp/day); the 5-year comparison is unavailable. "
                 )
             st.caption(
-                "EU regulation requires 90% fill by November 1. "
+                EU_TARGET_SENTENCE + " Pace is measured to 1 November, the usual end of injections. "
                 + _pace_text
                 + _lng_note
             )
@@ -411,8 +380,7 @@ with tab_overview:
                 else "Current storage level unavailable: GIE AGSI+ did not answer; retrying shortly."
             )
             st.caption(
-                f"EU regulation requires 90% fill by November 1. "
-                f"{_days_to_nov} days remaining. {_storage_hint}"
+                f"{EU_TARGET_SENTENCE} {_days_to_nov} days to 1 November. {_storage_hint}"
             )
     with w2:
         st.markdown("**LNG supply and Iran risk**")
@@ -428,21 +396,21 @@ with tab_overview:
             spread = continental_avg - nordic_avg
             if spread > 5:
                 st.caption(
-                    f"NL at €{continental_avg:.0f}/MWh versus Nordic €{nordic_avg:.0f}/MWh "
-                    f"(+€{spread:.0f}/MWh NL premium). "
+                    f"{continental_label} at €{continental_avg:.0f}/MWh versus Nordic €{nordic_avg:.0f}/MWh "
+                    f"(+€{spread:.0f}/MWh Continental premium). "
                     "Strong incentive to export Norwegian hydro via NordLink, NorNed, and NSN. "
                     "Norwegian reservoir levels (ENTSO-E B31 data) determine the upper bound on export capacity."
                 )
             elif spread < -5:
                 st.caption(
-                    f"Nordic at €{nordic_avg:.0f}/MWh versus NL €{continental_avg:.0f}/MWh "
+                    f"Nordic at €{nordic_avg:.0f}/MWh versus {continental_label} €{continental_avg:.0f}/MWh "
                     f"(+€{abs(spread):.0f}/MWh Nordic premium). "
                     "Reversed spread: Norway may be importing from the Continent. "
                     "Check reservoir levels and interconnector availability."
                 )
             else:
                 st.caption(
-                    f"Nordic €{nordic_avg:.0f}/MWh and NL €{continental_avg:.0f}/MWh broadly aligned "
+                    f"Nordic €{nordic_avg:.0f}/MWh and {continental_label} €{continental_avg:.0f}/MWh broadly aligned "
                     f"(spread: €{spread:+.0f}/MWh). No strong directional flow incentive."
                 )
         else:
@@ -479,9 +447,9 @@ with tab_gas:
 
         **Dotted line:** 5-year historical average fill level.
 
-        **Dashed horizontal line:** EU regulatory mandate of 90% fill by November 1.
+        **Dashed horizontal line and tinted window:** EU filling target of 90%, to be reached on any day between 1 October and 1 December.
 
-        A current level below the shaded band indicates storage has not been this low on this date in any of the preceding five years. The current EU mandate requires 90% fill by November 1 (extended regulation from the original 80% emergency target under EU 2022/1032). Germany's storage capacity (approximately 24 bcm) represents roughly 25% of its annual gas consumption.
+        A current level below the shaded band indicates storage has not been this low on this date in any of the preceding five years. The 2022 emergency regulation (EU 2022/1032) required 90% by 1 November; the 2025 amendment turned this into a window from 1 October to 1 December, allows deviations of up to 10 percentage points in difficult market conditions and extends the rules to the end of 2027. Germany's storage capacity (approximately 24 bcm) represents roughly 25% of its annual gas consumption.
         """)
 
     with st.expander("Key supply and demand risks", expanded=True):
@@ -497,7 +465,7 @@ with tab_gas:
 
         **Injection season benchmarks:**
         - April 1 reference level: approximately 28%
-        - Target by November 1: 90% (current EU mandate; 83% was achieved by October 1, 2025)
+        - EU target: 90% on any day between 1 October and 1 December (up to 10 pp lower in difficult market conditions)
         - Historical average injection: approximately 52 percentage points over the April to October period
         """)
 
@@ -567,10 +535,10 @@ with tab_lng:
         |----------|---------|-------------------|
         | Zeebrugge | Belgium | 9 bcm/yr |
         | Gate LNG | Netherlands (Rotterdam) | 12 bcm/yr |
-        | South Hook | Great Britain (Wales) | 21 bcm/yr |
-        | Dragon LNG | Great Britain (Wales) | 5 bcm/yr |
         | Dunkirk | France | 13 bcm/yr |
         | Montoir-de-Bretagne | France | 10 bcm/yr |
+
+        Great Britain's South Hook (21 bcm/yr) and Dragon LNG (5 bcm/yr) are the largest NW European import cluster, but they have not reported to GIE ALSI since the end of 2020 and are therefore not in the totals.
 
         **Alert threshold:** A week-on-week decline exceeding 15% in aggregate sendout is flagged as a potential supply disruption signal. US flex LNG cargoes (Sabine Pass, Freeport, Corpus Christi) respond to the TTF versus Henry Hub price differential.
         """)
@@ -709,7 +677,7 @@ with tab_prices:
         | Above 100 | Crisis level (2022 peak: approximately 350 EUR/MWh). |
 
         **Nordic-Continental spread (NL − NO2):**
-        Computed as `NL day-ahead − NO2 day-ahead` (EUR/MWh). Source: Nord Pool public endpoint, 365-day history.
+        Computed as `NL day-ahead − NO2 day-ahead` (EUR/MWh). Sources: ENTSO-E Transparency Platform, with Nord Pool for days ENTSO-E has not yet published; 365-day history.
         Reference levels: ±€20/MWh are empirical thresholds; above +€20, NordLink has historically run above 90% utilisation.
 
         - Positive spread (Continental above Nordic): Norwegian hydro has a clear export incentive. Interconnectors are likely constrained.
@@ -725,14 +693,14 @@ with tab_prices:
     st.caption(
         "Norwegian day-ahead prices by bidding zone (NO1–NO5) vs the Nordic system price (SYS). "
         "When zones diverge from SYS, congestion on internal transmission bottlenecks is the driver. "
-        "Source: Nord Pool Data Portal. 90-day history."
+        "Sources: ENTSO-E Transparency Platform (zones) and Nord Pool Data Portal (SYS). 90-day history."
     )
 
     with st.spinner("Loading Norwegian zonal prices…"):
         _no_zonal_df = _fetch_norwegian_zonal(days=90)
 
     if _no_zonal_df.empty:
-        st.caption("Norwegian zonal data unavailable. Nord Pool API did not return results.")
+        st.caption("Norwegian zonal prices are unavailable right now: neither ENTSO-E nor Nord Pool answered.")
     else:
         import plotly.graph_objects as _go_no
 
@@ -1080,57 +1048,64 @@ with tab_flows:
         st.caption(f"Cross-border flows · Source: {_flows_src}")
 
         # ── B5: Interconnector utilisation KPIs ───────────────────────────────
+        # Latest complete day per corridor. Utilisation is the mean absolute hourly net
+        # flow over the link's rating; NO1-SE3 has no fixed rating (flow-based capacity).
         _flows_df = flows.get("flows", pd.DataFrame())
         if not _flows_df.empty:
-            _latest_day = _flows_df["date"].max()
-            _today_flows = _flows_df[_flows_df["date"] == _latest_day].copy()
-            _today_flows["pair"] = _today_flows["pair"].str.replace("→", "->", regex=False)
+            _flows_df = _flows_df.copy()
+            _flows_df["pair"] = _flows_df["pair"].str.replace("→", "->", regex=False)
+            _corridors = ["NO2->DE", "NO2->GB", "NO2->DK1", "NO2->NL", "NO1->SE3"]
+            st.markdown("##### Interconnector utilisation: latest complete day")
+            _util_cols = st.columns(len(_corridors))
+            for _ci, _pair in enumerate(_corridors):
+                _rows = _flows_df[_flows_df["pair"] == _pair].sort_values("date")
+                _label = _pair.replace("->", " → ")
+                with _util_cols[_ci]:
+                    if _rows.empty:
+                        st.markdown(kpi_card(_label, "n/a", delta_span("no data from ENTSO-E", "amber")),
+                                    unsafe_allow_html=True)
+                        continue
+                    _row = _rows.iloc[-1]
+                    _net = float(_row["net_flow_mwh"])
+                    _dir = "net import" if _net > 0 else "net export"
+                    _day = pd.Timestamp(_row["date"]).strftime("%d %b")
+                    _cap_mw = INTERCONNECTOR_CAPACITY_MW.get(_pair)
+                    if _cap_mw:
+                        _util_pct = min(float(_row["abs_net_mwh"]) / (_cap_mw * 24.0) * 100.0, 100.0)
+                        _u_color = ("red" if _util_pct > INTERCONNECTOR_UTIL_HIGH_PCT
+                                    else "amber" if _util_pct > INTERCONNECTOR_UTIL_MED_PCT else "green")
+                        st.markdown(kpi_card(_label, f"{_util_pct:.0f}%",
+                                             delta_span(f"{abs(_net) / 1_000:.1f} GWh {_dir}, {_day}", _u_color)),
+                                    unsafe_allow_html=True)
+                    else:
+                        st.markdown(kpi_card(_label, f"{abs(_net) / 1_000:.1f} GWh",
+                                             delta_span(f"{_dir}, {_day}; AC border, no fixed rating", "blue")),
+                                    unsafe_allow_html=True)
 
-            if not _today_flows.empty:
-                st.markdown("##### Interconnector utilisation: latest day")
-                _util_cols = st.columns(len(INTERCONNECTOR_CAPACITY_MW))
-                for _ci, (_pair, _cap_mw) in enumerate(INTERCONNECTOR_CAPACITY_MW.items()):
-                    _row = _today_flows[_today_flows["pair"] == _pair]
-                    with _util_cols[_ci]:
-                        if not _row.empty:
-                            _flow_mwh = abs(float(_row["net_flow_mwh"].iloc[0]))
-                            _cap_mwh  = _cap_mw * 24.0  # MWh/day at full capacity
-                            _util_pct = min(_flow_mwh / _cap_mwh * 100.0, 100.0)
-                            _dir      = "→ NO" if float(_row["net_flow_mwh"].iloc[0]) > 0 else "→ EU"
-                            _u_color  = "red" if _util_pct > INTERCONNECTOR_UTIL_HIGH_PCT else ("amber" if _util_pct > INTERCONNECTOR_UTIL_MED_PCT else "green")
-                            st.markdown(
-                                kpi_card(
-                                    _pair.replace("->", " → "),
-                                    f"{_util_pct:.0f}%",
-                                    delta_span(f"{_flow_mwh/1000:.1f} GWh {_dir}", _u_color),
-                                ),
-                                unsafe_allow_html=True,
-                            )
-                        else:
-                            st.markdown(
-                                kpi_card(_pair.replace("->", " → "), "n/a",
-                                         delta_span("no data", "amber")),
-                                unsafe_allow_html=True,
-                            )
-
-        with st.expander("Understanding Nordic cross-border flows", expanded=True):
+        with st.expander("Understanding Norwegian cross-border flows", expanded=True):
             st.markdown("""
-            **Key interconnector corridors:**
-            - NO2 to DE (NordLink, 1.4 GW): primary corridor linking Norwegian hydro to Germany
-            - NO2 to NL (NorNed, 0.7 GW): Norway-Netherlands
-            - NO1 to GB (NSN, 1.4 GW): Norway-United Kingdom, commissioned 2021
-            - NO2 to DK1 (Skagerrak cables, 1.7 GW): Norway-Denmark West
+            **Corridors shown:**
+            - NO2 to DE (NordLink, 1.4 GW HVDC): Norwegian hydro to Germany
+            - NO2 to GB (North Sea Link, 1.4 GW HVDC): Norway to Great Britain, in service since 2021
+            - NO2 to DK1 (Skagerrak 1-4, 1.64 GW HVDC): Norway to western Denmark
+            - NO2 to NL (NorNed, 0.7 GW HVDC): Norway to the Netherlands
+            - NO1 to SE3 (AC interconnection): Eastern Norway to central Sweden
 
-            **Sign convention:** Positive values indicate net import into Norway. Negative values indicate net export from Norway.
+            **Sign convention:** positive values are a net import into Norway, negative values a net export.
 
-            **Utilisation formula:** `utilisation = |net_flow_MWh/day| ÷ (capacity_MW × 24h) × 100%`.
-            Capacities are nameplate thermal limits from ENTSO-E; actual available capacity may be lower
-            due to N-1 reliability margins or maintenance. Colour coding: >90% = red (constrained), >70% = amber, ≤70% = green.
+            **Units:** ENTSO-E reports each direction as average power per 15 minutes. Both directions are
+            averaged to hourly power on Norwegian time and summed into energy per day (GWh).
 
-            **Key signals to monitor:**
-            - Sustained high Norwegian exports imply reservoir draw-down; monitor NVE reservoir data
-            - Import spikes (positive values) indicate Norwegian generation is below domestic demand
-            - Compare flow direction against the Nordic-Continental price spread in the Prices tab
+            **Utilisation:** mean absolute hourly net flow on the latest complete day divided by the link's
+            rating. Ratings are nameplate values for the HVDC links; available capacity can be lower during
+            maintenance or when the TSOs reduce it. NO1-SE3 has no fixed rating because Nordic capacity on AC
+            borders comes from flow-based capacity calculation. Colours: above 90% red (constrained), above
+            70% amber, otherwise green.
+
+            **What to watch:**
+            - Sustained Norwegian exports draw reservoirs down; compare with the Hydro Reservoirs tab
+            - Net imports (positive values) mean Norwegian supply is short of demand at Continental prices
+            - Compare the flow direction with the Nordic-Continental price spread in the Prices tab
             """)
 
 

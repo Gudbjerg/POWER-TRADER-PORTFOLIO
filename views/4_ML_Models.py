@@ -18,7 +18,7 @@ st.set_page_config(
 
 from utils.helpers import ordinal, apply_dark_theme, commentary, kpi_card, delta_span, has_torch
 from utils.theme import ACCENTS, CHART, PLOTLY_TEMPLATE, page_header, page_footer
-from data.sentiment import get_sentiment_data
+from data.sentiment import get_sentiment_data, FEED_SOURCES_TEXT
 from data.prices import get_ttf_data
 
 apply_dark_theme()
@@ -32,14 +32,13 @@ page_header(
 _TORCH_AVAILABLE = has_torch()
 if not _TORCH_AVAILABLE:
     st.info(
-        "Layer 4 ML models require PyTorch and Transformers, which are excluded from this "
-        "deployment due to memory constraints on the free hosting tier. "
-        "The full pipeline runs locally and on GPU-enabled platforms (e.g. Hugging Face Spaces). "
-        "Architecture, feature specifications, and training setup are shown below."
+        "PyTorch and Transformers are not installed in this environment, so the LSTM forecaster "
+        "and the FinBERT sentiment model cannot run here. The regime model (HMM) runs without them. "
+        "Architecture, feature specifications and training setup are shown below."
     )
 
 from models.feature_assembly import (
-    assemble_features, get_feature_meta, get_available_feature_sets,
+    load_feature_matrix, get_feature_meta, get_available_feature_sets,
     get_lstm_feature_cols, get_hmm_feature_cols,
 )
 from models.lstm_model import (
@@ -53,9 +52,8 @@ from models.hmm_model import (
 st.divider()
 
 # ── Load feature matrix (cached) ─────────────────────────────────────────────
-@st.cache_data(ttl=3600, show_spinner=False)
 def _get_features():
-    return assemble_features(years=3)
+    return load_feature_matrix(years=3)
 
 import time as _time
 _t0 = _time.perf_counter()
@@ -70,18 +68,22 @@ _feat_meta = get_feature_meta()
 # Top status banner
 _status_parts = []
 for label, key in [("Prices", "core"), ("Storage", "storage"), ("Hydro", "hydro"), ("Wind", "wind")]:
-    status = "available" if _avail.get(key) else "pending"
+    status = "available" if _avail.get(key) else "unavailable"
     _status_parts.append(f"{label}: {status}")
 _ready = _avail.get("core") and _n_rows >= 50
-_load_tag = f"disk cache" if _load_ms < 500 else f"live fetch"
+_load_tag = "served from cache" if _load_ms < 500 else "assembled now"
+_span = (
+    f", {_features_df['date'].min():%d %b %Y} to {_features_df['date'].max():%d %b %Y}"
+    if _n_rows else ""
+)
 
 st.markdown(
     commentary(
-        f"Feature matrix: {_n_rows} trading days assembled ({_load_tag}, {_load_ms/1000:.1f}s). "
+        f"Feature matrix: {_n_rows} trading days{_span} ({_load_tag}, {_load_ms/1000:.1f}s). "
         f"{' | '.join(_status_parts)}. "
-        + ("Models can be trained: use the Train buttons in each model section below."
+        + ("The models below are trained on this matrix; the Retrain buttons fit them again on the latest data."
            if _ready else
-           "Insufficient data to train. Nord Pool prices and TTF are required as a minimum."),
+           "Too little data to train: day-ahead prices and TTF are required as a minimum."),
         "ok" if _ready else "warn",
     ),
     unsafe_allow_html=True,
@@ -128,10 +130,17 @@ with c1:
     """)
 
 with c2:
-    _lstm_status_color = "#3fb950" if lstm_is_trained() else ("#d29922" if _ready else "#f85149")
-    _lstm_status_label = "Trained (live)" if lstm_is_trained() else ("Ready to train" if _ready else "Awaiting data")
+    if not _TORCH_AVAILABLE:
+        _lstm_status_color, _lstm_status_label = "#8b949e", "Not available here (PyTorch not installed)"
+    elif lstm_is_trained():
+        _lstm_status_color = "#3fb950"
+        _lstm_status_label = f"Trained {lstm_load_meta().get('trained_at', '')[:10]}".strip()
+    elif _ready:
+        _lstm_status_color, _lstm_status_label = "#d29922", "Not trained yet"
+    else:
+        _lstm_status_color, _lstm_status_label = "#f85149", "Awaiting data"
     _lstm_feat_list = get_lstm_feature_cols(_features_df) if not _features_df.empty else []
-    _wind_note = "incl. wind" if _avail.get("wind") else "wind pending (B16)"
+    _wind_note = "incl. wind" if _avail.get("wind") else "wind unavailable"
     st.markdown(
         f"""
 <div style="background:#161b22;border:1px solid rgba(255,255,255,0.08);border-radius:8px;padding:16px;margin-bottom:8px;">
@@ -140,8 +149,8 @@ with c2:
   <div style="color:#8b949e;font-size:0.82rem;line-height:1.7;">
     Training rows: {_n_rows}<br>
     Features: {len(_lstm_feat_list)} ({_wind_note})<br>
-    Hydro (B31): {"available" if _avail.get("hydro") else "pending"}<br>
-    Wind (B16/B19): {"available" if _avail.get("wind") else "pending (Fraunhofer ISE fallback active)"}
+    Hydro (ENTSO-E B31): {"available" if _avail.get("hydro") else "unavailable"}<br>
+    Wind (ENTSO-E B18/B19): {"available" if _avail.get("wind") else "unavailable"}
   </div>
 </div>
 <div style="background:#161b22;border:1px solid rgba(255,255,255,0.08);border-radius:8px;padding:16px;">
@@ -158,15 +167,17 @@ with c2:
     )
 
 # ── LSTM live section ─────────────────────────────────────────────────────────
-with st.expander("Live Model 1: Train and Predict", expanded=lstm_is_trained()):
-    if not _ready:
+with st.expander("Live Model 1: Train and Predict", expanded=lstm_is_trained() and _TORCH_AVAILABLE):
+    if not _TORCH_AVAILABLE:
+        st.caption("The LSTM needs PyTorch, which is not installed in this environment.")
+    elif not _ready:
         st.warning("Insufficient data to train. Need at least Nord Pool prices + TTF (50+ days).")
     else:
         _lstm_feat_cols = get_lstm_feature_cols(_features_df)
         st.caption(
             f"Training features ({len(_lstm_feat_cols)}): {', '.join(_lstm_feat_cols)}. "
             f"Data: {_n_rows} days. "
-            + ("Wind generation excluded (ENTSO-E B16 data not available for this zone)."
+            + ("Wind generation excluded (no wind data available)."
                if not _avail.get("wind") else "Wind generation included.")
         )
 
@@ -200,14 +211,17 @@ with st.expander("Live Model 1: Train and Predict", expanded=lstm_is_trained()):
                 try:
                     _mae_f, _naive_f = float(_no2_mae), float(_no2_naive)
                     if _mae_f > _naive_f:
+                        _tw = load_test_results()
+                        _tw_text = (
+                            f" over the test window {_tw['date'].min():%d %b %Y} to {_tw['date'].max():%d %b %Y}"
+                            if not _tw.empty else ""
+                        )
                         st.warning(
-                            f"**Model limitation:** LSTM test MAE €{_mae_f:.2f}/MWh underperforms "
-                            f"naive persistence baseline (€{_naive_f:.2f}/MWh). "
-                            "Predictions currently revert toward the mean and should not be used for "
-                            "trading decisions. Root cause: the Q1–Q2 2026 test window coincides with "
-                            "the Iran/Hormuz supply shock, a regime structurally outside the training "
-                            "distribution. Methodology fix (log-return target, quantile loss, "
-                            "walk-forward validation) is scheduled for a future session.",
+                            f"**Model limitation:** the LSTM's NO2 test MAE (€{_mae_f:.2f}/MWh) is worse than "
+                            f"the naive persistence baseline (€{_naive_f:.2f}/MWh){_tw_text}. Its predictions "
+                            "revert toward the mean and should not be used for trading decisions. Candidate "
+                            "improvements: a return target instead of the price level, a quantile loss and "
+                            "walk-forward validation.",
                             icon="⚠️",
                         )
                 except (TypeError, ValueError):
@@ -265,19 +279,16 @@ with st.expander("Live Model 1: Train and Predict", expanded=lstm_is_trained()):
             )
             st.markdown("**Test set: actual vs predicted**")
             st.plotly_chart(_fig_pred, width="stretch")
-            _lm2 = lstm_load_meta()
             st.caption(
                 f"Solid lines: actual day-ahead prices. Dotted lines: LSTM predictions. "
-                f"Test period: {len(_test_df)} days. "
-                f"MAE above naive baseline reflects high price volatility in the test window "
-                f"(Q1 2025 to Q1 2026 included the post-crisis normalisation period). "
-                f"The model captures directional trends; large spikes are systematically "
-                f"underestimated: a known limitation of MAE-trained sequence models."
+                f"Test period: {_test_df['date'].min():%d %b %Y} to {_test_df['date'].max():%d %b %Y} "
+                f"({len(_test_df)} trading days, out of sample). Large spikes are systematically "
+                f"underestimated, a known limitation of sequence models trained on mean absolute error."
             )
 
         # Train button
         _btn_label = "Retrain Model 1 (LSTM)" if lstm_is_trained() else "Train Model 1 (LSTM)"
-        if st.button(_btn_label, key="train_lstm"):
+        if _TORCH_AVAILABLE and st.button(_btn_label, key="train_lstm"):
             progress_bar = st.progress(0)
             status_text  = st.empty()
             def _lstm_cb(epoch, total, tl, vl):
@@ -338,8 +349,13 @@ with c3:
     """)
 
 with c4:
-    _hmm_status_color = "#3fb950" if hmm_is_trained() else ("#d29922" if _ready else "#f85149")
-    _hmm_status_label = "Trained (live)" if hmm_is_trained() else ("Ready to train" if _ready else "Awaiting data")
+    if hmm_is_trained():
+        _hmm_status_color = "#3fb950"
+        _hmm_status_label = f"Trained {hmm_load_meta().get('trained_at', '')[:10]}".strip()
+    elif _ready:
+        _hmm_status_color, _hmm_status_label = "#d29922", "Not trained yet"
+    else:
+        _hmm_status_color, _hmm_status_label = "#f85149", "Awaiting data"
     _hmm_feat_list = get_hmm_feature_cols(_features_df) if not _features_df.empty else []
     st.markdown(
         f"""
@@ -349,8 +365,8 @@ with c4:
   <div style="color:#8b949e;font-size:0.82rem;line-height:1.7;">
     Training rows: {_n_rows}<br>
     HMM features: {len(_hmm_feat_list)}<br>
-    Hydro percentile: {"available" if _avail.get("hydro") else "pending"}<br>
-    Wind z-score: {"available" if _avail.get("wind") else "pending"}
+    Hydro percentile: {"available" if _avail.get("hydro") else "unavailable"}<br>
+    Wind z-score: {"available" if _avail.get("wind") else "unavailable"}
   </div>
 </div>
 <div style="background:#161b22;border:1px solid rgba(255,255,255,0.08);border-radius:8px;padding:16px;">
@@ -662,10 +678,10 @@ with st.expander("Live Model 2: Train and Classify", expanded=hmm_is_trained()):
             # ── 3D: explicit notice when the trained HMM cannot be applied ──────
             if not _reg:
                 st.caption(
-                    "Regime classification unavailable: the saved HMM could not be loaded (for example a "
-                    "Git LFS pointer in place of the weights file) or the feature matrix lacks a trained "
-                    f"feature ({', '.join(_hm.get('feature_cols', [])) or 'n/a'}). The realised-volatility "
-                    "overlay appears once a regime history can be decoded."
+                    "Regime classification unavailable: the saved model could not be applied to the "
+                    "current feature matrix (it needs "
+                    f"{', '.join(_hm.get('feature_cols', [])) or 'its training features'}). Retrain the "
+                    "model to classify the latest data."
                 )
             # ── end 3D notice ───────────────────────────────────────────────────
 
@@ -718,15 +734,16 @@ predictive power for next-day TTF price changes.
 **Architecture:**
 - **Model:** FinBERT (`ProsusAI/finbert`): BERT fine-tuned on financial text, classifies
   each headline as positive / negative / neutral with a confidence score
-- **Input:** Energy-relevant headlines filtered from BBC Business, Guardian Energy,
-  LNG World News, and Energy Monitor RSS feeds
+- **Input:** Energy-relevant headlines filtered from six RSS feeds (BBC Business, Guardian Energy,
+  LNG World News, Energy Monitor, Power Technology, Offshore Technology); the archives of the last
+  three are paged back 60 days when the stored history is too short
 - **Processing:** Each headline is scored. Daily aggregation:
   net sentiment = mean(positive conf.) − mean(negative conf.) ∈ [−1, +1]
 
 **Pipeline:**
-1. Fetch RSS headlines (4 feeds, cached 6h)
+1. Fetch RSS headlines (6 feeds, cached 6h)
 2. Filter by energy keywords: LNG, TTF, Hormuz, Norwegian gas, pipeline, carbon…
-3. Classify each headline with FinBERT (CPU inference, ~1s/headline)
+3. Classify each headline with FinBERT (CPU inference, batches of 16)
 4. Aggregate to daily net sentiment score
 5. Compute rolling 3d and 7d moving averages
 6. Compute rolling cross-correlation with next-day TTF % change (requires ≥21 days)
@@ -745,15 +762,17 @@ predictive power for next-day TTF price changes.
     """)
 
 with c6:
+    _finbert_line = "installed, running live" if _TORCH_AVAILABLE else "not installed in this environment"
+    _sent_status = ("Active (experimental)", "#3fb950") if _TORCH_AVAILABLE else ("Not available here", "#8b949e")
     st.markdown(
-        """
+        f"""
 <div style="background:#161b22;border:1px solid rgba(255,255,255,0.08);border-radius:8px;padding:16px;margin-bottom:8px;">
   <div style="color:#58a6ff;font-size:0.72rem;text-transform:uppercase;letter-spacing:1px;font-weight:600;margin-bottom:8px;">Status</div>
-  <div style="color:#3fb950;font-size:0.88rem;margin-bottom:12px;">Active (experimental)</div>
+  <div style="color:{_sent_status[1]};font-size:0.88rem;margin-bottom:12px;">{_sent_status[0]}</div>
   <div style="color:#8b949e;font-size:0.82rem;line-height:1.7;">
-    FinBERT: installed, running live<br>
-    RSS feeds: 4 sources, 6h cache<br>
-    Sentiment scoring: active<br>
+    FinBERT: {_finbert_line}<br>
+    RSS feeds: 6 sources, 6h cache<br>
+    History: archive backfill when shorter than 21 days<br>
     Granger / IC test: needs ≥21 days history<br>
     ENTSO-E: not required
   </div>
@@ -778,7 +797,7 @@ with st.spinner("Fetching headlines and running FinBERT…"):
     ttf  = get_ttf_data()
 
 if sent["error"]:
-    st.warning(f"Sentiment pipeline: {sent['error']}")
+    st.info(sent["error"])
 else:
     daily  = sent["daily"]
     scored = sent["scored"]
@@ -805,7 +824,7 @@ else:
     k1, k2, k3, k4 = st.columns(4)
     with k1:
         st.markdown(kpi_card("Headlines scored", str(n_headlines),
-                             delta_span("last 30 days · 6h refresh", "blue")), unsafe_allow_html=True)
+                             delta_span(f"{len(scored)} in stored history · 6h refresh", "blue")), unsafe_allow_html=True)
     with k2:
         st.markdown(kpi_card("Latest net sentiment", f"{latest_score:+.3f}",
                              delta_span(f"{latest_date}", sig_color_adj)), unsafe_allow_html=True)
@@ -893,7 +912,7 @@ else:
     elif len(daily) < 21:
         st.caption(
             f"Granger causality and rolling IC tests require ≥21 days of history. "
-            f"Currently have {len(daily)} day(s). Signal will self-validate as data accumulates."
+            f"Currently have {len(daily)} day(s); older headlines are being collected from the news archives."
         )
 
     # Recent scored headlines
@@ -908,29 +927,29 @@ else:
 
     if sent["fetched_at"]:
         st.caption(f"Last updated: {sent['fetched_at'].strftime('%Y-%m-%d %H:%M UTC')} · "
-                   f"Sources: BBC Business, Guardian Energy, LNG World News, Energy Monitor")
+                   f"Sources: {FEED_SOURCES_TEXT}")
 
 st.divider()
 
 # ── Data dependency map ───────────────────────────────────────────────────────
 st.markdown("### Data Dependencies")
 with st.expander("Feature pipeline and ENTSO-E data status", expanded=True):
-    _hydro_st  = "Live" if _avail.get("hydro") else "Pending (ENTSO-E B31)"
-    _wind_st   = "Live" if _avail.get("wind")  else "Pending (ENTSO-E B16/B19); Fraunhofer ISE fallback active"
-    _stor_st   = "Live" if _avail.get("storage") else "Requires AGSI_API_KEY"
+    _hydro_st  = "Live" if _avail.get("hydro") else "Unavailable"
+    _wind_st   = "Live" if _avail.get("wind")  else "Unavailable"
+    _stor_st   = "Live" if _avail.get("storage") else "Unavailable"
     st.markdown(f"""
     | Feature | Source | Models | Status |
     |---|---|---|---|
-    | NO2, NL day-ahead price | Nord Pool Data Portal | LSTM target + input, HMM | Live |
+    | NO2, NL day-ahead price | ENTSO-E A44 (Nord Pool for the latest days) | LSTM target + input, HMM | {"Live" if _avail.get("core") else "Unavailable"} |
     | TTF gas price | Yahoo Finance (TTF=F) | LSTM input, HMM | Live |
     | EU gas storage fill % | GIE AGSI+ | LSTM + HMM | {_stor_st} |
     | Norwegian hydro (TWh) | ENTSO-E B31 | LSTM + HMM | {_hydro_st} |
-    | German wind generation | ENTSO-E B16/B18/B19 + Fraunhofer ISE fallback | LSTM + HMM (optional) | {_wind_st} |
+    | German wind generation | ENTSO-E B18/B19, energy-charts.info fallback | LSTM + HMM (optional) | {_wind_st} |
 
     **Current feature matrix:** {_n_rows} trading days, {len(get_lstm_feature_cols(_features_df))} LSTM features,
     {len(get_hmm_feature_cols(_features_df))} HMM features.
-    Models can be trained now with available data and will automatically upgrade
-    to include wind and hydro when those sources return.
+    The models use wind and hydro whenever those sources are available. Prices are daily averages
+    over each delivery day (CET), and wind is energy per day from hourly mean power.
     """)
 
 page_footer([

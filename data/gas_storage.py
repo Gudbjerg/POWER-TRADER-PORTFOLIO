@@ -64,6 +64,55 @@ def _to_df(records: list[dict]) -> pd.DataFrame:
     return df
 
 
+HISTORY_YEARS = 6   # years of storage history behind the seasonal bands
+
+# EU filling target (Regulation (EU) 2022/1032 as amended in 2025, applying to the end of 2027):
+# 90% of capacity at any point between 1 October and 1 December, with deviations of up to
+# 10 percentage points allowed in difficult market conditions.
+EU_TARGET_PCT       = 90.0
+EU_TARGET_FLEX_PP   = 10.0
+EU_TARGET_LABEL     = "EU target 90% (any day 1 Oct to 1 Dec)"
+EU_TARGET_SENTENCE  = (
+    "The EU target is 90% fill at any point between 1 October and 1 December, with up to "
+    "10 percentage points of deviation allowed in difficult market conditions (rules in force "
+    "to the end of 2027)."
+)
+
+
+def calendar_doy(dates) -> pd.Series | int:
+    """Day of year on a leap-year calendar: 29 February is 60 and 1 March is 61 in every year.
+
+    Comparing years by plain day of year shifts every date after February by one day in leap
+    years and leaves day 366 without a counterpart; this keeps each calendar date aligned.
+    """
+    if isinstance(dates, pd.Series):
+        d = pd.to_datetime(dates)
+        return (pd.to_datetime({"year": 2024, "month": d.dt.month, "day": d.dt.day})
+                .dt.dayofyear.where(d.notna()))
+    ts = pd.Timestamp(dates)
+    return pd.Timestamp(year=2024, month=ts.month, day=ts.day).dayofyear
+
+
+def storage_season(when) -> str:
+    """Phase of the gas storage year for wording: injection, target window or withdrawal."""
+    month = pd.Timestamp(when).month
+    if 4 <= month <= 9:
+        return "injection season"
+    if month in (10, 11):
+        return "EU target window"
+    return "withdrawal season"
+
+
+def history_window(years: int = HISTORY_YEARS) -> tuple[str, str]:
+    """(date_from, date_to) of the storage history request, as AGSI+ date strings.
+
+    Every caller uses the same window so the cached history is shared between pages.
+    """
+    today = datetime.utcnow().date()
+    return ((today - timedelta(days=365 * years)).strftime("%Y-%m-%d"),
+            today.strftime("%Y-%m-%d"))
+
+
 def get_storage_data() -> dict:
     """
     Returns dict with keys:
@@ -71,9 +120,7 @@ def get_storage_data() -> dict:
       'germany'  : DataFrame of Germany storage
       'fetched_at': datetime
     """
-    today = datetime.utcnow().date()
-    date_from = (today - timedelta(days=365 * 6)).strftime("%Y-%m-%d")
-    date_to   = today.strftime("%Y-%m-%d")
+    date_from, date_to = history_window()
 
     europe  = fetch_storage_eu(date_from, date_to)
     germany = fetch_storage_country("DE", date_from, date_to)
@@ -96,7 +143,7 @@ def build_seasonal_bands(df: pd.DataFrame, value_col: str = "full") -> pd.DataFr
 
     df = df.copy()
     df["year"] = df["gasDayStart"].dt.year
-    df["doy"]  = df["gasDayStart"].dt.dayofyear
+    df["doy"]  = calendar_doy(df["gasDayStart"])
     current_year = datetime.utcnow().year
     historical = df[df["year"] < current_year]
 

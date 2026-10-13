@@ -5,7 +5,9 @@ Predicts next-day average day-ahead prices for NO2 and NL simultaneously.
 Architecture: 2-layer LSTM (64 → 32 units) with 0.2 dropout, linear output head.
 Trained with MAE loss; compared to naive persistence baseline.
 
-Weights and metadata are saved to models/weights/ so the model survives restarts.
+Weights and metadata are saved to models/weights/ so the model survives restarts. The
+weights are stored as JSON (each tensor as base64-encoded little-endian float32), a text
+format that deploys without binary file storage and loads bit-exactly.
 Training is triggered manually via the UI; inference runs automatically on load.
 """
 from __future__ import annotations
@@ -70,7 +72,7 @@ def _make_sequences(X: np.ndarray, y: np.ndarray, seq_len: int):
 # ── Save / load ──────────────────────────────────────────────────────────────
 
 def _weights_path() -> str:
-    return os.path.join(_WEIGHTS_DIR, "lstm_model.pt")
+    return os.path.join(_WEIGHTS_DIR, "lstm_weights.json")
 
 
 def _meta_path() -> str:
@@ -104,13 +106,41 @@ def load_meta() -> dict:
         return {}
 
 
+def _state_to_json(state_dict) -> dict:
+    """Serialise a state dict: each tensor as base64 little-endian float32 plus its shape."""
+    import base64
+    tensors = {}
+    for name, tensor in state_dict.items():
+        arr = np.ascontiguousarray(tensor.detach().cpu().numpy(), dtype="<f4")
+        tensors[name] = {"shape": list(arr.shape),
+                         "data": base64.b64encode(arr.tobytes()).decode("ascii")}
+    return {"format": "float32-le-base64", "tensors": tensors}
+
+
+def _state_from_json(obj: dict) -> dict:
+    """Inverse of _state_to_json; returns a state dict of torch tensors."""
+    import base64
+    import torch
+    if obj.get("format") != "float32-le-base64":
+        raise ValueError(f"unknown weights format: {obj.get('format')!r}")
+    state = {}
+    for name, spec in obj["tensors"].items():
+        arr = np.frombuffer(base64.b64decode(spec["data"]), dtype="<f4").reshape(spec["shape"])
+        state[name] = torch.from_numpy(arr.copy())
+    return state
+
+
+def _write_json(path: str, obj: dict) -> None:
+    """Write JSON atomically, so a reader never sees a half-written file."""
+    tmp = f"{path}.tmp"
+    with open(tmp, "w") as f:
+        json.dump(obj, f)
+    os.replace(tmp, path)
+
+
 def _save(model, scaler_mean: list, scaler_std: list, feature_cols: list,
           train_info: dict) -> None:
-    try:
-        import torch
-        torch.save(model.state_dict(), _weights_path())
-    except Exception:
-        pass
+    _write_json(_weights_path(), _state_to_json(model.state_dict()))
     meta = {
         "feature_cols":  feature_cols,
         "scaler_mean":   scaler_mean,
@@ -132,7 +162,8 @@ def _load(n_features: int):
         import torch
         meta  = load_meta()
         model = _build_model(n_features)
-        model.load_state_dict(torch.load(_weights_path(), map_location="cpu"))
+        with open(_weights_path()) as f:
+            model.load_state_dict(_state_from_json(json.load(f)))
         model.eval()
         return model, meta
     except Exception:

@@ -21,7 +21,7 @@ st.set_page_config(
 
 from utils.helpers import apply_dark_theme, kpi_card, delta_span
 from utils.theme import ACCENTS, CHART, PLOTLY_TEMPLATE, callout, page_header, page_footer, render
-from models.feature_assembly import assemble_features
+from models.feature_assembly import load_feature_matrix
 from config.settings import (
     BESS_FCR_N_EUR_PER_MW_YEAR,
     BESS_FCR_D_EUR_PER_MW_YEAR,
@@ -245,13 +245,13 @@ render(callout(
 
 # ── Feature matrix (for DAM spread) ──────────────────────────────────────────
 with st.spinner("Loading market data for DAM spread estimation…"):
-    _feat = assemble_features(years=3)
+    _feat = load_feature_matrix(years=3)
 
 _spread = _dam_spread_from_features(_feat)
 if _spread["fallback"]:
     st.caption(
         "DAM spread estimated from Nordic historical averages (€22/MWh achievable, top-20% filter). "
-        "Feature matrix unavailable. Visit Layer 2 first to populate. FCR revenues are unaffected."
+        "The NO2 price history is unavailable right now. FCR revenues are unaffected."
     )
 else:
     st.caption(

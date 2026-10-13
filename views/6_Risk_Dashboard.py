@@ -22,7 +22,7 @@ st.set_page_config(
 from utils.helpers import apply_dark_theme, kpi_card, delta_span
 from utils.globe import globe_link
 from utils.theme import ACCENTS, CHART, PLOTLY_TEMPLATE, callout, page_header, page_footer, render
-from models.feature_assembly import assemble_features
+from models.feature_assembly import load_feature_matrix
 
 apply_dark_theme()
 
@@ -297,13 +297,12 @@ render(callout(
 
 # ── Feature matrix ────────────────────────────────────────────────────────────
 with st.spinner("Assembling feature matrix…"):
-    _feat = assemble_features(years=3)
+    _feat = load_feature_matrix(years=3)
 
 if _feat.empty or len(_feat) < 60:
     st.error(
-        "Feature matrix unavailable or too short (< 60 rows). "
-        "Visit Layer 2 (Quant Analysis) first to populate the feature cache, "
-        "or configure ENTSO-E / AGSI API keys."
+        "The market data behind this page is unavailable right now (fewer than 60 trading days "
+        "could be assembled from ENTSO-E, Nord Pool, Yahoo Finance and GIE). Try again shortly."
     )
     st.stop()
 
@@ -312,7 +311,7 @@ _d4_missing = [k for k, v in _d4_coverage.items() if not v]
 if _d4_missing:
     st.caption(
         f"Feature groups unavailable: {', '.join(_d4_missing)}. "
-        "Some signals may be omitted. Check ENTSO-E key (hydro/wind) and AGSI key (storage)."
+        "Signals that depend on them are left out."
     )
 
 _feat = _feat.copy().reset_index(drop=True)
@@ -333,15 +332,17 @@ if _unavailable:
     st.warning(
         f"**{len(_unavailable)} signal(s) unavailable** due to missing feature data: "
         + ", ".join(_unavailable)
-        + ". Check ENTSO-E API key (hydro/wind) and AGSI key (storage).",
+        + ". Their data sources did not answer; they return automatically on the next refresh.",
         icon="⚠",
     )
 
 # ── Sidebar: portfolio builder ────────────────────────────────────────────────
+_DEMO_NOTIONAL = 1000   # EUR per €1/MWh, so the page opens with a populated example portfolio
 st.sidebar.markdown("### Portfolio Builder")
 st.sidebar.caption(
     "Notional = EUR gain per €1/MWh move in the underlying. "
-    "All defaults are 0 (opt-in). Signals that lack the required feature data are hidden."
+    f"The demo portfolio starts at €{_DEMO_NOTIONAL:,} per signal; set a slider to 0 to drop a signal. "
+    "Signals that lack the required feature data are hidden."
 )
 
 _notionals: dict[str, float] = {}
@@ -353,7 +354,7 @@ for _sig in _available_sigs:
     st.sidebar.caption(_sig["description"])
     _n = st.sidebar.slider(
         f"Notional {_sid}",
-        min_value=0, max_value=5000, step=100, value=0,
+        min_value=0, max_value=5000, step=100, value=_DEMO_NOTIONAL,
         label_visibility="collapsed",
         key=f"n_{_sid}",
     )

@@ -4,7 +4,9 @@ Gas storage visualisation: current year versus historical min/mean/max band.
 import plotly.graph_objects as go
 import pandas as pd
 from datetime import datetime
-from data.gas_storage import build_seasonal_bands
+from data.gas_storage import (
+    build_seasonal_bands, calendar_doy, storage_season, EU_TARGET_PCT, EU_TARGET_LABEL,
+)
 from config.settings import GIE_FAILURE_TTL_S
 from utils.helpers import has_agsi_key
 from utils.theme import CHART, PLOTLY_TEMPLATE
@@ -48,7 +50,7 @@ def render_storage_chart(storage_data: dict, region: str = "europe"):
 
     current_year = datetime.utcnow().year
     df_current = df[df["gasDayStart"].dt.year == current_year].copy()
-    df_current["doy"] = df_current["gasDayStart"].dt.dayofyear
+    df_current["doy"] = calendar_doy(df_current["gasDayStart"])
 
     bands = build_seasonal_bands(df, value_col="full")
 
@@ -59,8 +61,8 @@ def render_storage_chart(storage_data: dict, region: str = "europe"):
         )
         return
 
-    # Map day-of-year to calendar dates using a reference year
-    ref_year = 2023
+    # Map the leap-year day of year (see calendar_doy) to dates in a leap reference year
+    ref_year = 2024
     bands["date_ref"] = pd.to_datetime(
         bands["day_of_year"].apply(lambda d: f"{ref_year}-{d:03d}"),
         format="%Y-%j",
@@ -112,13 +114,17 @@ def render_storage_chart(storage_data: dict, region: str = "europe"):
         hovertemplate=f"{current_year}: %{{y:.1f}}%<extra></extra>",
     ))
 
-    # EU mandate reference line at 90% (extended regulation, target by Nov 1)
+    # EU filling target: 90% at any point between 1 October and 1 December
+    fig.add_vrect(
+        x0=f"{ref_year}-10-01", x1=f"{ref_year}-12-01",
+        fillcolor="rgba(210,180,40,0.06)", line_width=0, layer="below",
+    )
     fig.add_hline(
-        y=90,
+        y=EU_TARGET_PCT,
         line_dash="dash",
         line_color=COLORS["mandate"],
         line_width=1.2,
-        annotation_text="EU mandate (90%, Nov 1)",
+        annotation_text=EU_TARGET_LABEL,
         annotation_position="top right",
         annotation_font=dict(size=10, color=COLORS["mandate"]),
     )
@@ -156,8 +162,8 @@ def render_storage_chart(storage_data: dict, region: str = "europe"):
         below_min = (not min_at_doy.empty) and (current_pct < min_at_doy.values[0])
         if below_min:
             st.error(
-                f"Storage at {current_pct:.1f}%, below the 5-year minimum for this date. "
-                "Critically low heading into the summer refill season."
+                f"Storage at {current_pct:.1f}%, below the 5-year minimum for this date "
+                f"({storage_season(latest['gasDayStart'])})."
             )
         else:
             mean_at_doy = bands.loc[bands["day_of_year"] == latest["doy"], "mean"]
