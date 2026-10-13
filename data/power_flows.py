@@ -122,11 +122,15 @@ def fetch_all_flows(days: int = 30) -> pd.DataFrame:
     end = pd.Timestamp.now(tz=FLOW_TZ).normalize()
     start = end - pd.Timedelta(days=days)
 
+    # Ten directional requests, five at a time (ENTSO-E can take tens of seconds each)
+    from concurrent.futures import ThreadPoolExecutor
+    legs = [(a, b) for no_zone, nb_zone, _, _ in CORRIDORS for a, b in ((no_zone, nb_zone), (nb_zone, no_zone))]
+    with ThreadPoolExecutor(max_workers=5) as ex:
+        series = dict(zip(legs, ex.map(lambda leg: _directional(client, leg[0], leg[1], start, end), legs)))
+
     frames = []
     for no_zone, nb_zone, label, _ in CORRIDORS:
-        export_mw = _directional(client, no_zone, nb_zone, start, end)
-        import_mw = _directional(client, nb_zone, no_zone, start, end)
-        daily = corridor_daily(export_mw, import_mw, label)
+        daily = corridor_daily(series[(no_zone, nb_zone)], series[(nb_zone, no_zone)], label)
         if not daily.empty:
             frames.append(daily)
 
