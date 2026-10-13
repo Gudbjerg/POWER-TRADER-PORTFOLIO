@@ -36,6 +36,8 @@ HEADERS = {"Referer": "https://www.nordpoolgroup.com/", "User-Agent": "Mozilla/5
 DELIVERY_TZ = "Europe/Oslo"          # SDAC delivery days run on Central European time
 _NORDPOOL_WORKERS = 4
 _NORDPOOL_RETRY_WAITS = (1.5, 4.0)   # seconds before the second and third attempt
+NORDPOOL_MAX_DAYS = 90               # the public portal serves roughly the last two months
+_ENTSOE_CHUNK_DAYS = 90              # a year of 15-minute prices in one request can time out
 
 ENTSOE_ZONES = {
     "NO1":   "10YNO-1--------2",
@@ -77,7 +79,8 @@ def _fetch_day(date_str: str, areas: tuple[str, ...] = tuple(NORDPOOL_AREAS)) ->
             if resp.status_code in (429, 500, 502, 503, 504) and attempt < len(_NORDPOOL_RETRY_WAITS):
                 time.sleep(_NORDPOOL_RETRY_WAITS[attempt])
                 continue
-            resp.raise_for_status()
+            if resp.status_code >= 400:
+                return []          # 401 for dates outside the public window, 4xx otherwise
             data = resp.json()
         except requests.Timeout:
             return []
@@ -128,7 +131,7 @@ def fetch_entsoe_daily(zones: tuple[str, ...], days: int) -> pd.DataFrame:
         chunks = []
         chunk_start = start
         while chunk_start < end:
-            chunk_end = min(chunk_start + pd.Timedelta(days=365), end)
+            chunk_end = min(chunk_start + pd.Timedelta(days=_ENTSOE_CHUNK_DAYS), end)
             try:
                 s = client.query_day_ahead_prices(ENTSOE_ZONES[zone], start=chunk_start, end=chunk_end)
                 if s is not None and not s.empty:
@@ -169,8 +172,10 @@ def fetch_dayahead(zones: tuple[str, ...], days: int = 30) -> pd.DataFrame:
     have = set(zip(ent["date"], ent["zone"])) if not ent.empty else set()
     np_zones = tuple(z for z in zones if z != "DE-LU")
     missing_dates = sorted({d for d in wanted_dates for z in np_zones if (d, z) not in have})
-    # Days after today are only published after the auction (about 12:45 CET)
-    missing_dates = [d for d in missing_dates if d <= today + timedelta(days=1)]
+    # Days after today are only published after the auction (about 12:45 CET), and the
+    # public portal does not serve dates older than about two months
+    np_first = today - timedelta(days=NORDPOOL_MAX_DAYS)
+    missing_dates = [d for d in missing_dates if np_first <= d <= today + timedelta(days=1)]
     nordpool = _nordpool([d.strftime("%Y-%m-%d") for d in missing_dates], np_zones)
     if not nordpool.empty:
         nordpool = nordpool[[(d, z) not in have for d, z in zip(nordpool["date"], nordpool["zone"])]]

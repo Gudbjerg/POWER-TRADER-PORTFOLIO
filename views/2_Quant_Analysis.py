@@ -48,6 +48,7 @@ from models.wind_forecast_error import (
     ZONE_LABELS as WIND_ZONE_LABELS,
 )
 from data.wind import fetch_wind_daily, fetch_wind_forecast, fetch_de_renewables_today
+from data.energy_units import daily_mean
 from data.sentiment import get_sentiment_data
 
 apply_dark_theme()
@@ -226,7 +227,7 @@ def _get_scanner_prices(years: int = 3) -> pd.DataFrame:
                 _chunks: list = []
                 _cs = _st0
                 while _cs < _end:
-                    _ce = min(_cs + pd.Timedelta(days=365), _end)
+                    _ce = min(_cs + pd.Timedelta(days=90), _end)   # long 15-minute requests time out
                     try:
                         _s = _cli.query_day_ahead_prices(_eic, start=_cs, end=_ce)
                         if _s is not None and not _s.empty:
@@ -237,8 +238,8 @@ def _get_scanner_prices(years: int = 3) -> pd.DataFrame:
                 if _chunks:
                     _comb  = pd.concat(_chunks)
                     _comb  = _comb[~_comb.index.duplicated(keep="last")]
-                    _daily = _comb.tz_convert("UTC").resample("D").mean()
-                    _daily.index = pd.to_datetime(_daily.index).tz_localize(None).normalize()
+                    _daily = daily_mean(pd.to_numeric(_comb, errors="coerce").dropna(), tz="Europe/Oslo")
+                    _daily.index = pd.to_datetime(_daily.index).normalize()
                     _zdf   = pd.DataFrame({"date": _daily.index, _lbl: _daily.values})
                     _out   = _out.merge(_zdf, on="date", how="left")
         except Exception:

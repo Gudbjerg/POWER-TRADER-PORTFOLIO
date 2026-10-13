@@ -833,7 +833,7 @@ def interconnector(left: dict, right: dict, link: str, capacity: str | None = No
         direction = f"{left['place']} pays €{-spread:,.0f}/MWh more: the incentive is to import into {left['place']}."
 
     def _px(v):
-        return f"{v:,.0f}" if isinstance(v, (int, float)) and math.isfinite(v) else "n/a"
+        return f"{v:,.0f}" if isinstance(v, (int, float)) and math.isfinite(v) else "…"
 
     ink, fjord, cobalt = COLORS["text"], ACCENTS["l1"], COLORS["accent_2"]
     flow = (f'<path class="{flow_cls}" d="M120 70 L880 70" stroke="{COLORS["surface_1"]}" stroke-width="4" fill="none"/>'

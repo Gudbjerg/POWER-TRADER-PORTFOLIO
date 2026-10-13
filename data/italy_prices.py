@@ -289,7 +289,7 @@ def _fetch_entsoe(eic: str, start: date, end: date) -> pd.Series:
     # Bounded timeout and retries: entsoe-py waits indefinitely by default.
     client = EntsoePandasClient(api_key=key, timeout=30, retry_count=2, retry_delay=5)
     parts: list[pd.Series] = []
-    for c_start, c_end in date_chunks(start, end, 365):
+    for c_start, c_end in date_chunks(start, end, 90):   # a year of 15-minute prices can time out
         try:
             series = client.query_day_ahead_prices(
                 eic,

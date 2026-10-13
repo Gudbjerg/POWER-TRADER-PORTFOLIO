@@ -131,7 +131,7 @@ def _load_spot_entsoe(start: pd.Timestamp, end: pd.Timestamp) -> pd.DataFrame:
     """Daily average day-ahead price (EUR/MWh) for NO2 and NL from ENTSO-E A44.
 
     ``start`` and ``end`` are tz-aware delivery-day boundaries. Requests are split into
-    chunks of at most a year (the ENTSO-E limit). Returns columns ``no2`` and ``nl`` indexed
+    chunks of 90 days (a year of 15-minute prices can exceed the request timeout). Returns columns ``no2`` and ``nl`` indexed
     by delivery day; empty without a key or when ENTSO-E returns nothing.
     """
     try:
@@ -149,7 +149,7 @@ def _load_spot_entsoe(start: pd.Timestamp, end: pd.Timestamp) -> pd.DataFrame:
         chunks: list[pd.Series] = []
         chunk_start = start
         while chunk_start < end:
-            chunk_end = min(chunk_start + pd.Timedelta(days=365), end)
+            chunk_end = min(chunk_start + pd.Timedelta(days=90), end)   # long 15-minute requests time out
             try:
                 s = client.query_day_ahead_prices(eic, start=chunk_start, end=chunk_end)
                 if s is not None and not s.empty:
