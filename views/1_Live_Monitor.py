@@ -71,8 +71,8 @@ _NO_ZONE_LABELS = {
     "SYS": "SYS (System)",
 }
 _NO_ZONE_COLORS = {
-    "NO1": "#58a6ff", "NO2": "#3fb950", "NO3": "#d4ac3a",
-    "NO4": "#e07b39", "NO5": "#8e6bbf", "SYS": "#f85149",
+    "NO1": "#2f45c6", "NO2": "#2f7a47", "NO3": "#a86a12",
+    "NO4": "#c2611a", "NO5": "#6e4a9e", "SYS": "#c2391f",
 }
 
 
@@ -628,22 +628,22 @@ with tab_prices:
                 x=_sp["date"], y=_sp["spread"],
                 mode="lines",
                 name="NL − NO2 spread",
-                line=dict(color="#58a6ff", width=1.5),
+                line=dict(color="#2f45c6", width=1.5),
                 fill="tozeroy",
-                fillcolor="rgba(88,166,255,0.08)",
+                fillcolor="rgba(47,69,198,0.08)",
                 hovertemplate="NL−NO2: €%{y:.1f}/MWh<extra></extra>",
             ))
             _fig_sp.add_hline(y=0, line=dict(color=CHART["zero"], width=1))
             _fig_sp.add_hline(
-                y=SPREAD_CHART_REF_EUR, line=dict(color="#d4ac3a", width=1, dash="dot"),
+                y=SPREAD_CHART_REF_EUR, line=dict(color="#a86a12", width=1, dash="dot"),
                 annotation_text=f"  +€{SPREAD_CHART_REF_EUR:.0f} (NordLink historically >90% utilised)",
-                annotation_font=dict(color="#d4ac3a", size=10),
+                annotation_font=dict(color="#a86a12", size=10),
                 annotation_position="right",
             )
             _fig_sp.add_hline(
-                y=-SPREAD_CHART_REF_EUR, line=dict(color="#3fb950", width=1, dash="dot"),
+                y=-SPREAD_CHART_REF_EUR, line=dict(color="#2f7a47", width=1, dash="dot"),
                 annotation_text=f"  −€{SPREAD_CHART_REF_EUR:.0f} (Nordic premium, atypical)",
-                annotation_font=dict(color="#3fb950", size=10),
+                annotation_font=dict(color="#2f7a47", size=10),
                 annotation_position="right",
             )
             _fig_sp.update_layout(
@@ -915,38 +915,38 @@ with tab_prices:
         _fiit_fi_plot["date"] = pd.to_datetime(_fiit_fi_plot["date"])
         _fiit_fig.add_trace(_fiit_go.Scatter(
             x=_fiit_it_plot["date"], y=_fiit_it_plot["it_north"], name="IT-North",
-            line=dict(color="#e07b39", width=1.5),
+            line=dict(color="#c2611a", width=1.5),
             hovertemplate="IT-North: €%{y:.1f}/MWh<extra></extra>",
         ), row=1, col=1)
         _fiit_fig.add_trace(_fiit_go.Scatter(
             x=_fiit_fi_plot["date"], y=_fiit_fi_plot["fi"], name="FI (Finland)",
-            line=dict(color="#8e6bbf", width=1.5),
+            line=dict(color="#6e4a9e", width=1.5),
             hovertemplate="FI: €%{y:.1f}/MWh<extra></extra>",
         ), row=1, col=1)
         _fiit_fig.add_trace(_fiit_go.Scatter(
             x=_fiit_df["date"], y=_fiit_df["spread"], name="FI minus IT-North",
-            line=dict(color="#58a6ff", width=1.3),
-            fill="tozeroy", fillcolor="rgba(88,166,255,0.08)",
+            line=dict(color="#2f45c6", width=1.3),
+            fill="tozeroy", fillcolor="rgba(47,69,198,0.08)",
             hovertemplate="FI minus IT-North: €%{y:.1f}/MWh<extra></extra>",
         ), row=2, col=1)
         _fiit_fig.add_trace(_fiit_go.Scatter(
             x=_fiit_df["date"], y=_fiit_df["spread_ma"], name=f"{_FIIT_AVG_D}-day mean",
-            line=dict(color="#d29922", width=1.6, dash="dot"),
+            line=dict(color="#a86a12", width=1.6, dash="dot"),
             hovertemplate=f"{_FIIT_AVG_D}-day mean: €%{{y:.1f}}/MWh<extra></extra>",
         ), row=2, col=1)
-        _fiit_fig.add_hline(y=0, line=dict(color="rgba(255,255,255,0.25)", width=1), row=2, col=1)
+        _fiit_fig.add_hline(y=0, line=dict(color="rgba(19,47,56,0.25)", width=1), row=2, col=1)
         _fiit_fig.update_layout(
-            template="plotly_dark",
-            paper_bgcolor="#0d1117",
-            plot_bgcolor="#161b22",
+            template=PLOTLY_TEMPLATE,
+            paper_bgcolor="#f5f7f4",
+            plot_bgcolor="#f5f7f4",
             height=440,
             margin=dict(l=50, r=20, t=10, b=35),
             legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1,
                         font=dict(size=10)),
             hovermode="x unified",
         )
-        _fiit_fig.update_xaxes(gridcolor="rgba(255,255,255,0.06)", tickfont=dict(size=10, color="#8b949e"))
-        _fiit_fig.update_yaxes(gridcolor="rgba(255,255,255,0.06)", tickfont=dict(size=10, color="#8b949e"),
+        _fiit_fig.update_xaxes(gridcolor="rgba(19,47,56,0.06)", tickfont=dict(size=10, color="#667b83"))
+        _fiit_fig.update_yaxes(gridcolor="rgba(19,47,56,0.06)", tickfont=dict(size=10, color="#667b83"),
                                zeroline=False)
         _fiit_fig.update_yaxes(title_text="EUR/MWh", row=1, col=1)
         _fiit_fig.update_yaxes(title_text="Spread (EUR/MWh)", row=2, col=1)

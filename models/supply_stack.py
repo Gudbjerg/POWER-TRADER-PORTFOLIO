@@ -44,14 +44,14 @@ except ImportError:
 
 _FUELS: list[tuple] = [
     # (key, display_label, capacity_gw, color)
-    ("wind",    "Wind (onshore + offshore)", 66.0, "#3fb950"),
-    ("solar",   "Solar PV",                  73.0, "#f0e040"),
-    ("hydro",   "Hydro run-of-river",          4.5, "#58a6ff"),
-    ("biomass", "Biomass / biogas",             8.5, "#a371f7"),
-    ("lignite", "Lignite",                    17.0, "#8b6914"),
-    ("coal",    "Hard coal",                  23.0, "#6e7681"),
-    ("gas",     "Gas CCGT / OCGT",            30.0, "#e07b39"),
-    ("oil",     "Oil / gas turbine (peaker)",  2.5, "#f85149"),
+    ("wind",    "Wind (onshore + offshore)", 66.0, "#2f7a47"),
+    ("solar",   "Solar PV",                  73.0, "#b08d00"),
+    ("hydro",   "Hydro run-of-river",          4.5, "#2f45c6"),
+    ("biomass", "Biomass / biogas",             8.5, "#6e4a9e"),
+    ("lignite", "Lignite",                    17.0, "#7a5a12"),
+    ("coal",    "Hard coal",                  23.0, "#93a3a8"),
+    ("gas",     "Gas CCGT / OCGT",            30.0, "#c2611a"),
+    ("oil",     "Oil / gas turbine (peaker)",  2.5, "#c2391f"),
 ]
 
 # Share of installed capacity expected to be available when no live figure is supplied.
@@ -228,18 +228,18 @@ def make_merit_order_figure(
 
     # Demand line
     fig.add_vline(
-        x=demand_gw, line=dict(color="#e6edf3", width=2, dash="dash"),
+        x=demand_gw, line=dict(color="#132f38", width=2, dash="dash"),
         annotation_text=f"  Demand: {demand_gw:.0f} GW",
-        annotation_font=dict(color="#e6edf3", size=11),
+        annotation_font=dict(color="#132f38", size=11),
         annotation_position="top right",
     )
 
     # Implied clearing price (marginal cost horizontal)
     fig.add_hline(
         y=marginal["marginal_cost"],
-        line=dict(color="#f0e040", width=1.5, dash="dot"),
+        line=dict(color="#b08d00", width=1.5, dash="dot"),
         annotation_text=f"Implied: €{marginal['marginal_cost']:.1f}/MWh  ",
-        annotation_font=dict(color="#f0e040", size=11),
+        annotation_font=dict(color="#b08d00", size=11),
         annotation_position="top left",
     )
 
@@ -247,9 +247,9 @@ def make_merit_order_figure(
     if actual_power_price is not None and actual_power_price > 0:
         fig.add_hline(
             y=actual_power_price,
-            line=dict(color="#58a6ff", width=1.5, dash="dot"),
+            line=dict(color="#2f45c6", width=1.5, dash="dot"),
             annotation_text=f"NL actual: €{actual_power_price:.1f}/MWh  ",
-            annotation_font=dict(color="#58a6ff", size=11),
+            annotation_font=dict(color="#2f45c6", size=11),
             annotation_position="bottom left",
         )
 

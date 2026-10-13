@@ -367,6 +367,8 @@ def predict_next(features_df: pd.DataFrame) -> dict | None:
             y_mean = np.array(meta["y_mean"])
             y_std  = np.array(meta["y_std"])
             pred   = pred_norm * y_std + y_mean
+            if meta.get("target_mode") == "delta":
+                pred = df[TARGETS].iloc[-1].to_numpy(dtype=float) + pred
         else:
             # Fallback: use last known prices + weighted adjustment
             last_no2 = float(df["no2"].iloc[-1]) if "no2" in df.columns else None
@@ -417,14 +419,19 @@ def train_lstm_full(features_df: pd.DataFrame, feature_cols: list[str],
     std  = X_raw[:n_train].std(axis=0)
     std[std == 0] = 1.0
 
-    y_mean = y_raw[:n_train].mean(axis=0)
-    y_std  = y_raw[:n_train].std(axis=0)
+    # Target: the next day's change in price, not its level. Price levels drift far outside
+    # the training range in a supply shock, and a level model then reverts to the training
+    # mean; a change model is anchored on the last observed price.
+    y_delta = np.vstack([np.zeros((1, y_raw.shape[1]), dtype=np.float32), np.diff(y_raw, axis=0)])
+    y_mean = y_delta[1:n_train].mean(axis=0)
+    y_std  = y_delta[1:n_train].std(axis=0)
     y_std[y_std == 0] = 1.0
 
     X_norm = (X_raw - mean) / std
-    y_norm = (y_raw - y_mean) / y_std
+    y_norm = (y_delta - y_mean) / y_std
 
     Xs, ys = _make_sequences(X_norm, y_norm, SEQ_LEN)
+    y_prev = y_raw[SEQ_LEN - 1 : len(y_raw) - 1]   # last observed price of each sequence
     n_seq   = len(Xs)
     nt      = int(n_seq * 0.70)
     nv      = int(n_seq * 0.15)
@@ -474,13 +481,14 @@ def train_lstm_full(features_df: pd.DataFrame, feature_cols: list[str],
 
     with torch.no_grad():
         y_pred_norm = model(torch.tensor(Xs[nt+nv:])).numpy()
-    y_pred = y_pred_norm * y_std + y_mean
-    y_true = ys[nt+nv:] * y_std + y_mean
+    base   = y_prev[nt+nv:]
+    y_pred = base + (y_pred_norm * y_std + y_mean)
+    y_true = base + (ys[nt+nv:] * y_std + y_mean)
 
     test_mae_no2 = float(np.abs(y_pred[:, 0] - y_true[:, 0]).mean())
     test_mae_nl  = float(np.abs(y_pred[:, 1] - y_true[:, 1]).mean())
-    naive_no2    = float(np.abs(np.diff(y_raw[nt+nv+SEQ_LEN:, 0])).mean()) if len(y_raw[nt+nv+SEQ_LEN:]) > 1 else test_mae_no2
-    naive_nl     = float(np.abs(np.diff(y_raw[nt+nv+SEQ_LEN:, 1])).mean()) if len(y_raw[nt+nv+SEQ_LEN:]) > 1 else test_mae_nl
+    naive_no2    = float(np.abs(y_true[:, 0] - base[:, 0]).mean())   # persistence: tomorrow = today
+    naive_nl     = float(np.abs(y_true[:, 1] - base[:, 1]).mean())
 
     info = {
         "test_mae_no2":   round(test_mae_no2, 2),
@@ -494,6 +502,7 @@ def train_lstm_full(features_df: pd.DataFrame, feature_cols: list[str],
         "best_val_loss":  round(best_val, 5),
         "y_mean":         y_mean.tolist(),
         "y_std":          y_std.tolist(),
+        "target_mode":    "delta",
     }
     _save(model, mean.tolist(), std.tolist(), feature_cols, info)
 

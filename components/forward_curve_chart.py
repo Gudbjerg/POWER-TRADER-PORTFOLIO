@@ -9,10 +9,10 @@ import pandas as pd
 from utils.theme import CHART, PLOTLY_TEMPLATE
 
 COLORS = {
-    "winter":   "#4c8cbf",
-    "summer":   "#4caf8f",
-    "range":    "rgba(139,148,158,0.35)",
-    "spot":     "#e07b39",
+    "winter":   "#2f6aa6",
+    "summer":   "#0e7a7e",
+    "range":    "rgba(102,123,131,0.35)",
+    "spot":     "#c2611a",
     "grid":     CHART["grid"],
     "text":     CHART["text"],
     "bg":       CHART["bg"],
@@ -21,9 +21,9 @@ COLORS = {
 }
 
 TTF_THRESHOLDS = [
-    (20,  "Pre-crisis avg (~20)",  "rgba(80,160,80,0.75)"),
-    (35,  "Elevated (35)",         "rgba(200,160,50,0.75)"),
-    (50,  "High risk (50)",        "rgba(200,80,80,0.75)"),
+    (20,  "Pre-crisis avg (~20)",  "rgba(47,122,71,0.75)"),
+    (35,  "Elevated (35)",         "rgba(168,106,18,0.75)"),
+    (50,  "High risk (50)",        "rgba(194,57,31,0.75)"),
 ]
 
 

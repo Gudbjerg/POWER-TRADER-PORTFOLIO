@@ -19,9 +19,9 @@ TICKERS = {
 }
 
 COLORS = {
-    "TTF":   "#e07b39",
-    "Wheat": "#d4ac3a",
-    "Corn":  "#3fb950",
+    "TTF":   "#c2611a",
+    "Wheat": "#a86a12",
+    "Corn":  "#2f7a47",
 }
 
 

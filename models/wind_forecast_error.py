@@ -32,10 +32,10 @@ ZONE_LABELS: dict[str, str] = {
 }
 
 ZONE_COLORS: dict[str, str] = {
-    "DE":  "#e07b39",
-    "DK1": "#58a6ff",
-    "NO":  "#3fb950",
-    "GB":  "#a371f7",
+    "DE":  "#c2611a",
+    "DK1": "#2f45c6",
+    "NO":  "#2f7a47",
+    "GB":  "#6e4a9e",
 }
 
 
@@ -197,7 +197,7 @@ def make_error_bar_chart(
         if col not in df.columns:
             continue
         vals   = df[col]
-        colors = ["#f85149" if v > 0 else "#3fb950" for v in vals]
+        colors = ["#c2391f" if v > 0 else "#2f7a47" for v in vals]
         fig.add_trace(go.Bar(
             x=df["date"],
             y=vals,
@@ -247,7 +247,7 @@ def make_rmse_chart(
             y=rmse_df[col],
             mode="lines",
             name=ZONE_LABELS.get(zone, zone),
-            line=dict(color=ZONE_COLORS.get(zone, "#8b949e"), width=1.8),
+            line=dict(color=ZONE_COLORS.get(zone, "#667b83"), width=1.8),
             hovertemplate=(
                 f"<b>{ZONE_LABELS.get(zone, zone)}</b><br>"
                 "7-day RMSE: %{y:.1f} GWh<extra></extra>"
@@ -295,7 +295,7 @@ def make_correlation_scatter(
         y=corr_df["abs_price_change"],
         mode="markers",
         marker=dict(
-            color=ZONE_COLORS.get(zone, "#58a6ff"),
+            color=ZONE_COLORS.get(zone, "#2f45c6"),
             size=5,
             opacity=0.55,
         ),
@@ -311,7 +311,7 @@ def make_correlation_scatter(
     fig.add_annotation(
         xref="paper", yref="paper", x=0.98, y=0.98,
         text=corr_label, showarrow=False,
-        font=dict(size=12, color="#e6edf3"),
+        font=dict(size=12, color="#132f38"),
         bgcolor=CHART["annotation_bg"],
         bordercolor=CHART["annotation_border"],
         borderwidth=1,

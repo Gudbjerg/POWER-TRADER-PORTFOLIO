@@ -131,31 +131,31 @@ with c1:
 
 with c2:
     if not _TORCH_AVAILABLE:
-        _lstm_status_color, _lstm_status_label = "#8b949e", "Not available here (PyTorch not installed)"
+        _lstm_status_color, _lstm_status_label = "#667b83", "Not available here (PyTorch not installed)"
     elif lstm_is_trained():
-        _lstm_status_color = "#3fb950"
+        _lstm_status_color = "#2f7a47"
         _lstm_status_label = f"Trained {lstm_load_meta().get('trained_at', '')[:10]}".strip()
     elif _ready:
-        _lstm_status_color, _lstm_status_label = "#d29922", "Not trained yet"
+        _lstm_status_color, _lstm_status_label = "#a86a12", "Not trained yet"
     else:
-        _lstm_status_color, _lstm_status_label = "#f85149", "Awaiting data"
+        _lstm_status_color, _lstm_status_label = "#c2391f", "Awaiting data"
     _lstm_feat_list = get_lstm_feature_cols(_features_df) if not _features_df.empty else []
     _wind_note = "incl. wind" if _avail.get("wind") else "wind unavailable"
     st.markdown(
         f"""
-<div style="background:#161b22;border:1px solid rgba(255,255,255,0.08);border-radius:8px;padding:16px;margin-bottom:8px;">
-  <div style="color:#58a6ff;font-size:0.72rem;text-transform:uppercase;letter-spacing:1px;font-weight:600;margin-bottom:8px;">Status</div>
+<div style="background:#f5f7f4;border:1px solid rgba(19,47,56,0.08);border-radius:8px;padding:16px;margin-bottom:8px;">
+  <div style="color:#2f45c6;font-size:0.72rem;text-transform:uppercase;letter-spacing:1px;font-weight:600;margin-bottom:8px;">Status</div>
   <div style="color:{_lstm_status_color};font-size:0.88rem;margin-bottom:12px;">{_lstm_status_label}</div>
-  <div style="color:#8b949e;font-size:0.82rem;line-height:1.7;">
+  <div style="color:#667b83;font-size:0.82rem;line-height:1.7;">
     Training rows: {_n_rows}<br>
     Features: {len(_lstm_feat_list)} ({_wind_note})<br>
     Hydro (ENTSO-E B31): {"available" if _avail.get("hydro") else "unavailable"}<br>
     Wind (ENTSO-E B18/B19): {"available" if _avail.get("wind") else "unavailable"}
   </div>
 </div>
-<div style="background:#161b22;border:1px solid rgba(255,255,255,0.08);border-radius:8px;padding:16px;">
-  <div style="color:#58a6ff;font-size:0.72rem;text-transform:uppercase;letter-spacing:1px;font-weight:600;margin-bottom:8px;">Why This Matters</div>
-  <div style="color:#8b949e;font-size:0.82rem;line-height:1.7;">
+<div style="background:#f5f7f4;border:1px solid rgba(19,47,56,0.08);border-radius:8px;padding:16px;">
+  <div style="color:#2f45c6;font-size:0.72rem;text-transform:uppercase;letter-spacing:1px;font-weight:600;margin-bottom:8px;">Why This Matters</div>
+  <div style="color:#667b83;font-size:0.82rem;line-height:1.7;">
     A trader with a directionally accurate price signal (even just 55% correct)
     can size positions on intraday vs day-ahead spreads. The model is not intended to
     replace fundamental analysis but to quantify the marginal information content
@@ -250,22 +250,22 @@ with st.expander("Live Model 1: Train and Predict", expanded=lstm_is_trained() a
             _fig_pred = go.Figure()
             _fig_pred.add_trace(go.Scatter(
                 x=_test_df["date"], y=_test_df["no2_actual"],
-                name="NO2 actual", line=dict(color="#4cc9f0", width=1.5),
+                name="NO2 actual", line=dict(color="#1c8fb0", width=1.5),
                 hovertemplate="NO2 actual: €%{y:.1f}<extra></extra>",
             ))
             _fig_pred.add_trace(go.Scatter(
                 x=_test_df["date"], y=_test_df["no2_pred"],
-                name="NO2 predicted", line=dict(color="#4cc9f0", width=1.5, dash="dot"),
+                name="NO2 predicted", line=dict(color="#1c8fb0", width=1.5, dash="dot"),
                 hovertemplate="NO2 predicted: €%{y:.1f}<extra></extra>",
             ))
             _fig_pred.add_trace(go.Scatter(
                 x=_test_df["date"], y=_test_df["nl_actual"],
-                name="NL actual", line=dict(color="#f4a261", width=1.5),
+                name="NL actual", line=dict(color="#c77b2e", width=1.5),
                 hovertemplate="NL actual: €%{y:.1f}<extra></extra>",
             ))
             _fig_pred.add_trace(go.Scatter(
                 x=_test_df["date"], y=_test_df["nl_pred"],
-                name="NL predicted", line=dict(color="#f4a261", width=1.5, dash="dot"),
+                name="NL predicted", line=dict(color="#c77b2e", width=1.5, dash="dot"),
                 hovertemplate="NL predicted: €%{y:.1f}<extra></extra>",
             ))
             _fig_pred.update_layout(
@@ -350,28 +350,28 @@ with c3:
 
 with c4:
     if hmm_is_trained():
-        _hmm_status_color = "#3fb950"
+        _hmm_status_color = "#2f7a47"
         _hmm_status_label = f"Trained {hmm_load_meta().get('trained_at', '')[:10]}".strip()
     elif _ready:
-        _hmm_status_color, _hmm_status_label = "#d29922", "Not trained yet"
+        _hmm_status_color, _hmm_status_label = "#a86a12", "Not trained yet"
     else:
-        _hmm_status_color, _hmm_status_label = "#f85149", "Awaiting data"
+        _hmm_status_color, _hmm_status_label = "#c2391f", "Awaiting data"
     _hmm_feat_list = get_hmm_feature_cols(_features_df) if not _features_df.empty else []
     st.markdown(
         f"""
-<div style="background:#161b22;border:1px solid rgba(255,255,255,0.08);border-radius:8px;padding:16px;margin-bottom:8px;">
-  <div style="color:#58a6ff;font-size:0.72rem;text-transform:uppercase;letter-spacing:1px;font-weight:600;margin-bottom:8px;">Status</div>
+<div style="background:#f5f7f4;border:1px solid rgba(19,47,56,0.08);border-radius:8px;padding:16px;margin-bottom:8px;">
+  <div style="color:#2f45c6;font-size:0.72rem;text-transform:uppercase;letter-spacing:1px;font-weight:600;margin-bottom:8px;">Status</div>
   <div style="color:{_hmm_status_color};font-size:0.88rem;margin-bottom:12px;">{_hmm_status_label}</div>
-  <div style="color:#8b949e;font-size:0.82rem;line-height:1.7;">
+  <div style="color:#667b83;font-size:0.82rem;line-height:1.7;">
     Training rows: {_n_rows}<br>
     HMM features: {len(_hmm_feat_list)}<br>
     Hydro percentile: {"available" if _avail.get("hydro") else "unavailable"}<br>
     Wind z-score: {"available" if _avail.get("wind") else "unavailable"}
   </div>
 </div>
-<div style="background:#161b22;border:1px solid rgba(255,255,255,0.08);border-radius:8px;padding:16px;">
-  <div style="color:#58a6ff;font-size:0.72rem;text-transform:uppercase;letter-spacing:1px;font-weight:600;margin-bottom:8px;">Why This Matters</div>
-  <div style="color:#8b949e;font-size:0.82rem;line-height:1.7;">
+<div style="background:#f5f7f4;border:1px solid rgba(19,47,56,0.08);border-radius:8px;padding:16px;">
+  <div style="color:#2f45c6;font-size:0.72rem;text-transform:uppercase;letter-spacing:1px;font-weight:600;margin-bottom:8px;">Why This Matters</div>
+  <div style="color:#667b83;font-size:0.82rem;line-height:1.7;">
     Physical traders need to understand which fundamental factor is driving the market
     on any given day. A regime signal compresses multiple data sources into a single
     actionable label, helping a trader decide whether to prioritise hydro, gas,
@@ -401,10 +401,10 @@ with st.expander("Live Model 2: Train and Classify", expanded=hmm_is_trained()):
             if _reg:
                 reg_color = _reg["regime_color"]
                 st.markdown(
-                    f"""<div style="background:#161b22;border:2px solid {reg_color};border-radius:8px;
+                    f"""<div style="background:#f5f7f4;border:2px solid {reg_color};border-radius:8px;
                     padding:14px 18px;margin-bottom:12px;display:inline-block;">
                     <span style="color:{reg_color};font-size:1.1rem;font-weight:700;">{_reg["regime"]}</span>
-                    <span style="color:#8b949e;font-size:0.82rem;margin-left:12px;">
+                    <span style="color:#667b83;font-size:0.82rem;margin-left:12px;">
                     {_reg["confidence"]:.0f}% confidence · {_reg["latest_date"]}</span>
                     </div>""",
                     unsafe_allow_html=True,
@@ -416,7 +416,7 @@ with st.expander("Live Model 2: Train and Classify", expanded=hmm_is_trained()):
                     _C = {"bg": CHART["bg"], "panel_bg": CHART["panel_bg"], "grid": CHART["grid"], "text": CHART["text"]}
                     _fig_r = go.Figure()
                     for _regime, _grp in _hist_df.groupby("regime"):
-                        _color = REGIME_COLORS.get(_regime, "#8b949e")
+                        _color = REGIME_COLORS.get(_regime, "#667b83")
                         _fig_r.add_trace(go.Scatter(
                             x=_grp["date"], y=[_regime] * len(_grp),
                             mode="markers",
@@ -494,19 +494,19 @@ with st.expander("Live Model 2: Train and Classify", expanded=hmm_is_trained()):
                                 _fig_rv.add_trace(go.Scatter(
                                     x=_grp["date"], y=[_regime] * len(_grp),
                                     mode="markers", name=_regime,
-                                    marker=dict(color=REGIME_COLORS.get(_regime, "#8b949e"), size=6, symbol="square"),
+                                    marker=dict(color=REGIME_COLORS.get(_regime, "#667b83"), size=6, symbol="square"),
                                     hovertemplate=f"<b>{_regime}</b><extra></extra>",
                                 ))
                             _fig_rv.add_trace(go.Scatter(
                                 x=_rv_plot["date"], y=_rv_plot["rv"], yaxis="y2", mode="lines",
                                 name=f"{_RV_WIN}-day realised vol",
-                                line=dict(color="#e6edf3", width=1.4),
+                                line=dict(color="#132f38", width=1.4),
                                 hovertemplate="Realised vol: €%{y:.2f}/MWh<extra></extra>",
                             ))
                             _fig_rv.add_trace(go.Scatter(
                                 x=[_rv_plot["date"].min(), _rv_plot["date"].max()], y=[_rv_thr, _rv_thr],
                                 yaxis="y2", mode="lines", name=f"P{_RV_PCTL:.0f} spike threshold",
-                                line=dict(color="rgba(255,255,255,0.45)", width=1, dash="dot"),
+                                line=dict(color="rgba(19,47,56,0.45)", width=1, dash="dot"),
                                 hoverinfo="skip",
                             ))
                             _rv_tr = _rv_plot[_rv_plot["date"].isin(_rv_stats["transition_dates"])]
@@ -516,14 +516,14 @@ with st.expander("Live Model 2: Train and Classify", expanded=hmm_is_trained()):
                                     name="Regime transition",
                                     marker=dict(
                                         symbol="diamond", size=9,
-                                        color=[REGIME_COLORS.get(r, "#8b949e") for r in _rv_tr["regime"]],
+                                        color=[REGIME_COLORS.get(r, "#667b83") for r in _rv_tr["regime"]],
                                         line=dict(color="#ffffff", width=1),
                                     ),
                                     customdata=_rv_tr[["regime"]].to_numpy(),
                                     hovertemplate="Transition to %{customdata[0]}<extra></extra>",
                                 ))
                             _fig_rv.update_layout(
-                                template="plotly_dark", paper_bgcolor=_C["bg"], plot_bgcolor=_C["panel_bg"],
+                                template=PLOTLY_TEMPLATE, paper_bgcolor=_C["bg"], plot_bgcolor=_C["panel_bg"],
                                 font=dict(color=_C["text"], size=11),
                                 margin=dict(l=10, r=10, t=10, b=10), height=330,
                                 legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
@@ -571,19 +571,19 @@ with st.expander("Live Model 2: Train and Classify", expanded=hmm_is_trained()):
 
                             # Per-regime table
                             _rv_rows = "".join(
-                                "<tr style='border-bottom:1px solid #21262d'>"
-                                f"<td style='padding:5px 10px;font-weight:600;color:{REGIME_COLORS.get(_r.regime, '#8b949e')}'>{_r.regime}</td>"
-                                f"<td style='padding:5px 10px;text-align:right;color:#8b949e'>{int(_r.days):,}</td>"
-                                f"<td style='padding:5px 10px;text-align:right;color:#8b949e'>{_r.share:.0%}</td>"
-                                f"<td style='padding:5px 10px;text-align:right;color:#e6edf3'>€{_r.mean_rv:.2f}</td>"
-                                f"<td style='padding:5px 10px;text-align:right;color:#e6edf3'>€{_r.median_rv:.2f}</td>"
-                                f"<td style='padding:5px 10px;text-align:right;color:#8b949e'>€{_r.mean_price:.1f}</td>"
+                                "<tr style='border-bottom:1px solid #d3dbd6'>"
+                                f"<td style='padding:5px 10px;font-weight:600;color:{REGIME_COLORS.get(_r.regime, '#667b83')}'>{_r.regime}</td>"
+                                f"<td style='padding:5px 10px;text-align:right;color:#667b83'>{int(_r.days):,}</td>"
+                                f"<td style='padding:5px 10px;text-align:right;color:#667b83'>{_r.share:.0%}</td>"
+                                f"<td style='padding:5px 10px;text-align:right;color:#132f38'>€{_r.mean_rv:.2f}</td>"
+                                f"<td style='padding:5px 10px;text-align:right;color:#132f38'>€{_r.median_rv:.2f}</td>"
+                                f"<td style='padding:5px 10px;text-align:right;color:#667b83'>€{_r.mean_price:.1f}</td>"
                                 "</tr>"
                                 for _r in _rv_tbl.itertuples()
                             )
                             st.markdown(
                                 "<table style='width:100%;border-collapse:collapse;font-size:0.85rem;margin-top:6px'>"
-                                "<thead><tr style='border-bottom:2px solid #30363d;color:#8b949e;text-align:left'>"
+                                "<thead><tr style='border-bottom:2px solid #c5cfca;color:#667b83;text-align:left'>"
                                 "<th style='padding:6px 10px'>Regime</th>"
                                 "<th style='padding:6px 10px;text-align:right'>Days</th>"
                                 "<th style='padding:6px 10px;text-align:right'>Share</th>"
@@ -715,11 +715,11 @@ st.markdown("### Model 3: NLP Energy News Sentiment Signal")
 
 # Exploratory badge
 st.markdown(
-    """<div style="display:inline-block;background:rgba(210,153,34,0.15);border:1px solid rgba(210,153,34,0.4);
+    """<div style="display:inline-block;background:rgba(168,106,18,0.15);border:1px solid rgba(168,106,18,0.4);
     border-radius:6px;padding:6px 14px;margin-bottom:14px;">
-    <span style="color:#d29922;font-size:0.78rem;font-weight:600;text-transform:uppercase;letter-spacing:1px;">
+    <span style="color:#a86a12;font-size:0.78rem;font-weight:600;text-transform:uppercase;letter-spacing:1px;">
     Exploratory: Live Prototype</span>
-    <span style="color:#8b949e;font-size:0.78rem;margin-left:10px;">
+    <span style="color:#667b83;font-size:0.78rem;margin-left:10px;">
     Pipeline is running. Scoring builds up over time as headlines accumulate.</span>
     </div>""",
     unsafe_allow_html=True,
@@ -763,13 +763,13 @@ predictive power for next-day TTF price changes.
 
 with c6:
     _finbert_line = "installed, running live" if _TORCH_AVAILABLE else "not installed in this environment"
-    _sent_status = ("Active (experimental)", "#3fb950") if _TORCH_AVAILABLE else ("Not available here", "#8b949e")
+    _sent_status = ("Active (experimental)", "#2f7a47") if _TORCH_AVAILABLE else ("Not available here", "#667b83")
     st.markdown(
         f"""
-<div style="background:#161b22;border:1px solid rgba(255,255,255,0.08);border-radius:8px;padding:16px;margin-bottom:8px;">
-  <div style="color:#58a6ff;font-size:0.72rem;text-transform:uppercase;letter-spacing:1px;font-weight:600;margin-bottom:8px;">Status</div>
+<div style="background:#f5f7f4;border:1px solid rgba(19,47,56,0.08);border-radius:8px;padding:16px;margin-bottom:8px;">
+  <div style="color:#2f45c6;font-size:0.72rem;text-transform:uppercase;letter-spacing:1px;font-weight:600;margin-bottom:8px;">Status</div>
   <div style="color:{_sent_status[1]};font-size:0.88rem;margin-bottom:12px;">{_sent_status[0]}</div>
-  <div style="color:#8b949e;font-size:0.82rem;line-height:1.7;">
+  <div style="color:#667b83;font-size:0.82rem;line-height:1.7;">
     FinBERT: {_finbert_line}<br>
     RSS feeds: 6 sources, 6h cache<br>
     History: archive backfill when shorter than 21 days<br>
@@ -777,9 +777,9 @@ with c6:
     ENTSO-E: not required
   </div>
 </div>
-<div style="background:#161b22;border:1px solid rgba(255,255,255,0.08);border-radius:8px;padding:16px;">
-  <div style="color:#58a6ff;font-size:0.72rem;text-transform:uppercase;letter-spacing:1px;font-weight:600;margin-bottom:8px;">Why This Matters</div>
-  <div style="color:#8b949e;font-size:0.82rem;line-height:1.7;">
+<div style="background:#f5f7f4;border:1px solid rgba(19,47,56,0.08);border-radius:8px;padding:16px;">
+  <div style="color:#2f45c6;font-size:0.72rem;text-transform:uppercase;letter-spacing:1px;font-weight:600;margin-bottom:8px;">Why This Matters</div>
+  <div style="color:#667b83;font-size:0.82rem;line-height:1.7;">
     Energy prices react to news faster than fundamentals update. The 2026 Hormuz
     escalation (a 40% TTF spike in three days) would have been detectable as a
     sharp negative sentiment shift before prices fully adjusted.
@@ -805,8 +805,8 @@ else:
     C = {
         "bg": CHART["bg"], "panel_bg": CHART["panel_bg"],
         "grid": CHART["grid"], "text": CHART["text"],
-        "pos": "#3fb950", "neg": "#f85149",
-        "ma":  "#58a6ff", "zero": CHART["zero"],
+        "pos": "#2f7a47", "neg": "#c2391f",
+        "ma":  "#2f45c6", "zero": CHART["zero"],
     }
 
     # KPI row

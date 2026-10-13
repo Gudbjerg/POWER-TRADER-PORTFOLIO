@@ -443,26 +443,26 @@ st.divider()
 
 # ── Quant Signal Scorecard ────────────────────────────────────────────────────
 _PILL = {
-    "up":      "<span style='background:#3d1515;color:#f85149;border-radius:4px;"
+    "up":      "<span style='background:#f6e3df;color:#c2391f;border-radius:4px;"
                "padding:2px 7px;font-size:0.78rem;font-weight:600;'>↑ UPSIDE</span>",
-    "down":    "<span style='background:#0f2a1a;color:#3fb950;border-radius:4px;"
+    "down":    "<span style='background:#e2efe6;color:#2f7a47;border-radius:4px;"
                "padding:2px 7px;font-size:0.78rem;font-weight:600;'>↓ DOWNSIDE</span>",
-    "neutral": "<span style='background:#1a2233;color:#58a6ff;border-radius:4px;"
+    "neutral": "<span style='background:#e6ebef;color:#2f45c6;border-radius:4px;"
                "padding:2px 7px;font-size:0.78rem;font-weight:600;'>→ NEUTRAL</span>",
-    "na":      "<span style='background:#1a1a1a;color:#6e7681;border-radius:4px;"
+    "na":      "<span style='background:#132f38;color:#93a3a8;border-radius:4px;"
                "padding:2px 7px;font-size:0.78rem;font-weight:600;'>⊘ N/A</span>",
 }
 
 def _score_card_html(name: str, value: str, direction: str, note: str) -> str:
     pill = _PILL[direction]
     return (
-        f"<div style='background:#161b22;border:1px solid #30363d;border-radius:8px;"
+        f"<div style='background:#f5f7f4;border:1px solid #c5cfca;border-radius:8px;"
         f"padding:14px 16px;height:100%;'>"
-        f"<div style='color:#8b949e;font-size:0.74rem;margin-bottom:4px;'>{name}</div>"
-        f"<div style='font-size:1.05rem;font-weight:700;color:#e6edf3;"
+        f"<div style='color:#667b83;font-size:0.74rem;margin-bottom:4px;'>{name}</div>"
+        f"<div style='font-size:1.05rem;font-weight:700;color:#132f38;"
         f"margin-bottom:6px;'>{value}</div>"
         f"{pill}"
-        f"<div style='color:#8b949e;font-size:0.74rem;margin-top:6px;line-height:1.3;'>{note}</div>"
+        f"<div style='color:#667b83;font-size:0.74rem;margin-top:6px;line-height:1.3;'>{note}</div>"
         f"</div>"
     )
 
@@ -639,15 +639,15 @@ except Exception:
 _n_up   = sum(1 for s in _sc_signals if s["direction"] == "up")
 _n_down = sum(1 for s in _sc_signals if s["direction"] == "down")
 _n_neu  = sum(1 for s in _sc_signals if s["direction"] == "neutral")
-_agg_color = "#f85149" if _n_up > _n_down + _n_neu else ("#3fb950" if _n_down > _n_up + _n_neu else "#58a6ff")
+_agg_color = "#c2391f" if _n_up > _n_down + _n_neu else ("#2f7a47" if _n_down > _n_up + _n_neu else "#2f45c6")
 _agg_label = (f"<span style='color:{_agg_color};font-weight:700;'>"
               f"{_n_up} upside &nbsp;/&nbsp; {_n_down} downside &nbsp;/&nbsp; {_n_neu} neutral</span>")
 
 with st.expander("Quant Signal Scorecard", expanded=True):
     st.markdown(
-        f"<div style='margin-bottom:10px;font-size:0.85rem;color:#8b949e;'>"
+        f"<div style='margin-bottom:10px;font-size:0.85rem;color:#667b83;'>"
         f"Aggregate: {_agg_label}"
-        f"<span style='color:#484f58;margin-left:12px;font-size:0.72rem;'>"
+        f"<span style='color:#93a3a8;margin-left:12px;font-size:0.72rem;'>"
         f"Hydro loads after first Nordic Decomp visit · Sentiment accumulates over time</span></div>",
         unsafe_allow_html=True,
     )
@@ -766,9 +766,9 @@ with tab_mc:
         C = {
             "bg": CHART["bg"], "panel_bg": CHART["panel_bg"],
             "grid": CHART["grid"], "text": CHART["text"],
-            "band_out": "rgba(88,166,255,0.12)", "band_in": "rgba(88,166,255,0.27)",
-            "median": "#58a6ff", "hist": "#8b949e",
-            "mandate": "#d4ac3a", "target": "#3fb950",
+            "band_out": "rgba(47,69,198,0.12)", "band_in": "rgba(47,69,198,0.27)",
+            "median": "#2f45c6", "hist": "#667b83",
+            "mandate": "#a86a12", "target": "#2f7a47",
         }
         fig = go.Figure()
 
@@ -925,9 +925,9 @@ with tab_reg:
         C = {
             "bg": CHART["bg"], "panel_bg": CHART["panel_bg"],
             "grid": CHART["grid"], "text": CHART["text"],
-            "scatter": "#58a6ff", "regline": "#d4ac3a",
-            "actual": "#c9d1d9", "fitted": "#58a6ff",
-            "resid_pos": "#f85149", "resid_neg": "#3fb950",
+            "scatter": "#2f45c6", "regline": "#a86a12",
+            "actual": "#3a5560", "fitted": "#2f45c6",
+            "resid_pos": "#c2391f", "resid_neg": "#2f7a47",
             "zero": CHART["zero"],
         }
 
@@ -953,7 +953,7 @@ with tab_reg:
                 x=[float(reg_df["ttf_price"].iloc[-1])],
                 y=[latest_act],
                 mode="markers",
-                marker=dict(color="#f85149", size=9, symbol="circle",
+                marker=dict(color="#c2391f", size=9, symbol="circle",
                             line=dict(color="white", width=1)),
                 name="Latest",
                 hovertemplate=f"Latest: TTF €{reg_df['ttf_price'].iloc[-1]:.1f}, NL €{latest_act:.1f}<extra></extra>",
@@ -992,7 +992,7 @@ with tab_reg:
             ))
             for level, label in [(2.0, "+2\u03c3"), (-2.0, "\u22122\u03c3")]:
                 fig_res.add_hline(y=level, line_dash="dash",
-                                  line_color="rgba(248,81,73,0.55)", line_width=1)
+                                  line_color="rgba(194,57,31,0.55)", line_width=1)
             fig_res.add_hline(y=0, line_dash="solid",
                               line_color=C["zero"], line_width=0.8)
             fig_res.update_layout(
@@ -1145,7 +1145,7 @@ with tab_spike:
                 st.markdown(
                     f"{pill} &nbsp; <strong>{label}</strong> &nbsp; "
                     f"€{price:.1f}/MWh &nbsp; z = {z_str} &nbsp; "
-                    f"<span style='color:#8b949e;font-size:0.82rem;'>(30d avg: €{mean_s})</span>",
+                    f"<span style='color:#667b83;font-size:0.82rem;'>(30d avg: €{mean_s})</span>",
                     unsafe_allow_html=True,
                 )
             st.markdown("<div style='margin-bottom:12px'></div>", unsafe_allow_html=True)
@@ -1156,8 +1156,8 @@ with tab_spike:
             "grid": CHART["grid"], "text": CHART["text"],
         }
         ZONE_COLORS = {
-            "NO1": "#4caf8f", "NO2": "#2980b9", "SE3": "#7ec8e3",
-            "NL":  "#c0392b", "FI":  "#8e6bbf",
+            "NO1": "#0e7a7e", "NO2": "#2980b9", "SE3": "#1c8fb0",
+            "NL":  "#b0301c", "FI":  "#6e4a9e",
         }
 
         fig_z = go.Figure()
@@ -1169,15 +1169,15 @@ with tab_spike:
             fig_z.add_trace(go.Scatter(
                 x=sub["date"], y=sub["z_score"],
                 name=label,
-                line=dict(color=ZONE_COLORS.get(zone, "#888"), width=1.5),
+                line=dict(color=ZONE_COLORS.get(zone, "#667b83"), width=1.5),
                 hovertemplate=f"{label}: z=%{{y:.2f}}<extra></extra>",
             ))
 
         for level, color, dash in [
-            (ALERT_Z,  "rgba(248,81,73,0.7)",  "dash"),
-            (-ALERT_Z, "rgba(248,81,73,0.7)",  "dash"),
-            (WARNING_Z, "rgba(210,153,34,0.5)", "dot"),
-            (-WARNING_Z,"rgba(210,153,34,0.5)", "dot"),
+            (ALERT_Z,  "rgba(194,57,31,0.7)",  "dash"),
+            (-ALERT_Z, "rgba(194,57,31,0.7)",  "dash"),
+            (WARNING_Z, "rgba(168,106,18,0.5)", "dot"),
+            (-WARNING_Z,"rgba(168,106,18,0.5)", "dot"),
             (0,         CHART["zero"], "solid"),
         ]:
             fig_z.add_hline(y=level, line_dash=dash, line_color=color, line_width=1)
@@ -1301,9 +1301,9 @@ with tab_bt:
         C = {
             "bg": CHART["bg"], "panel_bg": CHART["panel_bg"],
             "grid": CHART["grid"], "text": CHART["text"],
-            "pos": "#3fb950", "neg": "#f85149",
-            "cum": "#58a6ff", "zero": CHART["zero"],
-            "cost": "rgba(210,180,40,0.55)",
+            "pos": "#2f7a47", "neg": "#c2391f",
+            "cum": "#2f45c6", "zero": CHART["zero"],
+            "cost": "rgba(168,106,18,0.55)",
         }
 
         # ── Annual P&L bar chart ─────────────────────────────────────────────
@@ -2180,7 +2180,7 @@ with tab_granger:
                     _lags  = list(_p_vals.keys())
                     _pvals = list(_p_vals.values())
                     _bar_colors = [
-                        "#f85149" if p < 0.05 else ("#e07b39" if p < 0.10 else "#58a6ff")
+                        "#c2391f" if p < 0.05 else ("#c2611a" if p < 0.10 else "#2f45c6")
                         for p in _pvals
                     ]
 
@@ -2194,15 +2194,15 @@ with tab_granger:
                         hovertemplate="Lag %{x}: p=%{y:.4f}<extra></extra>",
                     ))
                     _fig_gc.add_hline(
-                        y=0.05, line=dict(color="rgba(248,81,73,0.8)", width=1.5, dash="dash"),
+                        y=0.05, line=dict(color="rgba(194,57,31,0.8)", width=1.5, dash="dash"),
                         annotation_text="p=0.05 significance threshold",
-                        annotation_font=dict(color="rgba(248,81,73,0.8)", size=10),
+                        annotation_font=dict(color="rgba(194,57,31,0.8)", size=10),
                         annotation_position="top right",
                     )
                     _fig_gc.add_hline(
-                        y=0.10, line=dict(color="rgba(210,153,34,0.5)", width=1, dash="dot"),
+                        y=0.10, line=dict(color="rgba(168,106,18,0.5)", width=1, dash="dot"),
                         annotation_text="p=0.10 borderline",
-                        annotation_font=dict(color="rgba(210,153,34,0.5)", size=10),
+                        annotation_font=dict(color="rgba(168,106,18,0.5)", size=10),
                         annotation_position="bottom right",
                     )
                     _fig_gc.update_layout(
@@ -2231,13 +2231,13 @@ with tab_granger:
                     _fig_ts.add_trace(go.Scatter(
                         x=_merged["date"], y=_merged["net_sentiment"],
                         name="Net Sentiment",
-                        line=dict(color="#58a6ff", width=1.5),
+                        line=dict(color="#2f45c6", width=1.5),
                         hovertemplate="Sentiment: %{y:.2f}<extra></extra>",
                     ))
                     _fig_ts.add_trace(go.Scatter(
                         x=_merged["date"], y=_merged["return"],
                         name="TTF Return (%)",
-                        line=dict(color="#e07b39", width=1.2),
+                        line=dict(color="#c2611a", width=1.2),
                         yaxis="y2",
                         hovertemplate="TTF return: %{y:.2f}%<extra></extra>",
                     ))
@@ -2453,8 +2453,8 @@ with tab_storage_reg:
                 )
 
                 _years = _sreg["date"].dt.year.unique()
-                _palette = ["#58a6ff", "#3fb950", "#f0e040", "#e07b39", "#f85149",
-                            "#a371f7", "#7ec8e3", "#ffa657"]
+                _palette = ["#2f45c6", "#2f7a47", "#b08d00", "#c2611a", "#c2391f",
+                            "#6e4a9e", "#1c8fb0", "#c2611a"]
                 _fig_scatter = go.Figure()
                 for _i, _yr in enumerate(sorted(_years)):
                     _sub = _sreg[_sreg["date"].dt.year == _yr]
@@ -2474,7 +2474,7 @@ with tab_storage_reg:
                     x=_x_line, y=_y_line,
                     mode="lines",
                     name=f"OLS fit (R²={_r2:.2f})",
-                    line=dict(color="rgba(255,255,255,0.6)", width=2, dash="dash"),
+                    line=dict(color="rgba(19,47,56,0.6)", width=2, dash="dash"),
                     hoverinfo="skip",
                 ))
 
@@ -2483,7 +2483,7 @@ with tab_storage_reg:
                     x=[_latest_storage], y=[_latest_ttf],
                     mode="markers",
                     name="Current",
-                    marker=dict(color="#f85149", size=12, symbol="star",
+                    marker=dict(color="#c2391f", size=12, symbol="star",
                                 line=dict(color="white", width=1)),
                     hovertemplate=f"Now: storage={_latest_storage:.1f}%, TTF=€{_latest_ttf:.1f}/MWh<extra></extra>",
                 ))
@@ -2512,7 +2512,7 @@ with tab_storage_reg:
                 )
 
                 _resid_color = [
-                    "#f85149" if r > 0 else "#3fb950"
+                    "#c2391f" if r > 0 else "#2f7a47"
                     for r in _sreg["residual"]
                 ]
                 _fig_resid = go.Figure()
@@ -2524,15 +2524,15 @@ with tab_storage_reg:
                 ))
                 _fig_resid.add_hline(y=0, line=dict(color=CHART["zero"], width=1))
                 _fig_resid.add_hline(
-                    y=10, line=dict(color="rgba(248,81,73,0.4)", width=1, dash="dot"),
+                    y=10, line=dict(color="rgba(194,57,31,0.4)", width=1, dash="dot"),
                     annotation_text="+10 EUR/MWh",
-                    annotation_font=dict(color="rgba(248,81,73,0.6)", size=9),
+                    annotation_font=dict(color="rgba(194,57,31,0.6)", size=9),
                     annotation_position="top right",
                 )
                 _fig_resid.add_hline(
-                    y=-10, line=dict(color="rgba(63,185,80,0.4)", width=1, dash="dot"),
+                    y=-10, line=dict(color="rgba(47,122,71,0.4)", width=1, dash="dot"),
                     annotation_text="−10 EUR/MWh",
-                    annotation_font=dict(color="rgba(63,185,80,0.6)", size=9),
+                    annotation_font=dict(color="rgba(47,122,71,0.6)", size=9),
                     annotation_position="bottom right",
                 )
                 _fig_resid.update_layout(
@@ -2714,7 +2714,7 @@ with tab_hydro_lag:
             )
 
             _bar_cols = [
-                "#f85149" if c > 0 else "#58a6ff"
+                "#c2391f" if c > 0 else "#2f45c6"
                 for c in _corrs
             ]
             _fig_cc = go.Figure()
@@ -2729,9 +2729,9 @@ with tab_hydro_lag:
             # Highlight peak lag
             _fig_cc.add_vline(
                 x=_peak_lag,
-                line=dict(color="rgba(240,224,64,0.6)", width=2, dash="dash"),
+                line=dict(color="rgba(176,141,0,0.6)", width=2, dash="dash"),
                 annotation_text=f"  Peak lag: {_peak_lag}d",
-                annotation_font=dict(color="#f0e040", size=10),
+                annotation_font=dict(color="#b08d00", size=10),
                 annotation_position="top right",
             )
             _fig_cc.add_hline(y=0, line=dict(color=CHART["zero"], width=1))
@@ -2773,14 +2773,14 @@ with tab_hydro_lag:
                 y=_hdf_lag["rolling_corr"],
                 mode="lines",
                 name=f"Rolling {_roll_win}d ρ",
-                line=dict(color="#58a6ff", width=1.5),
+                line=dict(color="#2f45c6", width=1.5),
                 hovertemplate="%{x|%Y-%m-%d}: ρ=%{y:.3f}<extra></extra>",
             ))
             _fig_roll.add_hline(y=0, line=dict(color=CHART["zero"], width=1))
             _fig_roll.add_hline(
-                y=-0.4, line=dict(color="rgba(248,81,73,0.3)", width=1, dash="dot"),
+                y=-0.4, line=dict(color="rgba(194,57,31,0.3)", width=1, dash="dot"),
                 annotation_text="ρ=−0.4",
-                annotation_font=dict(color="rgba(248,81,73,0.5)", size=9),
+                annotation_font=dict(color="rgba(194,57,31,0.5)", size=9),
                 annotation_position="bottom right",
             )
             _fig_roll.update_layout(
@@ -2999,8 +2999,8 @@ with tab_ttf_norm:
                 x=list(_bands["ref_date"]) + list(_bands["ref_date"])[::-1],
                 y=list(_bands["p90"]) + list(_bands["p10"])[::-1],
                 fill="toself",
-                fillcolor="rgba(88,166,255,0.10)",
-                line=dict(color="rgba(255,255,255,0)"),
+                fillcolor="rgba(47,69,198,0.10)",
+                line=dict(color="rgba(19,47,56,0)"),
                 hoverinfo="skip",
                 name="10th–90th pct (historical)",
                 showlegend=True,
@@ -3011,8 +3011,8 @@ with tab_ttf_norm:
                 x=list(_bands["ref_date"]) + list(_bands["ref_date"])[::-1],
                 y=list(_bands["p75"]) + list(_bands["p25"])[::-1],
                 fill="toself",
-                fillcolor="rgba(88,166,255,0.22)",
-                line=dict(color="rgba(255,255,255,0)"),
+                fillcolor="rgba(47,69,198,0.22)",
+                line=dict(color="rgba(19,47,56,0)"),
                 hoverinfo="skip",
                 name="25th–75th pct (typical)",
                 showlegend=True,
@@ -3023,7 +3023,7 @@ with tab_ttf_norm:
                 x=_bands["ref_date"], y=_bands["p50"],
                 mode="lines",
                 name="Seasonal median",
-                line=dict(color="rgba(88,166,255,0.5)", width=1.5, dash="dot"),
+                line=dict(color="rgba(47,69,198,0.5)", width=1.5, dash="dot"),
                 hovertemplate="Median: €%{y:.1f}/MWh<extra></extra>",
             ))
 
@@ -3033,7 +3033,7 @@ with tab_ttf_norm:
                     x=_curr_df["ref_date"], y=_curr_df["price"],
                     mode="lines",
                     name=f"{_current_year} actual",
-                    line=dict(color="#f0e040", width=2),
+                    line=dict(color="#b08d00", width=2),
                     hovertemplate=f"{_current_year}: €%{{y:.1f}}/MWh<extra></extra>",
                 ))
 
@@ -3262,15 +3262,15 @@ with tab_coint:
                     x=_ci_dates, y=_ci_z_series,
                     mode="lines",
                     name="Spread z-score",
-                    line=dict(color="#58a6ff", width=1.2),
+                    line=dict(color="#2f45c6", width=1.2),
                     hovertemplate="%{x|%Y-%m-%d}: z=%{y:.2f}<extra></extra>",
                 ))
                 # Entry/exit bands
                 for _lv, _col, _lbl in [
-                    (2.0,  "rgba(248,81,73,0.5)",   "±2σ (aggressive entry)"),
-                    (1.0,  "rgba(224,123,57,0.5)",   "±1σ (base entry)"),
-                    (-1.0, "rgba(224,123,57,0.5)",   ""),
-                    (-2.0, "rgba(248,81,73,0.5)",    ""),
+                    (2.0,  "rgba(194,57,31,0.5)",   "±2σ (aggressive entry)"),
+                    (1.0,  "rgba(194,97,26,0.5)",   "±1σ (base entry)"),
+                    (-1.0, "rgba(194,97,26,0.5)",   ""),
+                    (-2.0, "rgba(194,57,31,0.5)",    ""),
                     (0.0,  CHART["zero"],  "Mean"),
                 ]:
                     _fig_z_ci.add_hline(
@@ -3284,7 +3284,7 @@ with tab_coint:
                     x=[_ci_dates[-1]], y=[_ci_z_now],
                     mode="markers",
                     name="Current",
-                    marker=dict(color="#f85149", size=10, symbol="circle",
+                    marker=dict(color="#c2391f", size=10, symbol="circle",
                                 line=dict(color="white", width=1)),
                     hovertemplate=f"Now: z={_ci_z_now:+.2f}<extra></extra>",
                 ))
@@ -3309,12 +3309,12 @@ with tab_coint:
                 _fig_px = go.Figure()
                 _fig_px.add_trace(go.Scatter(
                     x=_ci_df["date"], y=_ci_df["no2"], name="NO2",
-                    line=dict(color="#58a6ff", width=1.5),
+                    line=dict(color="#2f45c6", width=1.5),
                     hovertemplate="NO2: €%{y:.1f}/MWh<extra></extra>",
                 ))
                 _fig_px.add_trace(go.Scatter(
                     x=_ci_df["date"], y=_ci_df["nl"], name="NL",
-                    line=dict(color="#e07b39", width=1.5),
+                    line=dict(color="#c2611a", width=1.5),
                     hovertemplate="NL: €%{y:.1f}/MWh<extra></extra>",
                 ))
                 _fig_px.update_layout(
@@ -3544,17 +3544,17 @@ with tab_scanner:
             _stab_secs = _time.perf_counter() - _stab_t0
             _stab_map = {_k: _stab_summary_fn(_v, alpha=_STAB_ALPHA) for _k, _v in _stab_pv.items()}
             _STAB_COLORS = {
-                "Persistent": "#3fb950", "Episodic": "#d4ac3a", "Rare": "#8b949e",
-                "Absent": "#6e7681", "n/a": "#484f58",
+                "Persistent": "#2f7a47", "Episodic": "#a86a12", "Rare": "#667b83",
+                "Absent": "#93a3a8", "n/a": "#93a3a8",
             }
 
             def _stab_cell(_pair_label: str) -> str:
                 _s = _stab_map.get(_pair_label)
                 if not _s or _s["n_windows"] == 0:
-                    return "<span style='color:#484f58'>n/a</span>"
+                    return "<span style='color:#93a3a8'>n/a</span>"
                 return (
-                    f"<span style='color:{_STAB_COLORS.get(_s['label'], '#8b949e')};font-weight:600'>"
-                    f"{_s['share']:.0%}</span> <span style='color:#8b949e'>{_s['label']}</span>"
+                    f"<span style='color:{_STAB_COLORS.get(_s['label'], '#667b83')};font-weight:600'>"
+                    f"{_s['share']:.0%}</span> <span style='color:#667b83'>{_s['label']}</span>"
                 )
             # ── end D2_alt computation ────────────────────────────────────────────
 
@@ -3562,11 +3562,11 @@ with tab_scanner:
             st.markdown("#### All Pairs: Ranked by Cointegration Strength")
 
             _STATUS_BADGE = {
-                "Actionable": ("<span style='background:#3d1515;color:#f85149;border-radius:4px;"
+                "Actionable": ("<span style='background:#f6e3df;color:#c2391f;border-radius:4px;"
                                "padding:2px 8px;font-size:0.78rem;font-weight:600'>Actionable</span>"),
-                "Wait":       ("<span style='background:#2d2008;color:#d4ac3a;border-radius:4px;"
+                "Wait":       ("<span style='background:#f6ecd9;color:#a86a12;border-radius:4px;"
                                "padding:2px 8px;font-size:0.78rem;font-weight:600'>Wait</span>"),
-                "Not cointegrated": ("<span style='background:#1c1c1c;color:#484f58;border-radius:4px;"
+                "Not cointegrated": ("<span style='background:#132f38;color:#93a3a8;border-radius:4px;"
                                      "padding:2px 8px;font-size:0.78rem;font-weight:600'>Not cointegrated</span>"),
             }
 
@@ -3574,16 +3574,16 @@ with tab_scanner:
             for _r in _scan_res:
                 _hl_s = f"{_r['half_life']:.1f}d" if np.isfinite(_r["half_life"]) else "∞"
                 _hr_s = f"{_r['hit_rate']:.0f}%" if not np.isnan(_r["hit_rate"]) else "n/a"
-                _zc   = "#f85149" if abs(_r["z_now"]) > 2 else ("#d4ac3a" if abs(_r["z_now"]) > 1 else "#8b949e")
-                _pc   = "#3fb950" if _r["pval"] < 0.05 else ("#d4ac3a" if _r["pval"] < 0.10 else "#484f58")
+                _zc   = "#c2391f" if abs(_r["z_now"]) > 2 else ("#a86a12" if abs(_r["z_now"]) > 1 else "#667b83")
+                _pc   = "#2f7a47" if _r["pval"] < 0.05 else ("#a86a12" if _r["pval"] < 0.10 else "#93a3a8")
                 _tbl_rows_html.append(
-                    f"<tr style='border-bottom:1px solid #21262d'>"
-                    f"<td style='padding:5px 10px;font-weight:600;color:#e6edf3'>{_r['pair']}</td>"
-                    f"<td style='padding:5px 10px;text-align:right;color:#8b949e'>{_r['n_obs']:,}</td>"
+                    f"<tr style='border-bottom:1px solid #d3dbd6'>"
+                    f"<td style='padding:5px 10px;font-weight:600;color:#132f38'>{_r['pair']}</td>"
+                    f"<td style='padding:5px 10px;text-align:right;color:#667b83'>{_r['n_obs']:,}</td>"
                     f"<td style='padding:5px 10px;text-align:right;color:{_pc}'>{_r['pval']:.3f}</td>"
-                    f"<td style='padding:5px 10px;text-align:right;color:#8b949e'>{_hl_s}</td>"
+                    f"<td style='padding:5px 10px;text-align:right;color:#667b83'>{_hl_s}</td>"
                     f"<td style='padding:5px 10px;text-align:right;color:{_zc};font-weight:600'>{_r['z_now']:+.2f}σ</td>"
-                    f"<td style='padding:5px 10px;text-align:right;color:#8b949e'>{_hr_s}</td>"
+                    f"<td style='padding:5px 10px;text-align:right;color:#667b83'>{_hr_s}</td>"
                     f"<td style='padding:5px 10px;text-align:right'>{_stab_cell(_r['pair'])}</td>"
                     f"<td style='padding:5px 10px'>{_STATUS_BADGE.get(_r['status'], _r['status'])}</td>"
                     f"</tr>"
@@ -3591,7 +3591,7 @@ with tab_scanner:
 
             _tbl_header = (
                 "<table style='width:100%;border-collapse:collapse;font-size:0.88rem;margin-top:4px'>"
-                "<thead><tr style='border-bottom:2px solid #30363d;color:#8b949e;text-align:left'>"
+                "<thead><tr style='border-bottom:2px solid #c5cfca;color:#667b83;text-align:left'>"
                 "<th style='padding:6px 10px'>Pair</th>"
                 "<th style='padding:6px 10px;text-align:right'>Obs</th>"
                 "<th style='padding:6px 10px;text-align:right'>E-G p-value</th>"
@@ -3668,9 +3668,9 @@ with tab_scanner:
                     hovertemplate="%{y}<br>window ending %{x|%d %b %Y}<br>p = %{text}<extra></extra>",
                 ))
                 _fig_stab.update_layout(
-                    template="plotly_dark",
-                    paper_bgcolor="#0d1117", plot_bgcolor="#161b22",
-                    font=dict(color="#c9d1d9", size=11),
+                    template=PLOTLY_TEMPLATE,
+                    paper_bgcolor="#f5f7f4", plot_bgcolor="#f5f7f4",
+                    font=dict(color="#3a5560", size=11),
                     margin=dict(l=10, r=10, t=10, b=30),
                     height=max(240, 34 * len(_stab_ok_pairs) + 90),
                     xaxis=dict(title=None, showgrid=False),
@@ -3682,24 +3682,24 @@ with tab_scanner:
                 for _p in _stab_ok_pairs:
                     _s = _stab_map[_p]
                     _p_last = float(_stab_pv[_p]["p_value"].dropna().iloc[-1])
-                    _cur_c = "#3fb950" if _s["current_coint"] else "#f85149"
+                    _cur_c = "#2f7a47" if _s["current_coint"] else "#c2391f"
                     _cur_t = "Cointegrated" if _s["current_coint"] else "Not cointegrated"
                     _brk = _s["last_break"].strftime("%Y-%m-%d") if _s["last_break"] is not None else "none"
                     _stab_rows.append(
-                        "<tr style='border-bottom:1px solid #21262d'>"
-                        f"<td style='padding:5px 10px;font-weight:600;color:#e6edf3'>{_p}</td>"
-                        f"<td style='padding:5px 10px;text-align:right;color:#8b949e'>{_s['n_windows']}</td>"
-                        f"<td style='padding:5px 10px;text-align:right;color:#8b949e'>{_s['n_coint']} ({_s['share']:.0%})</td>"
+                        "<tr style='border-bottom:1px solid #d3dbd6'>"
+                        f"<td style='padding:5px 10px;font-weight:600;color:#132f38'>{_p}</td>"
+                        f"<td style='padding:5px 10px;text-align:right;color:#667b83'>{_s['n_windows']}</td>"
+                        f"<td style='padding:5px 10px;text-align:right;color:#667b83'>{_s['n_coint']} ({_s['share']:.0%})</td>"
                         f"<td style='padding:5px 10px;color:{_cur_c}'>{_cur_t} (p = {_p_last:.3f})</td>"
-                        f"<td style='padding:5px 10px;text-align:right;color:#8b949e'>{_s['current_streak']} "
+                        f"<td style='padding:5px 10px;text-align:right;color:#667b83'>{_s['current_streak']} "
                         f"window{'s' if _s['current_streak'] != 1 else ''}</td>"
-                        f"<td style='padding:5px 10px;text-align:right;color:#8b949e'>{_brk}</td>"
-                        f"<td style='padding:5px 10px;font-weight:600;color:{_STAB_COLORS.get(_s['label'], '#8b949e')}'>{_s['label']}</td>"
+                        f"<td style='padding:5px 10px;text-align:right;color:#667b83'>{_brk}</td>"
+                        f"<td style='padding:5px 10px;font-weight:600;color:{_STAB_COLORS.get(_s['label'], '#667b83')}'>{_s['label']}</td>"
                         "</tr>"
                     )
                 st.markdown(
                     "<table style='width:100%;border-collapse:collapse;font-size:0.85rem;margin-top:4px'>"
-                    "<thead><tr style='border-bottom:2px solid #30363d;color:#8b949e;text-align:left'>"
+                    "<thead><tr style='border-bottom:2px solid #c5cfca;color:#667b83;text-align:left'>"
                     "<th style='padding:6px 10px'>Pair</th>"
                     "<th style='padding:6px 10px;text-align:right'>Windows</th>"
                     f"<th style='padding:6px 10px;text-align:right'>p &lt; {_STAB_ALPHA}</th>"
@@ -3801,14 +3801,14 @@ with tab_scanner:
                         _dfig_z.add_trace(go.Scatter(
                             x=_cp["dates"], y=_cp["z_series"],
                             mode="lines", name="Z-score",
-                            line=dict(color="#58a6ff", width=1.2),
+                            line=dict(color="#2f45c6", width=1.2),
                             hovertemplate="%{x|%Y-%m-%d}: z=%{y:.2f}<extra></extra>",
                         ))
                         for _dlv, _dcol, _dlbl in [
-                            ( 2.0, "rgba(248,81,73,0.5)",   "±2σ"),
-                            ( 1.0, "rgba(224,123,57,0.5)",  "±1σ"),
-                            (-1.0, "rgba(224,123,57,0.5)",  ""),
-                            (-2.0, "rgba(248,81,73,0.5)",   ""),
+                            ( 2.0, "rgba(194,57,31,0.5)",   "±2σ"),
+                            ( 1.0, "rgba(194,97,26,0.5)",  "±1σ"),
+                            (-1.0, "rgba(194,97,26,0.5)",  ""),
+                            (-2.0, "rgba(194,57,31,0.5)",   ""),
                             ( 0.0, CHART["zero"], "Mean"),
                         ]:
                             _dfig_z.add_hline(
@@ -3821,7 +3821,7 @@ with tab_scanner:
                         _dfig_z.add_trace(go.Scatter(
                             x=[_cp["dates"][-1]], y=[_cp["z_now"]],
                             mode="markers", name="Current",
-                            marker=dict(color="#f85149", size=9, symbol="circle",
+                            marker=dict(color="#c2391f", size=9, symbol="circle",
                                         line=dict(color="white", width=1)),
                             hovertemplate=f"Now: z={_cp['z_now']:+.2f}<extra></extra>",
                         ))
@@ -3843,13 +3843,13 @@ with tab_scanner:
                         _dfig_px.add_trace(go.Scatter(
                             x=_cp["dates"], y=_cp["ya"],
                             name=_cp["a"].upper(),
-                            line=dict(color="#58a6ff", width=1.3),
+                            line=dict(color="#2f45c6", width=1.3),
                             hovertemplate=f"{_cp['a'].upper()}: €%{{y:.1f}}/MWh<extra></extra>",
                         ))
                         _dfig_px.add_trace(go.Scatter(
                             x=_cp["dates"], y=_cp["yb"],
                             name=_cp["b"].upper(),
-                            line=dict(color="#e07b39", width=1.3),
+                            line=dict(color="#c2611a", width=1.3),
                             hovertemplate=f"{_cp['b'].upper()}: €%{{y:.1f}}/MWh<extra></extra>",
                         ))
                         _dfig_px.update_layout(
@@ -4021,7 +4021,7 @@ with tab_pca:
         _fig_ev = go.Figure(go.Bar(
             x=["PC1 (Level)", "PC2 (Slope)", "PC3 (Curvature)"],
             y=[_pc1_pct, _pc2_pct, _pc3_pct],
-            marker_color=["#58a6ff", "#3fb950", "#d4ac3a"],
+            marker_color=["#2f45c6", "#2f7a47", "#a86a12"],
             text=[f"{v:.1f}%" for v in [_pc1_pct, _pc2_pct, _pc3_pct]],
             textposition="outside",
         ))
@@ -4045,7 +4045,7 @@ with tab_pca:
             "PC3 ≈ U-shaped (butterfly)"
         )
         _fig_ld = go.Figure()
-        for _pc, _col in [("PC1", "#58a6ff"), ("PC2", "#3fb950"), ("PC3", "#d4ac3a")]:
+        for _pc, _col in [("PC1", "#2f45c6"), ("PC2", "#2f7a47"), ("PC3", "#a86a12")]:
             _fig_ld.add_trace(go.Scatter(
                 x=list(_ld.index), y=_ld[_pc].tolist(),
                 name=_pc, line=dict(color=_col, width=2),
@@ -4069,9 +4069,9 @@ with tab_pca:
         st.markdown("#### Factor Scores: Full Panel History")
         _fig_sc = go.Figure()
         for _pc, _col, _lbl in [
-            ("PC1", "#58a6ff", "PC1 (Level)"),
-            ("PC2", "#3fb950", "PC2 (Slope)"),
-            ("PC3", "#d4ac3a", "PC3 (Curvature)"),
+            ("PC1", "#2f45c6", "PC1 (Level)"),
+            ("PC2", "#2f7a47", "PC2 (Slope)"),
+            ("PC3", "#a86a12", "PC3 (Curvature)"),
         ]:
             _fig_sc.add_trace(go.Scatter(
                 x=_sc_df.index, y=_sc_df[_pc],
@@ -4100,8 +4100,8 @@ with tab_pca:
         )
         _fig_sig = go.Figure()
         for _pcz, _col, _lbl in [
-            ("PC2_z", "#3fb950", "PC2 z-score (Slope)"),
-            ("PC3_z", "#d4ac3a", "PC3 z-score (Curvature)"),
+            ("PC2_z", "#2f7a47", "PC2 z-score (Slope)"),
+            ("PC3_z", "#a86a12", "PC3 z-score (Curvature)"),
         ]:
             if _pcz in _sc_df.columns:
                 _fig_sig.add_trace(go.Scatter(
@@ -4110,8 +4110,8 @@ with tab_pca:
                     hovertemplate=f"{_lbl}: %{{y:+.2f}}σ<extra></extra>",
                 ))
         for _lvl, _ann_c in [
-            (PCA_ENTRY_Z,  "#f85149"),
-            (-PCA_ENTRY_Z, "#3fb950"),
+            (PCA_ENTRY_Z,  "#c2391f"),
+            (-PCA_ENTRY_Z, "#2f7a47"),
         ]:
             _fig_sig.add_hline(
                 y=_lvl,
@@ -4151,16 +4151,16 @@ with tab_pca:
                 continue
             _z = float(_sc_last[_pcz])
             if _z >= PCA_ENTRY_Z:
-                _msg, _border = _bull_msg, "#f85149"
+                _msg, _border = _bull_msg, "#c2391f"
             elif _z <= -PCA_ENTRY_Z:
-                _msg, _border = _bear_msg, "#3fb950"
+                _msg, _border = _bear_msg, "#2f7a47"
             else:
-                _msg, _border = "In neutral zone: no trade signal", "#58a6ff"
+                _msg, _border = "In neutral zone: no trade signal", "#2f45c6"
             st.markdown(
                 f"<div class='commentary' style='border-left-color:{_border};'>"
                 f"<strong>{_lbl}</strong>&nbsp;&nbsp;"
                 f"<span style='color:{_border};'>z = {_z:+.2f}σ</span><br>"
-                f"<span style='color:#c9d1d9;font-size:0.85rem;'>{_msg}</span>"
+                f"<span style='color:#3a5560;font-size:0.85rem;'>{_msg}</span>"
                 f"</div>",
                 unsafe_allow_html=True,
             )

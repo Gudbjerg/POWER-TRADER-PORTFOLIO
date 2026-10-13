@@ -9,10 +9,10 @@ _DIR = os.path.dirname(__file__)
 _EVENTS_FILE = os.path.join(_DIR, "events.json")
 
 CATEGORY_COLORS = {
-    "geopolitical": "#f85149",
-    "supply":       "#d29922",
-    "policy":       "#58a6ff",
-    "weather":      "#3fb950",
+    "geopolitical": "#c2391f",
+    "supply":       "#a86a12",
+    "policy":       "#2f45c6",
+    "weather":      "#2f7a47",
 }
 
 IMPACT_DASH = {

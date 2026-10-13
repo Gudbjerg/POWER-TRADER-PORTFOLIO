@@ -8,8 +8,8 @@ import pandas as pd
 from utils.theme import CHART, PLOTLY_TEMPLATE
 
 COLORS = {
-    "price":    "#c0392b",
-    "solar":    "#d4ac3a",
+    "price":    "#b0301c",
+    "solar":    "#a86a12",
     "grid":     CHART["grid"],
     "text":     CHART["text"],
     "bg":       CHART["bg"],

@@ -13,11 +13,11 @@ from utils.theme import CHART, PLOTLY_TEMPLATE
 
 
 COLORS = {
-    "band_fill": "rgba(100,149,237,0.12)",
-    "band_mean": "rgba(100,149,237,0.55)",
-    "band_min":  "rgba(220,140,30,0.70)",
-    "current":   "#c0392b",
-    "mandate":   "rgba(210,180,40,0.55)",
+    "band_fill": "rgba(47,69,198,0.12)",
+    "band_mean": "rgba(47,69,198,0.55)",
+    "band_min":  "rgba(194,97,26,0.70)",
+    "current":   "#b0301c",
+    "mandate":   "rgba(168,106,18,0.55)",
     "grid":      CHART["grid"],
     "text":      CHART["text"],
     "bg":        CHART["bg"],
@@ -117,7 +117,7 @@ def render_storage_chart(storage_data: dict, region: str = "europe"):
     # EU filling target: 90% at any point between 1 October and 1 December
     fig.add_vrect(
         x0=f"{ref_year}-10-01", x1=f"{ref_year}-12-01",
-        fillcolor="rgba(210,180,40,0.06)", line_width=0, layer="below",
+        fillcolor="rgba(168,106,18,0.06)", line_width=0, layer="below",
     )
     fig.add_hline(
         y=EU_TARGET_PCT,

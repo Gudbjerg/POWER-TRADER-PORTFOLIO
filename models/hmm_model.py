@@ -34,11 +34,11 @@ N_ITER      = 200
 RANDOM_SEED = 42
 
 REGIME_COLORS = {
-    "Hydro-driven":        "#4caf8f",
-    "Gas-driven":          "#4c8cbf",
-    "Renewables-driven":   "#d4ac3a",
-    "Geopolitical stress": "#f85149",
-    "Unknown":             "#8b949e",
+    "Hydro-driven":        "#0e7a7e",
+    "Gas-driven":          "#2f6aa6",
+    "Renewables-driven":   "#a86a12",
+    "Geopolitical stress": "#c2391f",
+    "Unknown":             "#667b83",
 }
 
 
@@ -312,7 +312,7 @@ def predict_regime(features_df: pd.DataFrame) -> dict | None:
 
     return {
         "regime":        regime,
-        "regime_color":  REGIME_COLORS.get(regime, "#8b949e"),
+        "regime_color":  REGIME_COLORS.get(regime, "#667b83"),
         "confidence":    round(confidence * 100, 1),
         "latest_date":   str(df["date"].iloc[-1].date()),
         "history":       history,
@@ -355,5 +355,5 @@ def get_regime_history(features_df: pd.DataFrame) -> pd.DataFrame:
         "state":  state_seq,
         "regime": [regime_labels.get(int(s), "Unknown") for s in state_seq],
     })
-    out["color"] = out["regime"].map(REGIME_COLORS).fillna("#8b949e")
+    out["color"] = out["regime"].map(REGIME_COLORS).fillna("#667b83")
     return out

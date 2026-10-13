@@ -10,14 +10,14 @@ from utils.helpers import has_agsi_key
 from utils.theme import CHART, PLOTLY_TEMPLATE
 
 COUNTRY_COLORS = {
-    "BE": "#e07b39",
-    "NL": "#2a9d8f",
-    "GB": "#b5a642",
-    "FR": "#4361ee",
+    "BE": "#c2611a",
+    "NL": "#0e7a7e",
+    "GB": "#8f8424",
+    "FR": "#2f45c6",
 }
 
 COLORS = {
-    "ma_line":  "#c0392b",
+    "ma_line":  "#b0301c",
     "grid":     CHART["grid"],
     "text":     CHART["text"],
     "bg":       CHART["bg"],
@@ -73,7 +73,7 @@ def render_lng_chart(lng_data: dict):
             x=subset["gasDayStart"],
             y=subset["sendOut"],
             name=label,
-            marker_color=COUNTRY_COLORS.get(country, "#888"),
+            marker_color=COUNTRY_COLORS.get(country, "#667b83"),
             hovertemplate=f"{label}: %{{y:,.1f}} GWh/d<extra></extra>",
         ))
 

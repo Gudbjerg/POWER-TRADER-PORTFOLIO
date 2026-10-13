@@ -467,29 +467,29 @@ with _kc4:
 st.divider()
 
 # ── Direction pill helpers ────────────────────────────────────────────────────
-_UP_PILL  = ("<span style='background:#0f2a1a;color:#3fb950;border-radius:4px;"
+_UP_PILL  = ("<span style='background:#e2efe6;color:#2f7a47;border-radius:4px;"
              "padding:2px 8px;font-size:0.78rem;font-weight:600'>{}</span>")
-_DN_PILL  = ("<span style='background:#3d1515;color:#f85149;border-radius:4px;"
+_DN_PILL  = ("<span style='background:#f6e3df;color:#c2391f;border-radius:4px;"
              "padding:2px 8px;font-size:0.78rem;font-weight:600'>{}</span>")
-_NE_PILL  = ("<span style='background:#1c1c28;color:#8b949e;border-radius:4px;"
+_NE_PILL  = ("<span style='background:#e8e8f0;color:#667b83;border-radius:4px;"
              "padding:2px 8px;font-size:0.78rem;font-weight:600'>{}</span>")
 _D_PILLS  = {"up": _UP_PILL, "down": _DN_PILL, "neutral": _NE_PILL}
 
 _CONF_PILL = {
-    "high":   "<span style='color:#d4ac3a;font-size:0.76rem;font-weight:600'>High</span>",
-    "medium": "<span style='color:#58a6ff;font-size:0.76rem;font-weight:600'>Medium</span>",
-    "low":    "<span style='color:#484f58;font-size:0.76rem;font-weight:600'>Low</span>",
+    "high":   "<span style='color:#a86a12;font-size:0.76rem;font-weight:600'>High</span>",
+    "medium": "<span style='color:#2f45c6;font-size:0.76rem;font-weight:600'>Medium</span>",
+    "low":    "<span style='color:#93a3a8;font-size:0.76rem;font-weight:600'>Low</span>",
 }
 
 _CAT_COLORS = {
-    "Gas":          ("#1c2230", "#58a6ff"),
-    "Storage":      ("#1c2820", "#3fb950"),
-    "Power Spread": ("#2d1c1c", "#f85149"),
-    "Power / Gas":  ("#2a1c2d", "#d2a8ff"),
-    "Spread":       ("#28200e", "#d4ac3a"),
-    "Supply":       ("#1c2820", "#3fb950"),
-    "Gas / Storage":("#1a1c28", "#79c0ff"),
-    "Demand":       ("#2a1e10", "#e07b39"),
+    "Gas":          ("#e6ebef", "#2f45c6"),
+    "Storage":      ("#e2efe6", "#2f7a47"),
+    "Power Spread": ("#f6e3df", "#c2391f"),
+    "Power / Gas":  ("#eee4f3", "#8c6bbd"),
+    "Spread":       ("#f6ecd9", "#a86a12"),
+    "Supply":       ("#e2efe6", "#2f7a47"),
+    "Gas / Storage":("#e8e8f0", "#3e5bd8"),
+    "Demand":       ("#f6ecd9", "#c2611a"),
 }
 
 # ── Signal table ──────────────────────────────────────────────────────────────
@@ -497,22 +497,22 @@ st.markdown("#### Signal Table")
 
 _rows_html = []
 for _s in _signals:
-    _bg, _fc = _CAT_COLORS.get(_s["category"], ("#1c1c1c", "#8b949e"))
+    _bg, _fc = _CAT_COLORS.get(_s["category"], ("#132f38", "#667b83"))
     _cat_html = (f"<span style='background:{_bg};color:{_fc};border-radius:4px;"
                  f"padding:1px 6px;font-size:0.76rem;font-weight:500'>{_s['category']}</span>")
 
     _dp = _s["pctile"]
     if np.isnan(_dp):
-        _bar_html = "<span style='color:#8b949e;font-size:0.80rem'>regime, not ranked</span>"
+        _bar_html = "<span style='color:#667b83;font-size:0.80rem'>regime, not ranked</span>"
     else:
-        _bar_clr = ({"up": "#3fb950", "down": "#f85149", "neutral": "#58a6ff"}
-                    .get(_s["direction"], "#58a6ff"))
+        _bar_clr = ({"up": "#2f7a47", "down": "#c2391f", "neutral": "#2f45c6"}
+                    .get(_s["direction"], "#2f45c6"))
         _bar_html = (
             f"<div style='display:flex;align-items:center;gap:6px'>"
-            f"<div style='flex:0 0 110px;height:6px;background:#21262d;border-radius:3px;overflow:hidden'>"
+            f"<div style='flex:0 0 110px;height:6px;background:#d3dbd6;border-radius:3px;overflow:hidden'>"
             f"<div style='width:{_dp:.1f}%;height:100%;background:{_bar_clr};border-radius:3px'></div>"
             f"</div>"
-            f"<span style='color:#8b949e;font-size:0.80rem;white-space:nowrap'>{ordinal(_dp)}</span>"
+            f"<span style='color:#667b83;font-size:0.80rem;white-space:nowrap'>{ordinal(_dp)}</span>"
             f"</div>"
         )
 
@@ -520,14 +520,14 @@ for _s in _signals:
     _cf_html  = _CONF_PILL.get(_s["conf"], _CONF_PILL["low"])
 
     _rows_html.append(
-        f"<tr style='border-bottom:1px solid #21262d'>"
+        f"<tr style='border-bottom:1px solid #d3dbd6'>"
         f"<td style='padding:9px 10px;vertical-align:top'>"
-        f"  <div style='font-weight:600;color:#e6edf3;font-size:0.92rem'>{_s['name']}</div>"
-        f"  <div style='color:#8b949e;font-size:0.78rem;margin-top:3px'>{_s['note']}</div>"
-        f"  <div style='margin-top:4px;color:#484f58;font-size:0.74rem'>source: {_s['source']}</div>"
+        f"  <div style='font-weight:600;color:#132f38;font-size:0.92rem'>{_s['name']}</div>"
+        f"  <div style='color:#667b83;font-size:0.78rem;margin-top:3px'>{_s['note']}</div>"
+        f"  <div style='margin-top:4px;color:#93a3a8;font-size:0.74rem'>source: {_s['source']}</div>"
         f"</td>"
         f"<td style='padding:9px 10px;vertical-align:top;white-space:nowrap'>{_cat_html}</td>"
-        f"<td style='padding:9px 10px;vertical-align:top;color:#e6edf3;font-weight:500;"
+        f"<td style='padding:9px 10px;vertical-align:top;color:#132f38;font-weight:500;"
         f"    white-space:nowrap;font-size:0.92rem'>{_s['current']}</td>"
         f"<td style='padding:9px 10px;vertical-align:top'>{_bar_html}</td>"
         f"<td style='padding:9px 10px;vertical-align:top'>{_d_html}</td>"
@@ -537,7 +537,7 @@ for _s in _signals:
 
 _tbl_header = (
     "<table style='width:100%;border-collapse:collapse;font-size:0.88rem;margin-top:4px'>"
-    "<thead><tr style='border-bottom:2px solid #30363d;color:#8b949e;text-align:left'>"
+    "<thead><tr style='border-bottom:2px solid #c5cfca;color:#667b83;text-align:left'>"
     "<th style='padding:6px 10px'>Signal</th>"
     "<th style='padding:6px 10px'>Category</th>"
     "<th style='padding:6px 10px'>Current value</th>"

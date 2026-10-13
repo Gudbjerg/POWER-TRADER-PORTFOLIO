@@ -202,7 +202,7 @@ with tab_geo:
 
         # Momentum line chart
         _fig_mom = go.Figure()
-        for _n, _col, _lbl in [(5, "#f85149", "5d"), (20, "#e07b39", "20d"), (60, "#58a6ff", "60d")]:
+        for _n, _col, _lbl in [(5, "#c2391f", "5d"), (20, "#c2611a", "20d"), (60, "#2f45c6", "60d")]:
             _col_name = f"mom{_n}"
             _sub = _mom_df.dropna(subset=[_col_name])
             _fig_mom.add_trace(go.Scatter(
@@ -213,9 +213,9 @@ with tab_geo:
             ))
         _fig_mom.add_hline(y=0, line=dict(color=CHART["zero"], width=1))
         for _band, _opacity in [(5, 0.08), (10, 0.05)]:
-            _fig_mom.add_hrect(y0=_band, y1=50, fillcolor="rgba(248,81,73,{})".format(_opacity),
+            _fig_mom.add_hrect(y0=_band, y1=50, fillcolor="rgba(194,57,31,{})".format(_opacity),
                                line_width=0)
-            _fig_mom.add_hrect(y0=-50, y1=-_band, fillcolor="rgba(63,185,80,{})".format(_opacity),
+            _fig_mom.add_hrect(y0=-50, y1=-_band, fillcolor="rgba(47,122,71,{})".format(_opacity),
                                line_width=0)
         _fig_mom.update_layout(
             template=PLOTLY_TEMPLATE,
@@ -249,13 +249,13 @@ with tab_geo:
     for ev in filtered_events:
         impact = ev.get("impact", "warn")
         cat    = ev.get("category", "policy")
-        color  = CATEGORY_COLORS.get(cat, "#888")
+        color  = CATEGORY_COLORS.get(cat, "#667b83")
         date_s = ev["date"].strftime("%Y-%m-%d")
         border_cls = {"critical": "commentary-critical", "warn": "commentary-warn"}.get(impact, "")
         st.markdown(
             f'<div class="commentary {border_cls}" style="border-left-color:{color};">'
             f'<strong>{date_s}: {ev["label"]}</strong><br>'
-            f'<span style="color:#8b949e;font-size:0.78rem;text-transform:uppercase;'
+            f'<span style="color:#667b83;font-size:0.78rem;text-transform:uppercase;'
             f'letter-spacing:.5px;">{cat}</span><br>'
             f'{ev["description"]}</div>',
             unsafe_allow_html=True,
@@ -300,12 +300,12 @@ with tab_mix:
     mix_df = pd.DataFrame(_mix)
 
     MIX_COLORS = {
-        "Norway":  "#4caf8f",
-        "USA":     "#4361ee",
-        "Russia":  "#f85149",
-        "Algeria": "#d4ac3a",
-        "Qatar":   "#8e6bbf",
-        "Other":   "#8b949e",
+        "Norway":  "#0e7a7e",
+        "USA":     "#2f45c6",
+        "Russia":  "#c2391f",
+        "Algeria": "#a86a12",
+        "Qatar":   "#6e4a9e",
+        "Other":   "#667b83",
     }
     C = {
         "bg": CHART["bg"], "panel_bg": CHART["panel_bg"],
@@ -327,9 +327,9 @@ with tab_mix:
         ))
 
     fig_mix.add_vline(
-        x=2022, line_dash="dash", line_color="rgba(10,10,10,0.85)", line_width=1.5,
+        x=2022, line_dash="dash", line_color="rgba(245,247,244,0.85)", line_width=1.5,
         annotation_text="Russia invades Ukraine", annotation_position="top left",
-        annotation_font=dict(size=9, color="#0d1117"), annotation_textangle=-90,
+        annotation_font=dict(size=9, color="#f5f7f4"), annotation_textangle=-90,
     )
     fig_mix.update_layout(
         template=PLOTLY_TEMPLATE,
@@ -387,7 +387,7 @@ with tab_spill:
             "Tickers: TTF=F (gas), ZW=F (wheat), ZC=F (corn)."
         )
     else:
-        COMM_COLORS = {"TTF": "#e07b39", "Wheat": "#d4ac3a", "Corn": "#3fb950"}
+        COMM_COLORS = {"TTF": "#c2611a", "Wheat": "#a86a12", "Corn": "#2f7a47"}
         C = {
             "bg": CHART["bg"], "panel_bg": CHART["panel_bg"],
             "grid": CHART["grid"], "text": CHART["text"],
@@ -402,7 +402,7 @@ with tab_spill:
             fig_comm.add_trace(go.Scatter(
                 x=sub["date"], y=sub["price_norm"],
                 name=comm,
-                line=dict(color=COMM_COLORS.get(comm, "#888"), width=2),
+                line=dict(color=COMM_COLORS.get(comm, "#667b83"), width=2),
                 hovertemplate=f"{comm}: %{{y:.1f}}<extra></extra>",
             ))
 
@@ -426,7 +426,7 @@ with tab_spill:
 
         if len(wide) >= 90:
             pairs = [("TTF", "Wheat"), ("TTF", "Corn"), ("Wheat", "Corn")]
-            pair_colors = {"TTF-Wheat": "#d4ac3a", "TTF-Corn": "#3fb950", "Wheat-Corn": "#8e6bbf"}
+            pair_colors = {"TTF-Wheat": "#a86a12", "TTF-Corn": "#2f7a47", "Wheat-Corn": "#6e4a9e"}
 
             fig_corr = go.Figure()
             for a, b in pairs:
@@ -437,7 +437,7 @@ with tab_spill:
                 fig_corr.add_trace(go.Scatter(
                     x=wide.index, y=roll_corr,
                     name=label,
-                    line=dict(color=pair_colors.get(label, "#888"), width=1.8),
+                    line=dict(color=pair_colors.get(label, "#667b83"), width=1.8),
                     hovertemplate=f"{label}: %{{y:.2f}}<extra></extra>",
                 ))
             fig_corr.add_hline(y=0, line_dash="solid",
@@ -530,13 +530,13 @@ with tab_spill:
             _fig_cu.add_trace(go.Scatter(
                 x=_cu_norm.index, y=_cu_norm["TTF"],
                 name="TTF gas (EUR/MWh, power proxy)",
-                line=dict(color="#e07b39", width=1.8),
+                line=dict(color="#c2611a", width=1.8),
                 hovertemplate="TTF index: %{y:.1f}<extra></extra>",
             ))
             _fig_cu.add_trace(go.Scatter(
                 x=_cu_norm.index, y=_cu_norm["Copper"],
                 name="LME Copper (USD/lb, HG=F)",
-                line=dict(color="#58a6ff", width=1.8),
+                line=dict(color="#2f45c6", width=1.8),
                 hovertemplate="Copper index: %{y:.1f}<extra></extra>",
             ))
             _fig_cu.update_layout(
@@ -561,15 +561,15 @@ with tab_spill:
             _fig_cu_corr.add_trace(go.Scatter(
                 x=_roll_corr_cu.index, y=_roll_corr_cu,
                 name="90-day rolling Pearson",
-                line=dict(color="#8e6bbf", width=1.8),
-                fill="tozeroy", fillcolor="rgba(142,107,191,0.07)",
+                line=dict(color="#6e4a9e", width=1.8),
+                fill="tozeroy", fillcolor="rgba(110,74,158,0.07)",
                 hovertemplate="ρ(TTF,Copper): %{y:.2f}<extra></extra>",
             ))
             _fig_cu_corr.add_hline(y=0, line=dict(color=CHART["zero"], width=1))
-            _fig_cu_corr.add_hline(y=0.5, line=dict(color="#3fb950", width=1, dash="dot"),
-                                   annotation_text="  0.5", annotation_font=dict(color="#3fb950", size=9))
-            _fig_cu_corr.add_hline(y=-0.5, line=dict(color="#f85149", width=1, dash="dot"),
-                                   annotation_text="  −0.5", annotation_font=dict(color="#f85149", size=9))
+            _fig_cu_corr.add_hline(y=0.5, line=dict(color="#2f7a47", width=1, dash="dot"),
+                                   annotation_text="  0.5", annotation_font=dict(color="#2f7a47", size=9))
+            _fig_cu_corr.add_hline(y=-0.5, line=dict(color="#c2391f", width=1, dash="dot"),
+                                   annotation_text="  −0.5", annotation_font=dict(color="#c2391f", size=9))
             _fig_cu_corr.update_layout(
                 template=PLOTLY_TEMPLATE,
                 paper_bgcolor=CHART["bg"], plot_bgcolor=CHART["panel_bg"],
@@ -683,22 +683,22 @@ with tab_spill:
             _fig_al.add_trace(go.Scatter(
                 x=_stress.index, y=_stress.values,
                 name="Power cost % of revenue",
-                line=dict(color="#d4ac3a", width=1.8),
-                fill="tozeroy", fillcolor="rgba(212,172,58,0.07)",
+                line=dict(color="#a86a12", width=1.8),
+                fill="tozeroy", fillcolor="rgba(168,106,18,0.07)",
                 hovertemplate="Stress: %{y:.1f}%<extra></extra>",
             ))
             _fig_al.add_hline(
                 y=ALUM_STRESS_ELEVATED,
-                line=dict(color="#d4ac3a", width=1, dash="dot"),
+                line=dict(color="#a86a12", width=1, dash="dot"),
                 annotation_text=f"  {ALUM_STRESS_ELEVATED:.0f}% ELEVATED",
-                annotation_font=dict(color="#d4ac3a", size=9),
+                annotation_font=dict(color="#a86a12", size=9),
                 annotation_position="right",
             )
             _fig_al.add_hline(
                 y=ALUM_STRESS_CRITICAL,
-                line=dict(color="#f85149", width=1, dash="dot"),
+                line=dict(color="#c2391f", width=1, dash="dot"),
                 annotation_text=f"  {ALUM_STRESS_CRITICAL:.0f}% CRITICAL",
-                annotation_font=dict(color="#f85149", size=9),
+                annotation_font=dict(color="#c2391f", size=9),
                 annotation_position="right",
             )
             _fig_al.update_layout(
@@ -866,9 +866,9 @@ with tab_grid:
             texttemplate="%{text}",
             colorscale=[
                 [0.00, "#2166ac"],
-                [0.25, "#74add1"],
-                [0.50, "#161b22"],
-                [0.75, "#d6604d"],
+                [0.25, "#4f86b0"],
+                [0.50, "#f5f7f4"],
+                [0.75, "#c2391f"],
                 [1.00, "#b2182b"],
             ],
             zmin=-1, zmax=1,
@@ -910,11 +910,11 @@ with tab_grid:
         if _top15:
             _ll_css = """
             <style>
-            .ll-tbl{width:100%;border-collapse:collapse;font-size:0.80rem;color:#c9d1d9;}
-            .ll-tbl th{background:#21262d;color:#8b949e;font-weight:600;
-                       padding:6px 10px;text-align:left;border-bottom:1px solid #30363d;}
-            .ll-tbl td{padding:5px 10px;border-bottom:1px solid #21262d;}
-            .cb-wrap{background:#21262d;border-radius:3px;height:6px;
+            .ll-tbl{width:100%;border-collapse:collapse;font-size:0.80rem;color:#3a5560;}
+            .ll-tbl th{background:#d3dbd6;color:#667b83;font-weight:600;
+                       padding:6px 10px;text-align:left;border-bottom:1px solid #c5cfca;}
+            .ll-tbl td{padding:5px 10px;border-bottom:1px solid #d3dbd6;}
+            .cb-wrap{background:#d3dbd6;border-radius:3px;height:6px;
                      width:100px;display:inline-block;vertical-align:middle;margin-left:6px;}
             .cb-fill{height:6px;border-radius:3px;}
             </style>
@@ -925,9 +925,9 @@ with tab_grid:
                 _ct  = _r["contemp"]
                 _lag = _r["best_lag"]
                 _bar_w = int(abs(_bc) * 100)
-                _bar_c = "#d6604d" if _bc > 0 else "#74add1"
-                _bc_c  = "#d6604d" if _bc > 0 else "#74add1"
-                _lag_c = "#58a6ff" if _lag != 0 else "#8b949e"
+                _bar_c = "#c2391f" if _bc > 0 else "#4f86b0"
+                _bc_c  = "#c2391f" if _bc > 0 else "#4f86b0"
+                _lag_c = "#2f45c6" if _lag != 0 else "#667b83"
                 _ct_s  = f"{_ct:+.2f}" if not np.isnan(_ct) else "–"
                 _rows += (
                     f"<tr>"
@@ -1084,40 +1084,40 @@ with tab_jkm:
         )
         _jfig.add_trace(go.Scatter(
             x=_jkm_df["date"], y=_jkm_df["ttf"], name="TTF (EUR/MWh)",
-            line=dict(color="#e07b39", width=1.6),
+            line=dict(color="#c2611a", width=1.6),
             hovertemplate="TTF: €%{y:.2f}/MWh<extra></extra>",
         ), row=1, col=1)
         _jfig.add_trace(go.Scatter(
             x=_jkm_df["date"], y=_jkm_df["jkm_eur_mwh"], name="JKM (EUR/MWh, converted)",
-            line=dict(color="#58a6ff", width=1.6),
+            line=dict(color="#2f45c6", width=1.6),
             customdata=_jkm_df[["jkm_usd_mmbtu"]].to_numpy(),
             hovertemplate="JKM: €%{y:.2f}/MWh ($%{customdata[0]:.3f}/MMBtu)<extra></extra>",
         ), row=1, col=1)
         _jfig.add_trace(go.Bar(
             x=_jkm_df["date"], y=_jkm_df["spread"], name="TTF minus JKM", showlegend=False,
-            marker_color=["#3fb950" if v > 0 else "#f85149" for v in _jkm_df["spread"]],
+            marker_color=["#2f7a47" if v > 0 else "#c2391f" for v in _jkm_df["spread"]],
             hovertemplate="TTF minus JKM: €%{y:+.2f}/MWh<extra></extra>",
         ), row=2, col=1)
         _jfig.add_trace(go.Scatter(
             x=_jkm_df["date"], y=_jkm_df["percentile"], name="Rolling 1-year percentile",
-            line=dict(color="#d29922", width=1.5),
+            line=dict(color="#a86a12", width=1.5),
             hovertemplate="Percentile: %{y:.0f}<extra></extra>",
         ), row=3, col=1)
-        _jfig.add_hline(y=0, line=dict(color="rgba(255,255,255,0.25)", width=1), row=2, col=1)
+        _jfig.add_hline(y=0, line=dict(color="rgba(19,47,56,0.25)", width=1), row=2, col=1)
         for _jl in (10, 90):
-            _jfig.add_hline(y=_jl, line=dict(color="rgba(255,255,255,0.2)", width=1, dash="dot"), row=3, col=1)
+            _jfig.add_hline(y=_jl, line=dict(color="rgba(19,47,56,0.2)", width=1, dash="dot"), row=3, col=1)
         _jfig.update_layout(
-            template="plotly_dark",
-            paper_bgcolor="#0d1117", plot_bgcolor="#161b22",
-            font=dict(color="#c9d1d9", size=12),
+            template=PLOTLY_TEMPLATE,
+            paper_bgcolor="#f5f7f4", plot_bgcolor="#f5f7f4",
+            font=dict(color="#3a5560", size=12),
             height=560,
             margin=dict(l=60, r=20, t=30, b=40),
             legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1, font=dict(size=10)),
             hovermode="x unified",
             bargap=0,
         )
-        _jfig.update_xaxes(gridcolor="rgba(255,255,255,0.06)")
-        _jfig.update_yaxes(gridcolor="rgba(255,255,255,0.06)", zeroline=False)
+        _jfig.update_xaxes(gridcolor="rgba(19,47,56,0.06)")
+        _jfig.update_yaxes(gridcolor="rgba(19,47,56,0.06)", zeroline=False)
         _jfig.update_yaxes(title_text="EUR/MWh", row=1, col=1)
         _jfig.update_yaxes(title_text="Spread", row=2, col=1)
         _jfig.update_yaxes(title_text="Pctl", range=[0, 100], row=3, col=1)

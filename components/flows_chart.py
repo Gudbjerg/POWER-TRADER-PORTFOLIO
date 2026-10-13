@@ -8,11 +8,11 @@ from datetime import date, timedelta
 from utils.theme import CHART, PLOTLY_TEMPLATE
 
 PAIR_COLORS = {
-    "NO1->SE3": "#4cc9f0",
-    "NO2->DK1": "#4361ee",
-    "NO2->DE":  "#b5179e",
-    "NO2->NL":  "#c1666b",
-    "NO2->GB":  "#f4a261",   # North Sea Link
+    "NO1->SE3": "#1c8fb0",
+    "NO2->DK1": "#2f45c6",
+    "NO2->DE":  "#a0168a",
+    "NO2->NL":  "#b8494f",
+    "NO2->GB":  "#c77b2e",   # North Sea Link
 }
 
 COLORS = {
@@ -48,7 +48,7 @@ def render_flows_chart(flow_data: dict):
 
     for pair in df["pair"].unique():
         subset = df[df["pair"] == pair].sort_values("date")
-        color = PAIR_COLORS.get(pair, "#888888")
+        color = PAIR_COLORS.get(pair, "#667b83")
         fig.add_trace(go.Bar(
             x=subset["date"],
             y=subset["net_flow_mwh"] / 1_000,

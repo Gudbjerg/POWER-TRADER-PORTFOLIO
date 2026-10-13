@@ -34,24 +34,43 @@ def _client():
     return EntsoePandasClient(api_key=key, timeout=ENTSOE_TIMEOUT_S)
 
 
+_WIND_CHUNK_DAYS = 90   # long 15-minute requests time out; fetch in quarters
+
+
 def _entsoe_wind(client, eic: str, start, end) -> pd.Series:
-    """Fetch hourly wind (B19 onshore + B18 offshore) from ENTSO-E, return daily GWh."""
-    parts = []
+    """Daily wind energy in GWh (B19 onshore + B18 offshore) from ENTSO-E.
+
+    Each production type is fetched in 90-day chunks so one slow or failed request costs
+    one chunk, not the whole history. A day counts only when every production type that
+    returned data has that day, so a missing onshore chunk never shows up as a day of
+    offshore-only (far too low) output.
+    """
+    parts = {}
     for psr in ("B19", "B18"):
-        try:
-            gen = client.query_generation(eic, start=start, end=end, psr_type=psr)
-            if isinstance(gen, pd.DataFrame):
-                if isinstance(gen.columns, pd.MultiIndex):
-                    gen.columns = ["_".join(str(c) for c in col).strip() for col in gen.columns]
-                gen = gen.iloc[:, 0]
-            series = pd.to_numeric(gen, errors="coerce").dropna()
-            daily  = daily_energy(series, tz="UTC") / 1000   # hourly-mean MW summed → GWh
-            parts.append(daily)
-        except Exception:
-            continue
+        chunks = []
+        chunk_start = start
+        while chunk_start < end:
+            chunk_end = min(chunk_start + pd.Timedelta(days=_WIND_CHUNK_DAYS), end)
+            try:
+                gen = client.query_generation(eic, start=chunk_start, end=chunk_end, psr_type=psr)
+                if isinstance(gen, pd.DataFrame):
+                    if isinstance(gen.columns, pd.MultiIndex):
+                        gen.columns = ["_".join(str(c) for c in col).strip() for col in gen.columns]
+                    gen = gen.iloc[:, 0]
+                chunks.append(pd.to_numeric(gen, errors="coerce").dropna())
+            except Exception:
+                pass
+            chunk_start = chunk_end
+        if chunks:
+            series = pd.concat(chunks)
+            series = series[~series.index.duplicated(keep="last")]
+            daily = daily_energy(series, tz="UTC") / 1000   # hourly-mean MW summed → GWh
+            if not daily.empty:
+                parts[psr] = daily
     if not parts:
         return pd.Series(dtype=float)
-    return pd.concat(parts, axis=1).sum(axis=1, min_count=1).dropna()
+    frame = pd.concat(parts, axis=1)
+    return frame.dropna(how="any").sum(axis=1)
 
 
 def _energy_charts_wind(days: int) -> pd.Series:
