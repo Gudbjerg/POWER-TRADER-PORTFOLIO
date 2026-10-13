@@ -11,9 +11,9 @@ statsmodels>=0.14.0
 feedparser>=6.0.0
 hmmlearn>=0.3.0
 
-# Layer 4 (LSTM forecaster, FinBERT sentiment). The extra index serves CPU-only PyTorch
-# wheels, so pip does not pull the CUDA build (about 2.5 GB) on CPU hosts such as the
-# Hugging Face Space; elsewhere pip still resolves the normal wheels.
---extra-index-url https://download.pytorch.org/whl/cpu
+# Layer 4 (LSTM forecaster, FinBERT sentiment). Kept to plain requirement lines: the
+# Hugging Face Space builder skips a requirements file that carries pip options such as
+# --extra-index-url. For a CPU-only install elsewhere, install torch first with
+#   pip install torch --index-url https://download.pytorch.org/whl/cpu
 torch>=2.2.0
 transformers>=4.38.0

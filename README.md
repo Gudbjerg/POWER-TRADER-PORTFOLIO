@@ -391,8 +391,8 @@ The platform requires Python 3.11+ and Streamlit 1.56 or later (top navigation, 
 git clone https://github.com/Gudbjerg/POWER-TRADER-PORTFOLIO.git
 cd POWER-TRADER-PORTFOLIO
 pip install -r requirements.txt
-# requirements.txt already lists CPU-only PyTorch and Transformers for Layer 4.
-# To install PyTorch on its own:
+# requirements.txt lists PyTorch and Transformers for Layer 4. For the smaller CPU-only
+# PyTorch build, install it before the requirements:
 pip install torch --index-url https://download.pytorch.org/whl/cpu
 pip install transformers>=4.38.0
 export ENTSOE_API_KEY=<your_key>
