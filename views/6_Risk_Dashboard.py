@@ -22,7 +22,7 @@ st.set_page_config(
 from utils.helpers import apply_dark_theme, kpi_card, delta_span
 from utils.globe import globe_link
 from utils.theme import ACCENTS, CHART, PLOTLY_TEMPLATE, callout, page_header, page_footer, render
-from models.feature_assembly import assemble_features
+from models.feature_assembly import load_feature_matrix
 
 apply_dark_theme()
 
@@ -45,7 +45,7 @@ _SIGNALS = [
         "label":      "TTF Seasonal Position",
         "category":   "Gas",
         "underlying": "ttf",
-        "color":      "#e07b39",
+        "color":      "#c2611a",
         "source":     "D3 sig 1 / Tab 11",
         "description": "Long TTF when rolling 1-yr percentile < 25 (historically cheap); short when > 75.",
     },
@@ -54,7 +54,7 @@ _SIGNALS = [
         "label":      "EU Storage → TTF Bias",
         "category":   "Storage / Gas",
         "underlying": "ttf",
-        "color":      "#3fb950",
+        "color":      "#2f7a47",
         "source":     "D3 sig 2 / Tab 1",
         "description": "Low EU storage fill (< 25th pctile) → long TTF; high fill → short TTF.",
     },
@@ -63,7 +63,7 @@ _SIGNALS = [
         "label":      "NO2/NL Spread Z-Score",
         "category":   "Power Spread",
         "underlying": "no_nl_spread",
-        "color":      "#f85149",
+        "color":      "#c2391f",
         "source":     "D3 sig 3 / Tab 12–13",
         "description": "Long NO2/Short NL when expanding OLS residual z < −1; reverse when z > +1.",
     },
@@ -72,7 +72,7 @@ _SIGNALS = [
         "label":      "NO2 vs TTF OLS Residual",
         "category":   "Power / Gas",
         "underlying": "no2",
-        "color":      "#d2a8ff",
+        "color":      "#8c6bbd",
         "source":     "D3 sig 4 / Tab 2",
         "description": "Long NO2 when rolling-pctile of gas-power OLS residual < 25.",
     },
@@ -81,7 +81,7 @@ _SIGNALS = [
         "label":      "Norwegian Hydro → Power",
         "category":   "Supply",
         "underlying": "ttf",
-        "color":      "#79c0ff",
+        "color":      "#3e5bd8",
         "source":     "D3 sig 6 / Tab 10",
         "description": "Low hydro reservoir (< 25th pctile) → long TTF/power; high → short.",
     },
@@ -90,7 +90,7 @@ _SIGNALS = [
         "label":      "TTF vs Storage OLS Residual",
         "category":   "Gas / Storage",
         "underlying": "ttf",
-        "color":      "#d4ac3a",
+        "color":      "#a86a12",
         "source":     "D3 sig 7 / Tab 9",
         "description": "Long TTF when storage-OLS residual < 25th pctile (TTF cheap vs storage).",
     },
@@ -297,13 +297,12 @@ render(callout(
 
 # ── Feature matrix ────────────────────────────────────────────────────────────
 with st.spinner("Assembling feature matrix…"):
-    _feat = assemble_features(years=3)
+    _feat = load_feature_matrix(years=3)
 
 if _feat.empty or len(_feat) < 60:
     st.error(
-        "Feature matrix unavailable or too short (< 60 rows). "
-        "Visit Layer 2 (Quant Analysis) first to populate the feature cache, "
-        "or configure ENTSO-E / AGSI API keys."
+        "The market data behind this page is unavailable right now (fewer than 60 trading days "
+        "could be assembled from ENTSO-E, Nord Pool, Yahoo Finance and GIE). Try again shortly."
     )
     st.stop()
 
@@ -312,7 +311,7 @@ _d4_missing = [k for k, v in _d4_coverage.items() if not v]
 if _d4_missing:
     st.caption(
         f"Feature groups unavailable: {', '.join(_d4_missing)}. "
-        "Some signals may be omitted. Check ENTSO-E key (hydro/wind) and AGSI key (storage)."
+        "Signals that depend on them are left out."
     )
 
 _feat = _feat.copy().reset_index(drop=True)
@@ -333,15 +332,17 @@ if _unavailable:
     st.warning(
         f"**{len(_unavailable)} signal(s) unavailable** due to missing feature data: "
         + ", ".join(_unavailable)
-        + ". Check ENTSO-E API key (hydro/wind) and AGSI key (storage).",
+        + ". Their data sources did not answer; they return automatically on the next refresh.",
         icon="⚠",
     )
 
 # ── Sidebar: portfolio builder ────────────────────────────────────────────────
+_DEMO_NOTIONAL = 1000   # EUR per €1/MWh, so the page opens with a populated example portfolio
 st.sidebar.markdown("### Portfolio Builder")
 st.sidebar.caption(
     "Notional = EUR gain per €1/MWh move in the underlying. "
-    "All defaults are 0 (opt-in). Signals that lack the required feature data are hidden."
+    f"The demo portfolio starts at €{_DEMO_NOTIONAL:,} per signal; set a slider to 0 to drop a signal. "
+    "Signals that lack the required feature data are hidden."
 )
 
 _notionals: dict[str, float] = {}
@@ -353,7 +354,7 @@ for _sig in _available_sigs:
     st.sidebar.caption(_sig["description"])
     _n = st.sidebar.slider(
         f"Notional {_sid}",
-        min_value=0, max_value=5000, step=100, value=0,
+        min_value=0, max_value=5000, step=100, value=_DEMO_NOTIONAL,
         label_visibility="collapsed",
         key=f"n_{_sid}",
     )
@@ -518,17 +519,17 @@ else:
     _fig_dist = go.Figure()
     _fig_dist.add_trace(go.Histogram(
         x=_arr, nbinsx=60,
-        marker_color="#58a6ff", marker_line_color=CHART["edge"], marker_line_width=0.4,
+        marker_color="#2f45c6", marker_line_color=CHART["edge"], marker_line_width=0.4,
         opacity=0.75,
         hovertemplate="Range: %{x:.0f}<br>Count: %{y}<extra></extra>",
     ))
-    _fig_dist.add_vline(x=-_v95, line=dict(color="#f85149", width=1.5, dash="dot"),
+    _fig_dist.add_vline(x=-_v95, line=dict(color="#c2391f", width=1.5, dash="dot"),
                         annotation_text=f"  VaR95 −€{_v95:,.0f}",
-                        annotation_font=dict(color="#f85149", size=9),
+                        annotation_font=dict(color="#c2391f", size=9),
                         annotation_position="top right")
-    _fig_dist.add_vline(x=-_v99, line=dict(color="#d4ac3a", width=1.5, dash="dot"),
+    _fig_dist.add_vline(x=-_v99, line=dict(color="#a86a12", width=1.5, dash="dot"),
                         annotation_text=f"  VaR99 −€{_v99:,.0f}",
-                        annotation_font=dict(color="#d4ac3a", size=9),
+                        annotation_font=dict(color="#a86a12", size=9),
                         annotation_position="top right")
     _fig_dist.update_layout(
         template=PLOTLY_TEMPLATE,
@@ -644,14 +645,14 @@ else:
         z=_corr.values,
         x=_labels, y=_labels,
         colorscale=[
-            [0.0, "#1c4a8a"], [0.35, "#1c3060"],
-            [0.5, "#161b22"],
-            [0.65, "#5a1c1c"], [1.0, "#8a1c1c"],
+            [0.0, "#dfe5f7"], [0.35, "#dfe5f7"],
+            [0.5, "#f5f7f4"],
+            [0.65, "#f3dcd7"], [1.0, "#8a1c1c"],
         ],
         zmin=-1, zmax=1,
         text=np.round(_corr.values, 2),
         texttemplate="%{text}",
-        textfont=dict(size=10, color="#e6edf3"),
+        textfont=dict(size=10, color="#132f38"),
         hovertemplate="%{x} / %{y}: %{z:.2f}<extra></extra>",
         showscale=True,
         colorbar=dict(

@@ -9,12 +9,12 @@ import pandas as pd
 from utils.theme import CHART, PLOTLY_TEMPLATE
 
 ZONE_COLORS = {
-    "NO1":   "#4caf8f",
+    "NO1":   "#0e7a7e",
     "NO2":   "#2980b9",
-    "SE3":   "#7ec8e3",
-    "DE-LU": "#d4ac3a",
-    "NL":    "#c0392b",
-    "FI":    "#8e6bbf",
+    "SE3":   "#1c8fb0",
+    "DE-LU": "#a86a12",
+    "NL":    "#b0301c",
+    "FI":    "#6e4a9e",
 }
 
 ZONE_LABELS = {
@@ -27,8 +27,8 @@ ZONE_LABELS = {
 }
 
 COLORS = {
-    "nordic_avg":      "#3fb950",
-    "continental_avg": "#e07b39",
+    "nordic_avg":      "#2f7a47",
+    "continental_avg": "#c2611a",
     "grid":      CHART["grid"],
     "text":      CHART["text"],
     "bg":        CHART["bg"],
@@ -65,7 +65,7 @@ def render_spot_prices_chart(spot_data: dict):
         fig.add_trace(go.Scatter(
             x=subset["date"],
             y=subset["price_eur_mwh"],
-            line=dict(color=ZONE_COLORS.get(zone, "#888"), width=1.2),
+            line=dict(color=ZONE_COLORS.get(zone, "#667b83"), width=1.2),
             name=label,
             hovertemplate=f"{label}: €%{{y:.1f}}/MWh<extra></extra>",
         ))

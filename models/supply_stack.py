@@ -14,8 +14,11 @@ Assumptions logged in methodology expander on the page:
   cross-border import corrections.
 - Wind and solar dispatched at zero marginal cost and shown at the left of
   the stack (must-run, ahead of all thermal plant).
-- All capacities are installed estimates, not available capacity; plant
-  availability typically ~85–90% for thermal, ~100% for renewables.
+- Each block is the capacity expected to be available, not the installed capacity:
+  wind and solar at today's ENTSO-E day-ahead forecast when the page passes it, otherwise
+  at their average German capacity factors (wind 25%, solar 11%); thermal plant at typical
+  availability (85-90%). Stacking installed wind and solar at zero cost would place
+  140 GW of renewables in front of every demand level and make them marginal all year.
 - Hard coal fuel cost estimated at ~11 EUR/MWh_thermal (API2 reference ~80
   USD/t, calorific value 6.98 MWh/t, EUR/USD 0.93).
 - EUA emission intensities: gas 0.37 tCO2/MWh_el (CCGT 55% eff),
@@ -41,15 +44,28 @@ except ImportError:
 
 _FUELS: list[tuple] = [
     # (key, display_label, capacity_gw, color)
-    ("wind",    "Wind (onshore + offshore)", 66.0, "#3fb950"),
-    ("solar",   "Solar PV",                  73.0, "#f0e040"),
-    ("hydro",   "Hydro run-of-river",          4.5, "#58a6ff"),
-    ("biomass", "Biomass / biogas",             8.5, "#a371f7"),
-    ("lignite", "Lignite",                    17.0, "#8b6914"),
-    ("coal",    "Hard coal",                  23.0, "#6e7681"),
-    ("gas",     "Gas CCGT / OCGT",            30.0, "#e07b39"),
-    ("oil",     "Oil / gas turbine (peaker)",  2.5, "#f85149"),
+    ("wind",    "Wind (onshore + offshore)", 66.0, "#2f7a47"),
+    ("solar",   "Solar PV",                  73.0, "#b08d00"),
+    ("hydro",   "Hydro run-of-river",          4.5, "#2f45c6"),
+    ("biomass", "Biomass / biogas",             8.5, "#6e4a9e"),
+    ("lignite", "Lignite",                    17.0, "#7a5a12"),
+    ("coal",    "Hard coal",                  23.0, "#93a3a8"),
+    ("gas",     "Gas CCGT / OCGT",            30.0, "#c2611a"),
+    ("oil",     "Oil / gas turbine (peaker)",  2.5, "#c2391f"),
 ]
+
+# Share of installed capacity expected to be available when no live figure is supplied.
+# Wind and solar: average German capacity factors; thermal: typical plant availability.
+_AVAILABILITY: dict[str, float] = {
+    "wind":    0.25,
+    "solar":   0.11,
+    "hydro":   0.45,
+    "biomass": 0.70,
+    "lignite": 0.85,
+    "coal":    0.85,
+    "gas":     0.88,
+    "oil":     0.90,
+}
 
 # Static variable costs where fuel is not dynamically priced (EUR/MWh_el)
 _STATIC_SRMC: dict[str, float] = {
@@ -97,29 +113,38 @@ def fetch_eua_price() -> tuple[float, str]:
 
 # ── Merit order builder ───────────────────────────────────────────────────────
 
-def build_stack(ttf_eur_mwh: float, eua_eur_t: float) -> pd.DataFrame:
+def build_stack(ttf_eur_mwh: float, eua_eur_t: float,
+                available_gw: dict[str, float] | None = None) -> pd.DataFrame:
     """
     Build the ordered merit order DataFrame.
 
     Parameters
     ----------
-    ttf_eur_mwh : TTF front-month gas price (EUR/MWh_gas).
-    eua_eur_t   : EUA carbon allowance price (EUR/tonne CO2).
+    ttf_eur_mwh  : TTF front-month gas price (EUR/MWh_gas).
+    eua_eur_t    : EUA carbon allowance price (EUR/tonne CO2).
+    available_gw : Optional live availability per fuel in GW (for example today's wind
+                   and solar forecast); other fuels use the default availability factors.
 
     Returns
     -------
     pd.DataFrame sorted by marginal cost, with columns:
-        fuel, label, capacity_gw, marginal_cost, cum_start, cum_end, color
+        fuel, label, installed_gw, capacity_gw (available), marginal_cost,
+        cum_start, cum_end, color
     """
+    available_gw = available_gw or {}
     rows = []
-    for key, label, cap_gw, color in _FUELS:
+    for key, label, installed, color in _FUELS:
+        live = available_gw.get(key)
+        cap_gw = (float(min(max(live, 0.0), installed)) if live is not None
+                  else installed * _AVAILABILITY[key])
         if key == "gas":
             cost = ttf_eur_mwh / _GAS_EFFICIENCY + eua_eur_t * _GAS_EMISSIONS
         elif key == "coal":
             cost = _COAL_FUEL_COST / _COAL_EFFICIENCY + eua_eur_t * _COAL_EMISSIONS
         else:
             cost = _STATIC_SRMC[key]
-        rows.append({"fuel": key, "label": label, "capacity_gw": cap_gw,
+        rows.append({"fuel": key, "label": label, "installed_gw": installed,
+                     "capacity_gw": round(cap_gw, 1),
                      "marginal_cost": round(cost, 1), "color": color})
 
     df = pd.DataFrame(rows).sort_values("marginal_cost", kind="stable").reset_index(drop=True)
@@ -146,11 +171,11 @@ def identify_marginal_fuel(stack_df: pd.DataFrame, demand_gw: float) -> dict:
                 "marginal_cost":  row["marginal_cost"],
                 "utilisation_pct": round(util, 1),
             }
-    # Demand exceeds total installed capacity — scarcity pricing
+    # Demand exceeds total available capacity: scarcity pricing
     last = stack_df.iloc[-1]
     return {
         "fuel":           last["fuel"],
-        "label":          "Demand exceeds installed capacity",
+        "label":          "Demand exceeds available capacity",
         "marginal_cost":  last["marginal_cost"],
         "utilisation_pct": 100.0,
     }
@@ -194,7 +219,7 @@ def make_merit_order_figure(
                         line=dict(color=CHART["edge"], width=1)),
             hovertemplate=(
                 f"<b>{row['label']}</b><br>"
-                f"Capacity: {row['capacity_gw']:.0f} GW<br>"
+                f"Available: {row['capacity_gw']:.1f} GW of {row.get('installed_gw', row['capacity_gw']):.0f} GW installed<br>"
                 f"SRMC: {srmc_label}<br>"
                 f"Stack position: {row['cum_start']:.0f}–{row['cum_end']:.0f} GW"
                 "<extra></extra>"
@@ -203,18 +228,18 @@ def make_merit_order_figure(
 
     # Demand line
     fig.add_vline(
-        x=demand_gw, line=dict(color="#e6edf3", width=2, dash="dash"),
+        x=demand_gw, line=dict(color="#132f38", width=2, dash="dash"),
         annotation_text=f"  Demand: {demand_gw:.0f} GW",
-        annotation_font=dict(color="#e6edf3", size=11),
+        annotation_font=dict(color="#132f38", size=11),
         annotation_position="top right",
     )
 
     # Implied clearing price (marginal cost horizontal)
     fig.add_hline(
         y=marginal["marginal_cost"],
-        line=dict(color="#f0e040", width=1.5, dash="dot"),
+        line=dict(color="#b08d00", width=1.5, dash="dot"),
         annotation_text=f"Implied: €{marginal['marginal_cost']:.1f}/MWh  ",
-        annotation_font=dict(color="#f0e040", size=11),
+        annotation_font=dict(color="#b08d00", size=11),
         annotation_position="top left",
     )
 
@@ -222,9 +247,9 @@ def make_merit_order_figure(
     if actual_power_price is not None and actual_power_price > 0:
         fig.add_hline(
             y=actual_power_price,
-            line=dict(color="#58a6ff", width=1.5, dash="dot"),
+            line=dict(color="#2f45c6", width=1.5, dash="dot"),
             annotation_text=f"NL actual: €{actual_power_price:.1f}/MWh  ",
-            annotation_font=dict(color="#58a6ff", size=11),
+            annotation_font=dict(color="#2f45c6", size=11),
             annotation_position="bottom left",
         )
 
@@ -249,7 +274,7 @@ def make_merit_order_figure(
             font=dict(size=10, color=CHART["muted"]),
         ),
         xaxis=dict(
-            title="Installed capacity, cumulative (GW)",
+            title="Available capacity, cumulative (GW)",
             range=[0, total_cap * 1.02],
             gridcolor=CHART["grid"],
             tickfont=dict(size=11, color=CHART["muted"]),

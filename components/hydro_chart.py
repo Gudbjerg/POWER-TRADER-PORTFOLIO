@@ -10,10 +10,10 @@ from datetime import datetime
 from utils.theme import CHART, PLOTLY_TEMPLATE
 
 COLORS = {
-    "current":  "#4caf8f",
-    "p50":      "#8b949e",
-    "band":     "rgba(139,148,158,0.15)",
-    "band_mid": "rgba(139,148,158,0.25)",
+    "current":  "#0e7a7e",
+    "p50":      "#667b83",
+    "band":     "rgba(102,123,131,0.15)",
+    "band_mid": "rgba(102,123,131,0.25)",
     "grid":     CHART["grid"],
     "text":     CHART["text"],
     "bg":       CHART["bg"],

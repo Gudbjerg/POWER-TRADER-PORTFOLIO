@@ -22,14 +22,14 @@ st.set_page_config(
     initial_sidebar_state="collapsed",
 )
 
-from utils.helpers import ordinal, apply_dark_theme, kpi_card, delta_span, commentary
+from utils.helpers import ordinal, apply_dark_theme, kpi_card, delta_span, commentary, has_entsoe_key
 from utils.theme import ACCENTS, CHART, PLOTLY_TEMPLATE, page_header, page_footer
 from config.settings import (
     SCORE_RISK_PREMIUM_EUR, SCORE_SEASONAL_HI_PCT, SCORE_SEASONAL_LO_PCT,
     COINT_ENTRY_Z, COINT_MIN_OBS, COINT_MIN_MATCH, HYDRO_MAX_LAG,
     PCA_STORAGE_ALPHA, PCA_STORAGE_DECAY_TAU, PCA_ENTRY_Z, PCA_LOOKBACK_DAYS,
 )
-from data.gas_storage import get_storage_data
+from data.gas_storage import get_storage_data, calendar_doy
 from data.prices import get_ttf_data
 from data.spot_prices import fetch_spot_prices
 from models.storage_monte_carlo import compute_monthly_stats, run_monte_carlo
@@ -41,21 +41,22 @@ from models.nordic_decomp import (
     run_rolling_decomposition, current_contributions, dominant_driver,
     make_beta_chart, make_contribution_bar, FACTOR_LABELS,
 )
-from models.feature_assembly import assemble_features, get_available_feature_sets
+from models.feature_assembly import load_feature_matrix, get_available_feature_sets
 from models.wind_forecast_error import (
     compute_errors, compute_rolling_rmse, compute_price_correlation,
     make_error_bar_chart, make_rmse_chart, make_correlation_scatter,
     ZONE_LABELS as WIND_ZONE_LABELS,
 )
-from data.wind import fetch_wind_daily, fetch_wind_forecast
+from data.wind import fetch_wind_daily, fetch_wind_forecast, fetch_de_renewables_today
+from data.energy_units import daily_mean
+from data.deadline import call_with_deadline
 from data.sentiment import get_sentiment_data
 
 apply_dark_theme()
 
 # ── Load data ────────────────────────────────────────────────────────────────
-@st.cache_data(ttl=3600, show_spinner=False)
 def _get_features_l2():
-    return assemble_features(years=3)
+    return load_feature_matrix(years=3)
 
 @st.cache_data(ttl=3600, show_spinner=False)
 def _run_decomp_cached(df: pd.DataFrame, window: int = 90):
@@ -65,7 +66,7 @@ def _run_decomp_cached(df: pd.DataFrame, window: int = 90):
 def _run_ols_cached(reg_df: pd.DataFrame):
     return run_full_ols(reg_df)
 
-@st.cache_data(ttl=21600, show_spinner=False)
+@st.cache_data(ttl=1800, show_spinner=False)
 def _get_sentiment_l2():
     return get_sentiment_data()
 
@@ -133,7 +134,7 @@ def _build_ttf_pca_panel(eu_storage: pd.DataFrame) -> tuple[pd.DataFrame, str]:
             and "full" in eu_storage.columns):
         _st2 = eu_storage.copy()
         _st2["date"] = pd.to_datetime(_st2["gasDayStart"]).dt.normalize()
-        _st2["doy"]  = _st2["date"].dt.dayofyear
+        _st2["doy"]  = calendar_doy(_st2["date"])
         _st2["year"] = _st2["date"].dt.year
         _cur_yr = pd.Timestamp.now().year
         _doy_stats = (
@@ -227,9 +228,9 @@ def _get_scanner_prices(years: int = 3) -> pd.DataFrame:
                 _chunks: list = []
                 _cs = _st0
                 while _cs < _end:
-                    _ce = min(_cs + pd.Timedelta(days=365), _end)
+                    _ce = min(_cs + pd.Timedelta(days=90), _end)   # long 15-minute requests time out
                     try:
-                        _s = _cli.query_day_ahead_prices(_eic, start=_cs, end=_ce)
+                        _s = call_with_deadline(_cli.query_day_ahead_prices, _eic, start=_cs, end=_ce)
                         if _s is not None and not _s.empty:
                             _chunks.append(_s)
                     except Exception:
@@ -238,8 +239,8 @@ def _get_scanner_prices(years: int = 3) -> pd.DataFrame:
                 if _chunks:
                     _comb  = pd.concat(_chunks)
                     _comb  = _comb[~_comb.index.duplicated(keep="last")]
-                    _daily = _comb.tz_convert("UTC").resample("D").mean()
-                    _daily.index = pd.to_datetime(_daily.index).tz_localize(None).normalize()
+                    _daily = daily_mean(pd.to_numeric(_comb, errors="coerce").dropna(), tz="Europe/Oslo")
+                    _daily.index = pd.to_datetime(_daily.index).normalize()
                     _zdf   = pd.DataFrame({"date": _daily.index, _lbl: _daily.values})
                     _out   = _out.merge(_zdf, on="date", how="left")
         except Exception:
@@ -345,37 +346,36 @@ def _run_coint_scanner(price_df: pd.DataFrame) -> list[dict]:
 @st.cache_data(ttl=1800, show_spinner=False)
 def _get_de_live_load_gw() -> tuple:
     """
-    Fetch today's German total load from ENTSO-E A65.
+    Today's mean German load in GW from ENTSO-E.
+    Tries the day-ahead load forecast (covers the whole day), then actual load, for the
+    DE-LU bidding zone and then the German control area; falls back to yesterday's actuals.
     Returns (load_gw: float | None, source_label: str).
-    Falls back to yesterday if today's data not yet published.
     """
     _key = os.getenv("ENTSOE_API_KEY", "")
     if not _key:
-        return None, "key not configured"
+        return None, "ENTSO-E key not configured"
     try:
         from entsoe import EntsoePandasClient
-        import pytz
-        from datetime import datetime as _dt
-        _tz  = pytz.timezone("Europe/Berlin")
-        _now = _dt.now(_tz)
-        _start = pd.Timestamp(_now.date(), tz="Europe/Berlin")
-        _end   = _start + pd.Timedelta(days=1)
         _client_a65 = EntsoePandasClient(api_key=_key, timeout=ENTSOE_TIMEOUT_S)
-        try:
-            _ser = _client_a65.query_load("10Y1001A1001A83F", start=_start, end=_end)
-        except Exception:
-            _ser = None
-        if _ser is None or (hasattr(_ser, "empty") and _ser.empty):
-            _start -= pd.Timedelta(days=1)
-            _end   -= pd.Timedelta(days=1)
-            _ser    = _client_a65.query_load("10Y1001A1001A83F", start=_start, end=_end)
-        if _ser is not None and not (hasattr(_ser, "empty") and _ser.empty):
-            _vals = _ser.iloc[:, 0] if isinstance(_ser, pd.DataFrame) else _ser
-            _gw = float(_vals.mean()) / 1000.0
-            return _gw, f"ENTSO-E A65 ({_start.date()})"
-        return None, "no data today"
-    except Exception as _exc:
-        return None, f"A65 error: {str(_exc)[:60]}"
+    except Exception:
+        return None, "ENTSO-E client unavailable"
+    _today = pd.Timestamp.now(tz="Europe/Berlin").normalize()
+    _attempts = [
+        (_client_a65.query_load_forecast, _today, "day-ahead load forecast"),
+        (_client_a65.query_load, _today, "actual load"),
+        (_client_a65.query_load, _today - pd.Timedelta(days=1), "actual load"),
+    ]
+    for _query, _day, _label in _attempts:
+        for _area in ("10Y1001A1001A82H", "10Y1001A1001A83F"):
+            try:
+                _ser = call_with_deadline(_query, _area, start=_day, end=_day + pd.Timedelta(days=1), seconds=30)
+            except Exception:
+                continue
+            if isinstance(_ser, pd.DataFrame):
+                _ser = _ser.iloc[:, 0]
+            if _ser is not None and not _ser.dropna().empty:
+                return float(_ser.mean()) / 1000.0, f"ENTSO-E {_label}, {_day.date()}"
+    return None, "ENTSO-E load not published yet"
 
 with st.spinner(""):
     storage = get_storage_data()
@@ -406,13 +406,12 @@ with st.sidebar:
         st.caption(f"Spot prices: through {_spot_latest}")
     else:
         st.caption("Spot prices: unavailable")
-    _fm = st.session_state.get("features_l2")
+    _fm = _get_features_l2()
     if _fm is not None and not _fm.empty:
         _fm_latest = pd.to_datetime(_fm["date"]).max().strftime("%Y-%m-%d")
-        st.caption(f"Feature matrix: {len(_fm)} rows through {_fm_latest}")
+        st.caption(f"Feature matrix: {len(_fm)} trading days through {_fm_latest}")
     else:
-        st.caption("Feature matrix: loads on first visit to Nordic Decomp or Wind tab")
-    st.divider()
+        st.caption("Feature matrix: unavailable")
     st.divider()
 
 # ── Header ───────────────────────────────────────────────────────────────────
@@ -446,26 +445,26 @@ st.divider()
 
 # ── Quant Signal Scorecard ────────────────────────────────────────────────────
 _PILL = {
-    "up":      "<span style='background:#3d1515;color:#f85149;border-radius:4px;"
+    "up":      "<span style='background:#f6e3df;color:#c2391f;border-radius:4px;"
                "padding:2px 7px;font-size:0.78rem;font-weight:600;'>↑ UPSIDE</span>",
-    "down":    "<span style='background:#0f2a1a;color:#3fb950;border-radius:4px;"
+    "down":    "<span style='background:#e2efe6;color:#2f7a47;border-radius:4px;"
                "padding:2px 7px;font-size:0.78rem;font-weight:600;'>↓ DOWNSIDE</span>",
-    "neutral": "<span style='background:#1a2233;color:#58a6ff;border-radius:4px;"
+    "neutral": "<span style='background:#e6ebef;color:#2f45c6;border-radius:4px;"
                "padding:2px 7px;font-size:0.78rem;font-weight:600;'>→ NEUTRAL</span>",
-    "na":      "<span style='background:#1a1a1a;color:#6e7681;border-radius:4px;"
+    "na":      "<span style='background:#132f38;color:#93a3a8;border-radius:4px;"
                "padding:2px 7px;font-size:0.78rem;font-weight:600;'>⊘ N/A</span>",
 }
 
 def _score_card_html(name: str, value: str, direction: str, note: str) -> str:
     pill = _PILL[direction]
     return (
-        f"<div style='background:#161b22;border:1px solid #30363d;border-radius:8px;"
+        f"<div style='background:#f5f7f4;border:1px solid #c5cfca;border-radius:3px;"
         f"padding:14px 16px;height:100%;'>"
-        f"<div style='color:#8b949e;font-size:0.74rem;margin-bottom:4px;'>{name}</div>"
-        f"<div style='font-size:1.05rem;font-weight:700;color:#e6edf3;"
+        f"<div style='color:#667b83;font-size:0.74rem;margin-bottom:4px;'>{name}</div>"
+        f"<div style='font-size:1.05rem;font-weight:700;color:#132f38;"
         f"margin-bottom:6px;'>{value}</div>"
         f"{pill}"
-        f"<div style='color:#8b949e;font-size:0.74rem;margin-top:6px;line-height:1.3;'>{note}</div>"
+        f"<div style='color:#667b83;font-size:0.74rem;margin-top:6px;line-height:1.3;'>{note}</div>"
         f"</div>"
     )
 
@@ -543,7 +542,9 @@ try:
         float(np.clip(round(_sc_live_load), 30, 90))
         if _sc_live_load is not None else 60.0
     )
-    _sc_stack  = build_stack(_sc_ttf_latest, _sc_eua)
+    _sc_ren    = fetch_de_renewables_today()
+    _sc_stack  = build_stack(_sc_ttf_latest, _sc_eua,
+                             {k: _sc_ren[k] for k in ("wind", "solar") if k in _sc_ren})
     _sc_marg   = identify_marginal_fuel(_sc_stack, _sc_ref_demand)
     _sc_fuel   = _sc_marg["fuel"]
     _sc_dir = ("up" if _sc_fuel in ("gas", "oil")
@@ -560,7 +561,7 @@ try:
         "biomass": "Biomass-marginal: mid-stack clearing",
     }.get(_sc_fuel, f"{_sc_fuel} marginal")
     if _sc_live_load is None:
-        _sc_fuel_note += f" · A65 n/a: {_sc_load_src}"
+        _sc_fuel_note += f" · reference demand ({_sc_load_src})"
     _sc_demand_label = (
         f"{_sc_ref_demand:.0f} GW live"
         if _sc_live_load is not None
@@ -573,9 +574,9 @@ except Exception:
     _sc_signals.append({"name": "Marginal Fuel", "value": "n/a",
                          "direction": "na", "note": "Computation error"})
 
-# Signal 4: Hydro level vs 90-day mean (session_state — only after Nordic Decomp/Wind visit)
+# Signal 4: Hydro level vs 90-day mean (shared feature matrix, cached for an hour)
 try:
-    _sc_fm = st.session_state.get("features_l2")
+    _sc_fm = _get_features_l2()
     if _sc_fm is not None and not _sc_fm.empty and "hydro_pct" in _sc_fm.columns:
         _sc_hydro_ser = _sc_fm["hydro_pct"].dropna()
         if len(_sc_hydro_ser) >= 30:
@@ -590,10 +591,10 @@ try:
                                  "direction": _sc_dir, "note": _sc_note})
         else:
             _sc_signals.append({"name": "Hydro Level", "value": "n/a",
-                                 "direction": "na", "note": "Visit Nordic Decomp tab to load"})
+                                 "direction": "na", "note": "Too little hydro history (ENTSO-E B31)"})
     else:
         _sc_signals.append({"name": "Hydro Level", "value": "n/a",
-                             "direction": "na", "note": "Visit Nordic Decomp tab to load"})
+                             "direction": "na", "note": "Hydro data unavailable (ENTSO-E B31)"})
 except Exception:
     _sc_signals.append({"name": "Hydro Level", "value": "n/a",
                          "direction": "na", "note": "Computation error"})
@@ -628,7 +629,7 @@ try:
                                  "direction": "na", "note": f"Need 21 aligned days ({len(_sc_gc_merged)} so far)"})
     else:
         _sc_signals.append({"name": "Sentiment → TTF", "value": "n/a",
-                             "direction": "na", "note": "Sentiment pipeline unavailable"})
+                             "direction": "na", "note": "No scored headlines available"})
 except ImportError:
     _sc_signals.append({"name": "Sentiment → TTF", "value": "n/a",
                          "direction": "na", "note": "statsmodels not available"})
@@ -640,15 +641,15 @@ except Exception:
 _n_up   = sum(1 for s in _sc_signals if s["direction"] == "up")
 _n_down = sum(1 for s in _sc_signals if s["direction"] == "down")
 _n_neu  = sum(1 for s in _sc_signals if s["direction"] == "neutral")
-_agg_color = "#f85149" if _n_up > _n_down + _n_neu else ("#3fb950" if _n_down > _n_up + _n_neu else "#58a6ff")
+_agg_color = "#c2391f" if _n_up > _n_down + _n_neu else ("#2f7a47" if _n_down > _n_up + _n_neu else "#2f45c6")
 _agg_label = (f"<span style='color:{_agg_color};font-weight:700;'>"
               f"{_n_up} upside &nbsp;/&nbsp; {_n_down} downside &nbsp;/&nbsp; {_n_neu} neutral</span>")
 
 with st.expander("Quant Signal Scorecard", expanded=True):
     st.markdown(
-        f"<div style='margin-bottom:10px;font-size:0.85rem;color:#8b949e;'>"
+        f"<div style='margin-bottom:10px;font-size:0.85rem;color:#667b83;'>"
         f"Aggregate: {_agg_label}"
-        f"<span style='color:#484f58;margin-left:12px;font-size:0.72rem;'>"
+        f"<span style='color:#93a3a8;margin-left:12px;font-size:0.72rem;'>"
         f"Hydro loads after first Nordic Decomp visit · Sentiment accumulates over time</span></div>",
         unsafe_allow_html=True,
     )
@@ -738,15 +739,15 @@ with tab_mc:
         with k1:
             color = "green" if p_reach_90 >= 70 else ("amber" if p_reach_90 >= 40 else "red")
             st.markdown(
-                kpi_card("Prob(reach 90%, EU mandate)", f"{p_reach_90:.0f}%",
+                kpi_card("Prob(reach 90%, EU target)", f"{p_reach_90:.0f}%",
                          delta_span(f"at {rate_multiplier:.2f}x injection rate", color)),
                 unsafe_allow_html=True,
             )
         with k2:
             color = "green" if p_reach_80 >= 80 else ("amber" if p_reach_80 >= 55 else "red")
             st.markdown(
-                kpi_card("Prob(reach 80%, min threshold)", f"{p_reach_80:.0f}%",
-                         delta_span("original 2022 emergency target", color)),
+                kpi_card("Prob(reach 80%)", f"{p_reach_80:.0f}%",
+                         delta_span("target less the 10 pp flexibility", color)),
                 unsafe_allow_html=True,
             )
         with k3:
@@ -767,9 +768,9 @@ with tab_mc:
         C = {
             "bg": CHART["bg"], "panel_bg": CHART["panel_bg"],
             "grid": CHART["grid"], "text": CHART["text"],
-            "band_out": "rgba(88,166,255,0.12)", "band_in": "rgba(88,166,255,0.27)",
-            "median": "#58a6ff", "hist": "#8b949e",
-            "mandate": "#d4ac3a", "target": "#3fb950",
+            "band_out": "rgba(47,69,198,0.12)", "band_in": "rgba(47,69,198,0.27)",
+            "median": "#2f45c6", "hist": "#667b83",
+            "mandate": "#a86a12", "target": "#2f7a47",
         }
         fig = go.Figure()
 
@@ -797,10 +798,10 @@ with tab_mc:
                                  line=dict(color=C["median"], width=2.2),
                                  hovertemplate="P50: %{y:.1f}%<extra></extra>"))
         fig.add_hline(y=90, line_dash="dash", line_color=C["target"], line_width=1.5,
-                      annotation_text="90% EU mandate (Nov 1)", annotation_position="right",
+                      annotation_text="90% EU target", annotation_position="right",
                       annotation_font=dict(color=C["target"], size=11))
         fig.add_hline(y=80, line_dash="dot", line_color=C["mandate"], line_width=1.0,
-                      annotation_text="80% (2022 original)", annotation_position="right",
+                      annotation_text="80% (with 10 pp flexibility)", annotation_position="right",
                       annotation_font=dict(color=C["mandate"], size=10))
         fig.update_layout(
             template=PLOTLY_TEMPLATE, paper_bgcolor=C["bg"], plot_bgcolor=C["panel_bg"],
@@ -838,11 +839,12 @@ with tab_mc:
             The random seed is fixed per multiplier value for reproducible scenario comparisons.
 
             **Reference levels:**
-            - **90% (green dashed):** Current EU mandate. The original 2022 emergency regulation (EU 2022/1032)
-              set 80%, but subsequent extensions raised the target to 90% by November 1 for the 2023–2025+
-              period. In 2025, EU storage reached 83% by October 1 and met the 90% mandate by November 1.
-            - **80% (gold dotted):** The original 2022 emergency target under EU Regulation 2022/1032.
-              Shown for historical reference.
+            - **90% (green dashed):** EU filling target. Regulation (EU) 2022/1032 required 90% by
+              1 November; the 2025 amendment allows the target to be met on any day between 1 October and
+              1 December and extends the rules to the end of 2027. The simulation ends on 1 November, the
+              usual end of net injections, so its terminal level is close to the season's peak.
+            - **80% (gold dotted):** The target less the 10 percentage points of deviation the amended
+              regulation allows in difficult market conditions.
 
             **Percentile bands:** Outer band (P10-P90) contains 80% of paths. Inner band (P25-P75) is the
             interquartile range. The blue line is the P50 median path.
@@ -925,9 +927,9 @@ with tab_reg:
         C = {
             "bg": CHART["bg"], "panel_bg": CHART["panel_bg"],
             "grid": CHART["grid"], "text": CHART["text"],
-            "scatter": "#58a6ff", "regline": "#d4ac3a",
-            "actual": "#c9d1d9", "fitted": "#58a6ff",
-            "resid_pos": "#f85149", "resid_neg": "#3fb950",
+            "scatter": "#2f45c6", "regline": "#a86a12",
+            "actual": "#3a5560", "fitted": "#2f45c6",
+            "resid_pos": "#c2391f", "resid_neg": "#2f7a47",
             "zero": CHART["zero"],
         }
 
@@ -953,7 +955,7 @@ with tab_reg:
                 x=[float(reg_df["ttf_price"].iloc[-1])],
                 y=[latest_act],
                 mode="markers",
-                marker=dict(color="#f85149", size=9, symbol="circle",
+                marker=dict(color="#c2391f", size=9, symbol="circle",
                             line=dict(color="white", width=1)),
                 name="Latest",
                 hovertemplate=f"Latest: TTF €{reg_df['ttf_price'].iloc[-1]:.1f}, NL €{latest_act:.1f}<extra></extra>",
@@ -992,7 +994,7 @@ with tab_reg:
             ))
             for level, label in [(2.0, "+2\u03c3"), (-2.0, "\u22122\u03c3")]:
                 fig_res.add_hline(y=level, line_dash="dash",
-                                  line_color="rgba(248,81,73,0.55)", line_width=1)
+                                  line_color="rgba(194,57,31,0.55)", line_width=1)
             fig_res.add_hline(y=0, line_dash="solid",
                               line_color=C["zero"], line_width=0.8)
             fig_res.update_layout(
@@ -1145,7 +1147,7 @@ with tab_spike:
                 st.markdown(
                     f"{pill} &nbsp; <strong>{label}</strong> &nbsp; "
                     f"€{price:.1f}/MWh &nbsp; z = {z_str} &nbsp; "
-                    f"<span style='color:#8b949e;font-size:0.82rem;'>(30d avg: €{mean_s})</span>",
+                    f"<span style='color:#667b83;font-size:0.82rem;'>(30d avg: €{mean_s})</span>",
                     unsafe_allow_html=True,
                 )
             st.markdown("<div style='margin-bottom:12px'></div>", unsafe_allow_html=True)
@@ -1156,8 +1158,8 @@ with tab_spike:
             "grid": CHART["grid"], "text": CHART["text"],
         }
         ZONE_COLORS = {
-            "NO1": "#4caf8f", "NO2": "#2980b9", "SE3": "#7ec8e3",
-            "NL":  "#c0392b", "FI":  "#8e6bbf",
+            "NO1": "#0e7a7e", "NO2": "#2980b9", "SE3": "#1c8fb0",
+            "NL":  "#b0301c", "FI":  "#6e4a9e",
         }
 
         fig_z = go.Figure()
@@ -1169,15 +1171,15 @@ with tab_spike:
             fig_z.add_trace(go.Scatter(
                 x=sub["date"], y=sub["z_score"],
                 name=label,
-                line=dict(color=ZONE_COLORS.get(zone, "#888"), width=1.5),
+                line=dict(color=ZONE_COLORS.get(zone, "#667b83"), width=1.5),
                 hovertemplate=f"{label}: z=%{{y:.2f}}<extra></extra>",
             ))
 
         for level, color, dash in [
-            (ALERT_Z,  "rgba(248,81,73,0.7)",  "dash"),
-            (-ALERT_Z, "rgba(248,81,73,0.7)",  "dash"),
-            (WARNING_Z, "rgba(210,153,34,0.5)", "dot"),
-            (-WARNING_Z,"rgba(210,153,34,0.5)", "dot"),
+            (ALERT_Z,  "rgba(194,57,31,0.7)",  "dash"),
+            (-ALERT_Z, "rgba(194,57,31,0.7)",  "dash"),
+            (WARNING_Z, "rgba(168,106,18,0.5)", "dot"),
+            (-WARNING_Z,"rgba(168,106,18,0.5)", "dot"),
             (0,         CHART["zero"], "solid"),
         ]:
             fig_z.add_hline(y=level, line_dash=dash, line_color=color, line_width=1)
@@ -1301,9 +1303,9 @@ with tab_bt:
         C = {
             "bg": CHART["bg"], "panel_bg": CHART["panel_bg"],
             "grid": CHART["grid"], "text": CHART["text"],
-            "pos": "#3fb950", "neg": "#f85149",
-            "cum": "#58a6ff", "zero": CHART["zero"],
-            "cost": "rgba(210,180,40,0.55)",
+            "pos": "#2f7a47", "neg": "#c2391f",
+            "cum": "#2f45c6", "zero": CHART["zero"],
+            "cost": "rgba(168,106,18,0.55)",
         }
 
         # ── Annual P&L bar chart ─────────────────────────────────────────────
@@ -1497,7 +1499,7 @@ with tab_stack:
             "Modelled demand (GW)",
             min_value=30.0, max_value=90.0, value=_default_demand, step=1.0,
             help=(
-                "Default set to today's ENTSO-E A65 German actual load average. "
+                "Default set to today's mean German load from ENTSO-E (day-ahead forecast, else actuals). "
                 "German grid load varies from ~35 GW (summer weekend night) to ~85 GW "
                 "(cold winter peak). Slide to override."
             ),
@@ -1519,7 +1521,9 @@ with tab_stack:
 
     # ── Fetch EUA, build stack ────────────────────────────────────────────────
     eua_price, eua_source = _get_eua()
-    stack_df  = build_stack(ttf_latest, eua_price)
+    _ren_today = fetch_de_renewables_today()
+    stack_df  = build_stack(ttf_latest, eua_price,
+                            {k: _ren_today[k] for k in ("wind", "solar") if k in _ren_today})
     marginal  = identify_marginal_fuel(stack_df, demand_gw)
 
     # ── KPI row ──────────────────────────────────────────────────────────────
@@ -1646,12 +1650,15 @@ with tab_stack:
         **Dynamic inputs:**
         - Gas CCGT SRMC = TTF ÷ 0.55 + EUA × 0.37 (live TTF: **€{ttf_latest:.1f}/MWh**, EUA: **€{eua_price:.0f}/t**)
         - Hard coal SRMC = 11 EUR/MWh_th ÷ 0.40 + EUA × 0.85 ≈ **€{coal_srmc:.1f}/MWh** at current EUA
-        - Demand default: **{_default_demand:.0f} GW**, from {"ENTSO-E A65 today's average (" + _load_src + ")" if _live_load_gw is not None else "static 60 GW fallback (" + _load_src + ")"}
+        - Demand default: **{_default_demand:.0f} GW**, from {"today's mean load (" + _load_src + ")" if _live_load_gw is not None else "a 60 GW reference (" + _load_src + ")"}
+        - Wind and solar availability: {("today's ENTSO-E day-ahead forecast, wind " + str(_ren_today.get("wind", "n/a")) + " GW and solar " + str(_ren_today.get("solar", "n/a")) + " GW (daily mean)") if _ren_today else "average capacity factors (wind 25%, solar 11%) because no forecast was available"}
 
-        **Static inputs (Bundesnetzagentur 2024):**
-        - Wind: 66 GW installed | Solar: 73 GW | Hydro: 4.5 GW | Biomass: 8.5 GW
+        **Static inputs (Bundesnetzagentur 2024, installed):**
+        - Wind: 66 GW | Solar: 73 GW | Hydro: 4.5 GW | Biomass: 8.5 GW
         - Lignite: 17 GW (€20/MWh) | Hard coal: 23 GW | Gas CCGT/OCGT: 30 GW | Oil peakers: 2.5 GW
         - Nuclear: 0 GW (all plants retired April 2023)
+        - Each block is drawn at its available capacity: thermal plant at 85-90% availability,
+          run-of-river hydro at 45%, biomass at 70%
 
         **EUA source:** {eua_source}
 
@@ -1692,11 +1699,9 @@ with tab_decomp:
         "are directly comparable across drivers."
     )
 
-    # Lazy-load feature matrix: only assembled when this tab is first visited
-    if "features_l2" not in st.session_state:
-        with st.spinner("Assembling feature matrix (first visit; subsequent loads are instant)…"):
-            st.session_state["features_l2"] = _get_features_l2()
-    features_df = st.session_state["features_l2"]
+    # Shared feature matrix (cached for an hour across pages)
+    with st.spinner("Loading the feature matrix…"):
+        features_df = _get_features_l2()
 
     _avail_l2 = get_available_feature_sets(features_df)
     _n_rows_l2 = len(features_df)
@@ -1874,10 +1879,8 @@ with tab_wind:
     )
 
     # ── Load feature matrix (lazy — only when this tab is visited) ───────────
-    if "features_l2" not in st.session_state:
-        with st.spinner("Assembling feature matrix (first visit; subsequent loads are instant)…"):
-            st.session_state["features_l2"] = _get_features_l2()
-    features_df = st.session_state["features_l2"]
+    with st.spinner("Loading the feature matrix…"):
+        features_df = _get_features_l2()
 
     # ── Load wind data ────────────────────────────────────────────────────────
     @st.cache_data(ttl=3600, show_spinner=False)
@@ -1900,10 +1903,8 @@ with tab_wind:
     # ── Source banners ────────────────────────────────────────────────────────
     if fc_source == "unavailable":
         st.warning(
-            "Wind forecast data (ENTSO-E A69) is unavailable. "
-            "Possible causes: no ENTSOE_API_KEY set, or ENTSO-E server instability "
-            "(A69 wind forecast endpoint may be affected by the ongoing platform issues "
-            "also affecting B16/B19 actual generation). Check API key in settings.",
+            "Wind forecast data (ENTSO-E A69) is unavailable right now"
+            + ("." if has_entsoe_key() else ": no ENTSOE_API_KEY is configured."),
             icon="⚠️",
         )
     else:
@@ -1917,8 +1918,7 @@ with tab_wind:
     if fc_df.empty or act_df.empty or not fc_zones:
         st.info(
             "Both forecast (ENTSO-E A69) and actual (ENTSO-E B18/B19 or Fraunhofer ISE) "
-            "data are required for error computation. Actual DE wind is available via "
-            "Fraunhofer ISE fallback: forecast data requires an active ENTSO-E API key.",
+            "data are required for error computation; one of them is unavailable right now.",
             icon="ℹ️",
         )
     else:
@@ -2069,9 +2069,8 @@ with tab_granger:
 
     if _sent_error and _daily_sent.empty:
         st.warning(
-            f"Sentiment pipeline unavailable: {_sent_error} "
-            "This tab requires the FinBERT model (HuggingFace Spaces deployment) and "
-            "at least 21 days of scored headlines.",
+            f"{_sent_error} The test needs FinBERT scores for at least 21 trading days "
+            "of energy headlines.",
             icon="⚠️",
         )
     else:
@@ -2081,8 +2080,8 @@ with tab_granger:
             st.warning("TTF price data unavailable: cannot compute Granger test.", icon="⚠️")
         elif _daily_sent.empty:
             st.info(
-                "No sentiment history yet. Granger test requires at least 21 days of scored headlines. "
-                "History accumulates automatically on each page load.",
+                "No sentiment history yet. The Granger test needs at least 21 days of scored headlines; "
+                "older headlines are being collected from the news archives in the background.",
                 icon="ℹ️",
             )
         else:
@@ -2107,7 +2106,7 @@ with tab_granger:
                     f"Granger test requires {_MIN_DAYS} aligned trading days with both sentiment "
                     f"and TTF return data. Currently have **{_n_merged}**; "
                     f"**{_days_needed} more** needed before the test can run. "
-                    "Sentiment history accumulates automatically.",
+                    "Older headlines are collected from the news archives in the background.",
                     icon="ℹ️",
                 )
                 # Show what we have so far
@@ -2183,7 +2182,7 @@ with tab_granger:
                     _lags  = list(_p_vals.keys())
                     _pvals = list(_p_vals.values())
                     _bar_colors = [
-                        "#f85149" if p < 0.05 else ("#e07b39" if p < 0.10 else "#58a6ff")
+                        "#c2391f" if p < 0.05 else ("#c2611a" if p < 0.10 else "#2f45c6")
                         for p in _pvals
                     ]
 
@@ -2197,15 +2196,15 @@ with tab_granger:
                         hovertemplate="Lag %{x}: p=%{y:.4f}<extra></extra>",
                     ))
                     _fig_gc.add_hline(
-                        y=0.05, line=dict(color="rgba(248,81,73,0.8)", width=1.5, dash="dash"),
+                        y=0.05, line=dict(color="rgba(194,57,31,0.8)", width=1.5, dash="dash"),
                         annotation_text="p=0.05 significance threshold",
-                        annotation_font=dict(color="rgba(248,81,73,0.8)", size=10),
+                        annotation_font=dict(color="rgba(194,57,31,0.8)", size=10),
                         annotation_position="top right",
                     )
                     _fig_gc.add_hline(
-                        y=0.10, line=dict(color="rgba(210,153,34,0.5)", width=1, dash="dot"),
+                        y=0.10, line=dict(color="rgba(168,106,18,0.5)", width=1, dash="dot"),
                         annotation_text="p=0.10 borderline",
-                        annotation_font=dict(color="rgba(210,153,34,0.5)", size=10),
+                        annotation_font=dict(color="rgba(168,106,18,0.5)", size=10),
                         annotation_position="bottom right",
                     )
                     _fig_gc.update_layout(
@@ -2234,13 +2233,13 @@ with tab_granger:
                     _fig_ts.add_trace(go.Scatter(
                         x=_merged["date"], y=_merged["net_sentiment"],
                         name="Net Sentiment",
-                        line=dict(color="#58a6ff", width=1.5),
+                        line=dict(color="#2f45c6", width=1.5),
                         hovertemplate="Sentiment: %{y:.2f}<extra></extra>",
                     ))
                     _fig_ts.add_trace(go.Scatter(
                         x=_merged["date"], y=_merged["return"],
                         name="TTF Return (%)",
-                        line=dict(color="#e07b39", width=1.2),
+                        line=dict(color="#c2611a", width=1.2),
                         yaxis="y2",
                         hovertemplate="TTF return: %{y:.2f}%<extra></extra>",
                     ))
@@ -2456,8 +2455,8 @@ with tab_storage_reg:
                 )
 
                 _years = _sreg["date"].dt.year.unique()
-                _palette = ["#58a6ff", "#3fb950", "#f0e040", "#e07b39", "#f85149",
-                            "#a371f7", "#7ec8e3", "#ffa657"]
+                _palette = ["#2f45c6", "#2f7a47", "#b08d00", "#c2611a", "#c2391f",
+                            "#6e4a9e", "#1c8fb0", "#c2611a"]
                 _fig_scatter = go.Figure()
                 for _i, _yr in enumerate(sorted(_years)):
                     _sub = _sreg[_sreg["date"].dt.year == _yr]
@@ -2477,7 +2476,7 @@ with tab_storage_reg:
                     x=_x_line, y=_y_line,
                     mode="lines",
                     name=f"OLS fit (R²={_r2:.2f})",
-                    line=dict(color="rgba(255,255,255,0.6)", width=2, dash="dash"),
+                    line=dict(color="rgba(19,47,56,0.6)", width=2, dash="dash"),
                     hoverinfo="skip",
                 ))
 
@@ -2486,7 +2485,7 @@ with tab_storage_reg:
                     x=[_latest_storage], y=[_latest_ttf],
                     mode="markers",
                     name="Current",
-                    marker=dict(color="#f85149", size=12, symbol="star",
+                    marker=dict(color="#c2391f", size=12, symbol="star",
                                 line=dict(color="white", width=1)),
                     hovertemplate=f"Now: storage={_latest_storage:.1f}%, TTF=€{_latest_ttf:.1f}/MWh<extra></extra>",
                 ))
@@ -2515,7 +2514,7 @@ with tab_storage_reg:
                 )
 
                 _resid_color = [
-                    "#f85149" if r > 0 else "#3fb950"
+                    "#c2391f" if r > 0 else "#2f7a47"
                     for r in _sreg["residual"]
                 ]
                 _fig_resid = go.Figure()
@@ -2527,15 +2526,15 @@ with tab_storage_reg:
                 ))
                 _fig_resid.add_hline(y=0, line=dict(color=CHART["zero"], width=1))
                 _fig_resid.add_hline(
-                    y=10, line=dict(color="rgba(248,81,73,0.4)", width=1, dash="dot"),
+                    y=10, line=dict(color="rgba(194,57,31,0.4)", width=1, dash="dot"),
                     annotation_text="+10 EUR/MWh",
-                    annotation_font=dict(color="rgba(248,81,73,0.6)", size=9),
+                    annotation_font=dict(color="rgba(194,57,31,0.6)", size=9),
                     annotation_position="top right",
                 )
                 _fig_resid.add_hline(
-                    y=-10, line=dict(color="rgba(63,185,80,0.4)", width=1, dash="dot"),
+                    y=-10, line=dict(color="rgba(47,122,71,0.4)", width=1, dash="dot"),
                     annotation_text="−10 EUR/MWh",
-                    annotation_font=dict(color="rgba(63,185,80,0.6)", size=9),
+                    annotation_font=dict(color="rgba(47,122,71,0.6)", size=9),
                     annotation_position="bottom right",
                 )
                 _fig_resid.update_layout(
@@ -2639,19 +2638,16 @@ with tab_hydro_lag:
         "how far ahead hydro fundamentals lead the spot market."
     )
 
-    # Lazy-load feature matrix
-    if "features_l2" not in st.session_state:
-        with st.spinner("Assembling feature matrix (first visit; subsequent loads are instant)…"):
-            st.session_state["features_l2"] = _get_features_l2()
-    _hydro_feat_df = st.session_state["features_l2"]
+    # Shared feature matrix (cached for an hour across pages)
+    with st.spinner("Loading the feature matrix…"):
+        _hydro_feat_df = _get_features_l2()
 
     if _hydro_feat_df.empty:
-        st.warning("Feature matrix unavailable. Check ENTSO-E API key.", icon="⚠️")
+        st.warning("The feature matrix is unavailable right now: the price sources did not answer.", icon="⚠️")
     elif "hydro_pct" not in _hydro_feat_df.columns or _hydro_feat_df["hydro_pct"].notna().sum() < 60:
         st.info(
-            "Norwegian hydro reservoir data is not available in the current feature set. "
-            "This requires an active ENTSO-E API key (ENTSOE_API_KEY in .env). "
-            "Without hydro data, the lead/lag analysis cannot run.",
+            "Norwegian hydro reservoir data (ENTSO-E B31) is not available right now, "
+            "so the lead/lag analysis cannot run.",
             icon="ℹ️",
         )
     else:
@@ -2720,7 +2716,7 @@ with tab_hydro_lag:
             )
 
             _bar_cols = [
-                "#f85149" if c > 0 else "#58a6ff"
+                "#c2391f" if c > 0 else "#2f45c6"
                 for c in _corrs
             ]
             _fig_cc = go.Figure()
@@ -2735,9 +2731,9 @@ with tab_hydro_lag:
             # Highlight peak lag
             _fig_cc.add_vline(
                 x=_peak_lag,
-                line=dict(color="rgba(240,224,64,0.6)", width=2, dash="dash"),
+                line=dict(color="rgba(176,141,0,0.6)", width=2, dash="dash"),
                 annotation_text=f"  Peak lag: {_peak_lag}d",
-                annotation_font=dict(color="#f0e040", size=10),
+                annotation_font=dict(color="#b08d00", size=10),
                 annotation_position="top right",
             )
             _fig_cc.add_hline(y=0, line=dict(color=CHART["zero"], width=1))
@@ -2779,14 +2775,14 @@ with tab_hydro_lag:
                 y=_hdf_lag["rolling_corr"],
                 mode="lines",
                 name=f"Rolling {_roll_win}d ρ",
-                line=dict(color="#58a6ff", width=1.5),
+                line=dict(color="#2f45c6", width=1.5),
                 hovertemplate="%{x|%Y-%m-%d}: ρ=%{y:.3f}<extra></extra>",
             ))
             _fig_roll.add_hline(y=0, line=dict(color=CHART["zero"], width=1))
             _fig_roll.add_hline(
-                y=-0.4, line=dict(color="rgba(248,81,73,0.3)", width=1, dash="dot"),
+                y=-0.4, line=dict(color="rgba(194,57,31,0.3)", width=1, dash="dot"),
                 annotation_text="ρ=−0.4",
-                annotation_font=dict(color="rgba(248,81,73,0.5)", size=9),
+                annotation_font=dict(color="rgba(194,57,31,0.5)", size=9),
                 annotation_position="bottom right",
             )
             _fig_roll.update_layout(
@@ -3005,8 +3001,8 @@ with tab_ttf_norm:
                 x=list(_bands["ref_date"]) + list(_bands["ref_date"])[::-1],
                 y=list(_bands["p90"]) + list(_bands["p10"])[::-1],
                 fill="toself",
-                fillcolor="rgba(88,166,255,0.10)",
-                line=dict(color="rgba(255,255,255,0)"),
+                fillcolor="rgba(47,69,198,0.10)",
+                line=dict(color="rgba(19,47,56,0)"),
                 hoverinfo="skip",
                 name="10th–90th pct (historical)",
                 showlegend=True,
@@ -3017,8 +3013,8 @@ with tab_ttf_norm:
                 x=list(_bands["ref_date"]) + list(_bands["ref_date"])[::-1],
                 y=list(_bands["p75"]) + list(_bands["p25"])[::-1],
                 fill="toself",
-                fillcolor="rgba(88,166,255,0.22)",
-                line=dict(color="rgba(255,255,255,0)"),
+                fillcolor="rgba(47,69,198,0.22)",
+                line=dict(color="rgba(19,47,56,0)"),
                 hoverinfo="skip",
                 name="25th–75th pct (typical)",
                 showlegend=True,
@@ -3029,7 +3025,7 @@ with tab_ttf_norm:
                 x=_bands["ref_date"], y=_bands["p50"],
                 mode="lines",
                 name="Seasonal median",
-                line=dict(color="rgba(88,166,255,0.5)", width=1.5, dash="dot"),
+                line=dict(color="rgba(47,69,198,0.5)", width=1.5, dash="dot"),
                 hovertemplate="Median: €%{y:.1f}/MWh<extra></extra>",
             ))
 
@@ -3039,7 +3035,7 @@ with tab_ttf_norm:
                     x=_curr_df["ref_date"], y=_curr_df["price"],
                     mode="lines",
                     name=f"{_current_year} actual",
-                    line=dict(color="#f0e040", width=2),
+                    line=dict(color="#b08d00", width=2),
                     hovertemplate=f"{_current_year}: €%{{y:.1f}}/MWh<extra></extra>",
                 ))
 
@@ -3138,16 +3134,14 @@ with tab_coint:
         "Entry/exit z-score thresholds define a rules-based spread trading signal."
     )
 
-    # Lazy-load feature matrix
-    if "features_l2" not in st.session_state:
-        with st.spinner("Assembling feature matrix (first visit; subsequent loads are instant)…"):
-            st.session_state["features_l2"] = _get_features_l2()
-    _coint_feat = st.session_state["features_l2"]
+    # Shared feature matrix (cached for an hour across pages)
+    with st.spinner("Loading the feature matrix…"):
+        _coint_feat = _get_features_l2()
 
     if _coint_feat.empty:
-        st.warning("Feature matrix unavailable. Check ENTSO-E API key.", icon="⚠️")
+        st.warning("The feature matrix is unavailable right now: the price sources did not answer.", icon="⚠️")
     elif "no2" not in _coint_feat.columns or "nl" not in _coint_feat.columns:
-        st.warning("NO2 and NL price series required. Check ENTSO-E A44 API key.", icon="⚠️")
+        st.warning("NO2 and NL day-ahead prices are unavailable right now.", icon="⚠️")
     else:
         _ci_df = _coint_feat[["date", "no2", "nl"]].dropna().copy()
         _ci_df["date"] = pd.to_datetime(_ci_df["date"])
@@ -3270,15 +3264,15 @@ with tab_coint:
                     x=_ci_dates, y=_ci_z_series,
                     mode="lines",
                     name="Spread z-score",
-                    line=dict(color="#58a6ff", width=1.2),
+                    line=dict(color="#2f45c6", width=1.2),
                     hovertemplate="%{x|%Y-%m-%d}: z=%{y:.2f}<extra></extra>",
                 ))
                 # Entry/exit bands
                 for _lv, _col, _lbl in [
-                    (2.0,  "rgba(248,81,73,0.5)",   "±2σ (aggressive entry)"),
-                    (1.0,  "rgba(224,123,57,0.5)",   "±1σ (base entry)"),
-                    (-1.0, "rgba(224,123,57,0.5)",   ""),
-                    (-2.0, "rgba(248,81,73,0.5)",    ""),
+                    (2.0,  "rgba(194,57,31,0.5)",   "±2σ (aggressive entry)"),
+                    (1.0,  "rgba(194,97,26,0.5)",   "±1σ (base entry)"),
+                    (-1.0, "rgba(194,97,26,0.5)",   ""),
+                    (-2.0, "rgba(194,57,31,0.5)",    ""),
                     (0.0,  CHART["zero"],  "Mean"),
                 ]:
                     _fig_z_ci.add_hline(
@@ -3292,7 +3286,7 @@ with tab_coint:
                     x=[_ci_dates[-1]], y=[_ci_z_now],
                     mode="markers",
                     name="Current",
-                    marker=dict(color="#f85149", size=10, symbol="circle",
+                    marker=dict(color="#c2391f", size=10, symbol="circle",
                                 line=dict(color="white", width=1)),
                     hovertemplate=f"Now: z={_ci_z_now:+.2f}<extra></extra>",
                 ))
@@ -3317,12 +3311,12 @@ with tab_coint:
                 _fig_px = go.Figure()
                 _fig_px.add_trace(go.Scatter(
                     x=_ci_df["date"], y=_ci_df["no2"], name="NO2",
-                    line=dict(color="#58a6ff", width=1.5),
+                    line=dict(color="#2f45c6", width=1.5),
                     hovertemplate="NO2: €%{y:.1f}/MWh<extra></extra>",
                 ))
                 _fig_px.add_trace(go.Scatter(
                     x=_ci_df["date"], y=_ci_df["nl"], name="NL",
-                    line=dict(color="#e07b39", width=1.5),
+                    line=dict(color="#c2611a", width=1.5),
                     hovertemplate="NL: €%{y:.1f}/MWh<extra></extra>",
                 ))
                 _fig_px.update_layout(
@@ -3445,7 +3439,7 @@ with tab_scanner:
 
     if _scan_px.empty or len(_scan_cols) < 2:
         st.warning(
-            "Scanner requires at least 2 price series. Check ENTSO-E API key for DE and FR data.",
+            "The scanner needs at least two price series; the price sources did not answer.",
             icon="⚠️",
         )
     else:
@@ -3552,17 +3546,17 @@ with tab_scanner:
             _stab_secs = _time.perf_counter() - _stab_t0
             _stab_map = {_k: _stab_summary_fn(_v, alpha=_STAB_ALPHA) for _k, _v in _stab_pv.items()}
             _STAB_COLORS = {
-                "Persistent": "#3fb950", "Episodic": "#d4ac3a", "Rare": "#8b949e",
-                "Absent": "#6e7681", "n/a": "#484f58",
+                "Persistent": "#2f7a47", "Episodic": "#a86a12", "Rare": "#667b83",
+                "Absent": "#93a3a8", "n/a": "#93a3a8",
             }
 
             def _stab_cell(_pair_label: str) -> str:
                 _s = _stab_map.get(_pair_label)
                 if not _s or _s["n_windows"] == 0:
-                    return "<span style='color:#484f58'>n/a</span>"
+                    return "<span style='color:#93a3a8'>n/a</span>"
                 return (
-                    f"<span style='color:{_STAB_COLORS.get(_s['label'], '#8b949e')};font-weight:600'>"
-                    f"{_s['share']:.0%}</span> <span style='color:#8b949e'>{_s['label']}</span>"
+                    f"<span style='color:{_STAB_COLORS.get(_s['label'], '#667b83')};font-weight:600'>"
+                    f"{_s['share']:.0%}</span> <span style='color:#667b83'>{_s['label']}</span>"
                 )
             # ── end D2_alt computation ────────────────────────────────────────────
 
@@ -3570,11 +3564,11 @@ with tab_scanner:
             st.markdown("#### All Pairs: Ranked by Cointegration Strength")
 
             _STATUS_BADGE = {
-                "Actionable": ("<span style='background:#3d1515;color:#f85149;border-radius:4px;"
+                "Actionable": ("<span style='background:#f6e3df;color:#c2391f;border-radius:4px;"
                                "padding:2px 8px;font-size:0.78rem;font-weight:600'>Actionable</span>"),
-                "Wait":       ("<span style='background:#2d2008;color:#d4ac3a;border-radius:4px;"
+                "Wait":       ("<span style='background:#f6ecd9;color:#a86a12;border-radius:4px;"
                                "padding:2px 8px;font-size:0.78rem;font-weight:600'>Wait</span>"),
-                "Not cointegrated": ("<span style='background:#1c1c1c;color:#484f58;border-radius:4px;"
+                "Not cointegrated": ("<span style='background:#132f38;color:#93a3a8;border-radius:4px;"
                                      "padding:2px 8px;font-size:0.78rem;font-weight:600'>Not cointegrated</span>"),
             }
 
@@ -3582,16 +3576,16 @@ with tab_scanner:
             for _r in _scan_res:
                 _hl_s = f"{_r['half_life']:.1f}d" if np.isfinite(_r["half_life"]) else "∞"
                 _hr_s = f"{_r['hit_rate']:.0f}%" if not np.isnan(_r["hit_rate"]) else "n/a"
-                _zc   = "#f85149" if abs(_r["z_now"]) > 2 else ("#d4ac3a" if abs(_r["z_now"]) > 1 else "#8b949e")
-                _pc   = "#3fb950" if _r["pval"] < 0.05 else ("#d4ac3a" if _r["pval"] < 0.10 else "#484f58")
+                _zc   = "#c2391f" if abs(_r["z_now"]) > 2 else ("#a86a12" if abs(_r["z_now"]) > 1 else "#667b83")
+                _pc   = "#2f7a47" if _r["pval"] < 0.05 else ("#a86a12" if _r["pval"] < 0.10 else "#93a3a8")
                 _tbl_rows_html.append(
-                    f"<tr style='border-bottom:1px solid #21262d'>"
-                    f"<td style='padding:5px 10px;font-weight:600;color:#e6edf3'>{_r['pair']}</td>"
-                    f"<td style='padding:5px 10px;text-align:right;color:#8b949e'>{_r['n_obs']:,}</td>"
+                    f"<tr style='border-bottom:1px solid #d3dbd6'>"
+                    f"<td style='padding:5px 10px;font-weight:600;color:#132f38'>{_r['pair']}</td>"
+                    f"<td style='padding:5px 10px;text-align:right;color:#667b83'>{_r['n_obs']:,}</td>"
                     f"<td style='padding:5px 10px;text-align:right;color:{_pc}'>{_r['pval']:.3f}</td>"
-                    f"<td style='padding:5px 10px;text-align:right;color:#8b949e'>{_hl_s}</td>"
+                    f"<td style='padding:5px 10px;text-align:right;color:#667b83'>{_hl_s}</td>"
                     f"<td style='padding:5px 10px;text-align:right;color:{_zc};font-weight:600'>{_r['z_now']:+.2f}σ</td>"
-                    f"<td style='padding:5px 10px;text-align:right;color:#8b949e'>{_hr_s}</td>"
+                    f"<td style='padding:5px 10px;text-align:right;color:#667b83'>{_hr_s}</td>"
                     f"<td style='padding:5px 10px;text-align:right'>{_stab_cell(_r['pair'])}</td>"
                     f"<td style='padding:5px 10px'>{_STATUS_BADGE.get(_r['status'], _r['status'])}</td>"
                     f"</tr>"
@@ -3599,7 +3593,7 @@ with tab_scanner:
 
             _tbl_header = (
                 "<table style='width:100%;border-collapse:collapse;font-size:0.88rem;margin-top:4px'>"
-                "<thead><tr style='border-bottom:2px solid #30363d;color:#8b949e;text-align:left'>"
+                "<thead><tr style='border-bottom:2px solid #c5cfca;color:#667b83;text-align:left'>"
                 "<th style='padding:6px 10px'>Pair</th>"
                 "<th style='padding:6px 10px;text-align:right'>Obs</th>"
                 "<th style='padding:6px 10px;text-align:right'>E-G p-value</th>"
@@ -3676,9 +3670,9 @@ with tab_scanner:
                     hovertemplate="%{y}<br>window ending %{x|%d %b %Y}<br>p = %{text}<extra></extra>",
                 ))
                 _fig_stab.update_layout(
-                    template="plotly_dark",
-                    paper_bgcolor="#0d1117", plot_bgcolor="#161b22",
-                    font=dict(color="#c9d1d9", size=11),
+                    template=PLOTLY_TEMPLATE,
+                    paper_bgcolor="#f5f7f4", plot_bgcolor="#f5f7f4",
+                    font=dict(color="#3a5560", size=11),
                     margin=dict(l=10, r=10, t=10, b=30),
                     height=max(240, 34 * len(_stab_ok_pairs) + 90),
                     xaxis=dict(title=None, showgrid=False),
@@ -3690,24 +3684,24 @@ with tab_scanner:
                 for _p in _stab_ok_pairs:
                     _s = _stab_map[_p]
                     _p_last = float(_stab_pv[_p]["p_value"].dropna().iloc[-1])
-                    _cur_c = "#3fb950" if _s["current_coint"] else "#f85149"
+                    _cur_c = "#2f7a47" if _s["current_coint"] else "#c2391f"
                     _cur_t = "Cointegrated" if _s["current_coint"] else "Not cointegrated"
                     _brk = _s["last_break"].strftime("%Y-%m-%d") if _s["last_break"] is not None else "none"
                     _stab_rows.append(
-                        "<tr style='border-bottom:1px solid #21262d'>"
-                        f"<td style='padding:5px 10px;font-weight:600;color:#e6edf3'>{_p}</td>"
-                        f"<td style='padding:5px 10px;text-align:right;color:#8b949e'>{_s['n_windows']}</td>"
-                        f"<td style='padding:5px 10px;text-align:right;color:#8b949e'>{_s['n_coint']} ({_s['share']:.0%})</td>"
+                        "<tr style='border-bottom:1px solid #d3dbd6'>"
+                        f"<td style='padding:5px 10px;font-weight:600;color:#132f38'>{_p}</td>"
+                        f"<td style='padding:5px 10px;text-align:right;color:#667b83'>{_s['n_windows']}</td>"
+                        f"<td style='padding:5px 10px;text-align:right;color:#667b83'>{_s['n_coint']} ({_s['share']:.0%})</td>"
                         f"<td style='padding:5px 10px;color:{_cur_c}'>{_cur_t} (p = {_p_last:.3f})</td>"
-                        f"<td style='padding:5px 10px;text-align:right;color:#8b949e'>{_s['current_streak']} "
+                        f"<td style='padding:5px 10px;text-align:right;color:#667b83'>{_s['current_streak']} "
                         f"window{'s' if _s['current_streak'] != 1 else ''}</td>"
-                        f"<td style='padding:5px 10px;text-align:right;color:#8b949e'>{_brk}</td>"
-                        f"<td style='padding:5px 10px;font-weight:600;color:{_STAB_COLORS.get(_s['label'], '#8b949e')}'>{_s['label']}</td>"
+                        f"<td style='padding:5px 10px;text-align:right;color:#667b83'>{_brk}</td>"
+                        f"<td style='padding:5px 10px;font-weight:600;color:{_STAB_COLORS.get(_s['label'], '#667b83')}'>{_s['label']}</td>"
                         "</tr>"
                     )
                 st.markdown(
                     "<table style='width:100%;border-collapse:collapse;font-size:0.85rem;margin-top:4px'>"
-                    "<thead><tr style='border-bottom:2px solid #30363d;color:#8b949e;text-align:left'>"
+                    "<thead><tr style='border-bottom:2px solid #c5cfca;color:#667b83;text-align:left'>"
                     "<th style='padding:6px 10px'>Pair</th>"
                     "<th style='padding:6px 10px;text-align:right'>Windows</th>"
                     f"<th style='padding:6px 10px;text-align:right'>p &lt; {_STAB_ALPHA}</th>"
@@ -3809,14 +3803,14 @@ with tab_scanner:
                         _dfig_z.add_trace(go.Scatter(
                             x=_cp["dates"], y=_cp["z_series"],
                             mode="lines", name="Z-score",
-                            line=dict(color="#58a6ff", width=1.2),
+                            line=dict(color="#2f45c6", width=1.2),
                             hovertemplate="%{x|%Y-%m-%d}: z=%{y:.2f}<extra></extra>",
                         ))
                         for _dlv, _dcol, _dlbl in [
-                            ( 2.0, "rgba(248,81,73,0.5)",   "±2σ"),
-                            ( 1.0, "rgba(224,123,57,0.5)",  "±1σ"),
-                            (-1.0, "rgba(224,123,57,0.5)",  ""),
-                            (-2.0, "rgba(248,81,73,0.5)",   ""),
+                            ( 2.0, "rgba(194,57,31,0.5)",   "±2σ"),
+                            ( 1.0, "rgba(194,97,26,0.5)",  "±1σ"),
+                            (-1.0, "rgba(194,97,26,0.5)",  ""),
+                            (-2.0, "rgba(194,57,31,0.5)",   ""),
                             ( 0.0, CHART["zero"], "Mean"),
                         ]:
                             _dfig_z.add_hline(
@@ -3829,7 +3823,7 @@ with tab_scanner:
                         _dfig_z.add_trace(go.Scatter(
                             x=[_cp["dates"][-1]], y=[_cp["z_now"]],
                             mode="markers", name="Current",
-                            marker=dict(color="#f85149", size=9, symbol="circle",
+                            marker=dict(color="#c2391f", size=9, symbol="circle",
                                         line=dict(color="white", width=1)),
                             hovertemplate=f"Now: z={_cp['z_now']:+.2f}<extra></extra>",
                         ))
@@ -3851,13 +3845,13 @@ with tab_scanner:
                         _dfig_px.add_trace(go.Scatter(
                             x=_cp["dates"], y=_cp["ya"],
                             name=_cp["a"].upper(),
-                            line=dict(color="#58a6ff", width=1.3),
+                            line=dict(color="#2f45c6", width=1.3),
                             hovertemplate=f"{_cp['a'].upper()}: €%{{y:.1f}}/MWh<extra></extra>",
                         ))
                         _dfig_px.add_trace(go.Scatter(
                             x=_cp["dates"], y=_cp["yb"],
                             name=_cp["b"].upper(),
-                            line=dict(color="#e07b39", width=1.3),
+                            line=dict(color="#c2611a", width=1.3),
                             hovertemplate=f"{_cp['b'].upper()}: €%{{y:.1f}}/MWh<extra></extra>",
                         ))
                         _dfig_px.update_layout(
@@ -4029,7 +4023,7 @@ with tab_pca:
         _fig_ev = go.Figure(go.Bar(
             x=["PC1 (Level)", "PC2 (Slope)", "PC3 (Curvature)"],
             y=[_pc1_pct, _pc2_pct, _pc3_pct],
-            marker_color=["#58a6ff", "#3fb950", "#d4ac3a"],
+            marker_color=["#2f45c6", "#2f7a47", "#a86a12"],
             text=[f"{v:.1f}%" for v in [_pc1_pct, _pc2_pct, _pc3_pct]],
             textposition="outside",
         ))
@@ -4053,7 +4047,7 @@ with tab_pca:
             "PC3 ≈ U-shaped (butterfly)"
         )
         _fig_ld = go.Figure()
-        for _pc, _col in [("PC1", "#58a6ff"), ("PC2", "#3fb950"), ("PC3", "#d4ac3a")]:
+        for _pc, _col in [("PC1", "#2f45c6"), ("PC2", "#2f7a47"), ("PC3", "#a86a12")]:
             _fig_ld.add_trace(go.Scatter(
                 x=list(_ld.index), y=_ld[_pc].tolist(),
                 name=_pc, line=dict(color=_col, width=2),
@@ -4077,9 +4071,9 @@ with tab_pca:
         st.markdown("#### Factor Scores: Full Panel History")
         _fig_sc = go.Figure()
         for _pc, _col, _lbl in [
-            ("PC1", "#58a6ff", "PC1 (Level)"),
-            ("PC2", "#3fb950", "PC2 (Slope)"),
-            ("PC3", "#d4ac3a", "PC3 (Curvature)"),
+            ("PC1", "#2f45c6", "PC1 (Level)"),
+            ("PC2", "#2f7a47", "PC2 (Slope)"),
+            ("PC3", "#a86a12", "PC3 (Curvature)"),
         ]:
             _fig_sc.add_trace(go.Scatter(
                 x=_sc_df.index, y=_sc_df[_pc],
@@ -4108,8 +4102,8 @@ with tab_pca:
         )
         _fig_sig = go.Figure()
         for _pcz, _col, _lbl in [
-            ("PC2_z", "#3fb950", "PC2 z-score (Slope)"),
-            ("PC3_z", "#d4ac3a", "PC3 z-score (Curvature)"),
+            ("PC2_z", "#2f7a47", "PC2 z-score (Slope)"),
+            ("PC3_z", "#a86a12", "PC3 z-score (Curvature)"),
         ]:
             if _pcz in _sc_df.columns:
                 _fig_sig.add_trace(go.Scatter(
@@ -4118,8 +4112,8 @@ with tab_pca:
                     hovertemplate=f"{_lbl}: %{{y:+.2f}}σ<extra></extra>",
                 ))
         for _lvl, _ann_c in [
-            (PCA_ENTRY_Z,  "#f85149"),
-            (-PCA_ENTRY_Z, "#3fb950"),
+            (PCA_ENTRY_Z,  "#c2391f"),
+            (-PCA_ENTRY_Z, "#2f7a47"),
         ]:
             _fig_sig.add_hline(
                 y=_lvl,
@@ -4159,16 +4153,16 @@ with tab_pca:
                 continue
             _z = float(_sc_last[_pcz])
             if _z >= PCA_ENTRY_Z:
-                _msg, _border = _bull_msg, "#f85149"
+                _msg, _border = _bull_msg, "#c2391f"
             elif _z <= -PCA_ENTRY_Z:
-                _msg, _border = _bear_msg, "#3fb950"
+                _msg, _border = _bear_msg, "#2f7a47"
             else:
-                _msg, _border = "In neutral zone: no trade signal", "#58a6ff"
+                _msg, _border = "In neutral zone: no trade signal", "#2f45c6"
             st.markdown(
                 f"<div class='commentary' style='border-left-color:{_border};'>"
                 f"<strong>{_lbl}</strong>&nbsp;&nbsp;"
                 f"<span style='color:{_border};'>z = {_z:+.2f}σ</span><br>"
-                f"<span style='color:#c9d1d9;font-size:0.85rem;'>{_msg}</span>"
+                f"<span style='color:#3a5560;font-size:0.85rem;'>{_msg}</span>"
                 f"</div>",
                 unsafe_allow_html=True,
             )

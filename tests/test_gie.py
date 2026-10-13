@@ -180,16 +180,29 @@ def test_without_a_key_nothing_is_requested(monkeypatch, sleeps, fresh_caches):
 
 def test_lng_totals_name_the_countries_that_failed(monkeypatch, sleeps, fresh_caches):
     def fake_fetch_all_pages(url, params):
-        if params["country"] == "GB":
+        if params["country"] == "FR":
             raise gie.GieUnavailable("HTTP 429")
         return [{"gasDayStart": d.strftime("%Y-%m-%d"), "sendOut": "100"}
                 for d in pd.date_range(end=pd.Timestamp.now().normalize(), periods=20, freq="D")]
 
     monkeypatch.setattr(lt, "fetch_all_pages", fake_fetch_all_pages)
     data = lt.get_lng_data()
-    assert data["unavailable"] == ["GB"]
-    assert set(data["sendout"]["country"]) == {"BE", "NL", "FR"}
-    assert data["totals"]["total_sendout"].iloc[-1] == 300.0
+    assert data["unavailable"] == ["FR"]
+    assert set(data["sendout"]["country"]) == {"BE", "NL"}
+    assert data["totals"]["total_sendout"].iloc[-1] == 200.0
+
+
+def test_gb_is_not_requested(monkeypatch, sleeps, fresh_caches):
+    """GB terminals stopped reporting to ALSI at the end of 2020, so GB is never fetched."""
+    requested = []
+
+    def fake_fetch_all_pages(url, params):
+        requested.append(params["country"])
+        return []
+
+    monkeypatch.setattr(lt, "fetch_all_pages", fake_fetch_all_pages)
+    lt.get_lng_data()
+    assert "GB" not in requested and set(requested) == {"BE", "NL", "FR"}
 
 
 def test_lng_without_failures_reports_none(monkeypatch, sleeps, fresh_caches):

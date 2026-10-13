@@ -7,9 +7,9 @@ import pandas as pd
 from utils.theme import CHART, PLOTLY_TEMPLATE
 
 COLORS = {
-    "ttf":      "#e07b39",
-    "ma30":     "#2a9d8f",
-    "ma90":     "#b5a642",
+    "ttf":      "#c2611a",
+    "ma30":     "#0e7a7e",
+    "ma90":     "#8f8424",
     "grid":     CHART["grid"],
     "text":     CHART["text"],
     "bg":       CHART["bg"],
@@ -18,9 +18,9 @@ COLORS = {
 
 # Reference price thresholds with label and line colour
 TTF_THRESHOLDS = [
-    (20,  "Pre-crisis avg (~20)",  "rgba(80,160,80,0.35)"),
-    (35,  "Elevated (35)",         "rgba(200,160,50,0.35)"),
-    (50,  "High risk (50)",        "rgba(200,80,80,0.35)"),
+    (20,  "Pre-crisis avg (~20)",  "rgba(47,122,71,0.35)"),
+    (35,  "Elevated (35)",         "rgba(168,106,18,0.35)"),
+    (50,  "High risk (50)",        "rgba(194,57,31,0.35)"),
 ]
 
 
@@ -72,7 +72,7 @@ def render_ttf_chart(ttf_data: dict, events: list | None = None):
         _last_date = None
         for ev in visible:
             ev_date = pd.Timestamp(ev["date"])
-            color = CATEGORY_COLORS.get(ev.get("category", "policy"), "#888")
+            color = CATEGORY_COLORS.get(ev.get("category", "policy"), "#667b83")
             dash  = IMPACT_DASH.get(ev.get("impact", "warn"), "dot")
             if _last_date is not None and (ev_date - _last_date).days <= _CLUSTER_DAYS:
                 _cluster_idx += 1

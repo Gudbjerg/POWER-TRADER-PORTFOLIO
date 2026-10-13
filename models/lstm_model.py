@@ -5,7 +5,9 @@ Predicts next-day average day-ahead prices for NO2 and NL simultaneously.
 Architecture: 2-layer LSTM (64 → 32 units) with 0.2 dropout, linear output head.
 Trained with MAE loss; compared to naive persistence baseline.
 
-Weights and metadata are saved to models/weights/ so the model survives restarts.
+Weights and metadata are saved to models/weights/ so the model survives restarts. The
+weights are stored as JSON (each tensor as base64-encoded little-endian float32), a text
+format that deploys without binary file storage and loads bit-exactly.
 Training is triggered manually via the UI; inference runs automatically on load.
 """
 from __future__ import annotations
@@ -70,7 +72,7 @@ def _make_sequences(X: np.ndarray, y: np.ndarray, seq_len: int):
 # ── Save / load ──────────────────────────────────────────────────────────────
 
 def _weights_path() -> str:
-    return os.path.join(_WEIGHTS_DIR, "lstm_model.pt")
+    return os.path.join(_WEIGHTS_DIR, "lstm_weights.json")
 
 
 def _meta_path() -> str:
@@ -104,13 +106,41 @@ def load_meta() -> dict:
         return {}
 
 
+def _state_to_json(state_dict) -> dict:
+    """Serialise a state dict: each tensor as base64 little-endian float32 plus its shape."""
+    import base64
+    tensors = {}
+    for name, tensor in state_dict.items():
+        arr = np.ascontiguousarray(tensor.detach().cpu().numpy(), dtype="<f4")
+        tensors[name] = {"shape": list(arr.shape),
+                         "data": base64.b64encode(arr.tobytes()).decode("ascii")}
+    return {"format": "float32-le-base64", "tensors": tensors}
+
+
+def _state_from_json(obj: dict) -> dict:
+    """Inverse of _state_to_json; returns a state dict of torch tensors."""
+    import base64
+    import torch
+    if obj.get("format") != "float32-le-base64":
+        raise ValueError(f"unknown weights format: {obj.get('format')!r}")
+    state = {}
+    for name, spec in obj["tensors"].items():
+        arr = np.frombuffer(base64.b64decode(spec["data"]), dtype="<f4").reshape(spec["shape"])
+        state[name] = torch.from_numpy(arr.copy())
+    return state
+
+
+def _write_json(path: str, obj: dict) -> None:
+    """Write JSON atomically, so a reader never sees a half-written file."""
+    tmp = f"{path}.tmp"
+    with open(tmp, "w") as f:
+        json.dump(obj, f)
+    os.replace(tmp, path)
+
+
 def _save(model, scaler_mean: list, scaler_std: list, feature_cols: list,
           train_info: dict) -> None:
-    try:
-        import torch
-        torch.save(model.state_dict(), _weights_path())
-    except Exception:
-        pass
+    _write_json(_weights_path(), _state_to_json(model.state_dict()))
     meta = {
         "feature_cols":  feature_cols,
         "scaler_mean":   scaler_mean,
@@ -132,7 +162,8 @@ def _load(n_features: int):
         import torch
         meta  = load_meta()
         model = _build_model(n_features)
-        model.load_state_dict(torch.load(_weights_path(), map_location="cpu"))
+        with open(_weights_path()) as f:
+            model.load_state_dict(_state_from_json(json.load(f)))
         model.eval()
         return model, meta
     except Exception:
@@ -336,6 +367,8 @@ def predict_next(features_df: pd.DataFrame) -> dict | None:
             y_mean = np.array(meta["y_mean"])
             y_std  = np.array(meta["y_std"])
             pred   = pred_norm * y_std + y_mean
+            if meta.get("target_mode") == "delta":
+                pred = df[TARGETS].iloc[-1].to_numpy(dtype=float) + pred
         else:
             # Fallback: use last known prices + weighted adjustment
             last_no2 = float(df["no2"].iloc[-1]) if "no2" in df.columns else None
@@ -386,14 +419,19 @@ def train_lstm_full(features_df: pd.DataFrame, feature_cols: list[str],
     std  = X_raw[:n_train].std(axis=0)
     std[std == 0] = 1.0
 
-    y_mean = y_raw[:n_train].mean(axis=0)
-    y_std  = y_raw[:n_train].std(axis=0)
+    # Target: the next day's change in price, not its level. Price levels drift far outside
+    # the training range in a supply shock, and a level model then reverts to the training
+    # mean; a change model is anchored on the last observed price.
+    y_delta = np.vstack([np.zeros((1, y_raw.shape[1]), dtype=np.float32), np.diff(y_raw, axis=0)])
+    y_mean = y_delta[1:n_train].mean(axis=0)
+    y_std  = y_delta[1:n_train].std(axis=0)
     y_std[y_std == 0] = 1.0
 
     X_norm = (X_raw - mean) / std
-    y_norm = (y_raw - y_mean) / y_std
+    y_norm = (y_delta - y_mean) / y_std
 
     Xs, ys = _make_sequences(X_norm, y_norm, SEQ_LEN)
+    y_prev = y_raw[SEQ_LEN - 1 : len(y_raw) - 1]   # last observed price of each sequence
     n_seq   = len(Xs)
     nt      = int(n_seq * 0.70)
     nv      = int(n_seq * 0.15)
@@ -443,13 +481,14 @@ def train_lstm_full(features_df: pd.DataFrame, feature_cols: list[str],
 
     with torch.no_grad():
         y_pred_norm = model(torch.tensor(Xs[nt+nv:])).numpy()
-    y_pred = y_pred_norm * y_std + y_mean
-    y_true = ys[nt+nv:] * y_std + y_mean
+    base   = y_prev[nt+nv:]
+    y_pred = base + (y_pred_norm * y_std + y_mean)
+    y_true = base + (ys[nt+nv:] * y_std + y_mean)
 
     test_mae_no2 = float(np.abs(y_pred[:, 0] - y_true[:, 0]).mean())
     test_mae_nl  = float(np.abs(y_pred[:, 1] - y_true[:, 1]).mean())
-    naive_no2    = float(np.abs(np.diff(y_raw[nt+nv+SEQ_LEN:, 0])).mean()) if len(y_raw[nt+nv+SEQ_LEN:]) > 1 else test_mae_no2
-    naive_nl     = float(np.abs(np.diff(y_raw[nt+nv+SEQ_LEN:, 1])).mean()) if len(y_raw[nt+nv+SEQ_LEN:]) > 1 else test_mae_nl
+    naive_no2    = float(np.abs(y_true[:, 0] - base[:, 0]).mean())   # persistence: tomorrow = today
+    naive_nl     = float(np.abs(y_true[:, 1] - base[:, 1]).mean())
 
     info = {
         "test_mae_no2":   round(test_mae_no2, 2),
@@ -463,6 +502,7 @@ def train_lstm_full(features_df: pd.DataFrame, feature_cols: list[str],
         "best_val_loss":  round(best_val, 5),
         "y_mean":         y_mean.tolist(),
         "y_std":          y_std.tolist(),
+        "target_mode":    "delta",
     }
     _save(model, mean.tolist(), std.tolist(), feature_cols, info)
 

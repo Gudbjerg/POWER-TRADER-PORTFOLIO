@@ -8,13 +8,16 @@ from utils.scenarios import storage_refill_pace, storage_status
 
 
 def _bands(start_fill: float = 50.0, per_day: float = 0.2) -> pd.DataFrame:
-    """Synthetic 5-year mean path: rises linearly from 1 April and is flat outside the season."""
+    """Synthetic 5-year mean path: rises linearly from 1 April and is flat outside the season.
+
+    Day numbers follow data.gas_storage.calendar_doy (a leap-year calendar), as the bands do.
+    """
     rows = []
     for doy in range(1, 367):
-        if 91 <= doy <= 305:   # 1 April to 1 November in a non-leap year
-            mean = start_fill + (doy - 91) * per_day
-        elif doy > 305:
-            mean = start_fill + (305 - 91) * per_day
+        if 92 <= doy <= 306:   # 1 April to 1 November on the leap-year calendar
+            mean = start_fill + (doy - 92) * per_day
+        elif doy > 306:
+            mean = start_fill + (306 - 92) * per_day
         else:
             mean = start_fill
         rows.append({"day_of_year": doy, "min": mean - 10, "mean": mean, "max": mean + 10})
@@ -22,7 +25,7 @@ def _bands(start_fill: float = 50.0, per_day: float = 0.2) -> pd.DataFrame:
 
 
 def test_pace_compares_required_injection_with_the_five_year_window():
-    today = date(2026, 10, 10)   # day 283, 22 days before 1 November
+    today = date(2026, 10, 10)   # 22 days before 1 November
     info = storage_refill_pace(73.5, _bands(per_day=0.2), today)
     assert info["days"] == 22
     assert info["required_pp"] == pytest.approx(16.5)
@@ -64,7 +67,7 @@ def test_critical_wording_follows_the_season():
     assert "summer" not in autumn
     assert "end of the withdrawal season" in winter
     for text in (autumn, winter):
-        assert "90% by 1 November" in text
+        assert "90% on any day between 1 October and 1 December" in text
         assert "—" not in text
 
 
@@ -88,3 +91,19 @@ def test_ordinal(value, text):
     from utils.helpers import ordinal
 
     assert ordinal(value) == text
+
+
+def test_calendar_day_of_year_aligns_leap_and_common_years():
+    from data.gas_storage import calendar_doy
+    assert calendar_doy(date(2025, 3, 1)) == calendar_doy(date(2024, 3, 1)) == 61
+    assert calendar_doy(date(2024, 2, 29)) == 60
+    assert calendar_doy(date(2025, 12, 31)) == 366
+    series = calendar_doy(pd.Series(pd.to_datetime(["2023-11-01", "2024-11-01"])))
+    assert series.tolist() == [306, 306]
+
+
+def test_storage_season_wording():
+    from data.gas_storage import storage_season
+    assert storage_season(date(2026, 6, 1)) == "injection season"
+    assert storage_season(date(2026, 10, 12)) == "EU target window"
+    assert storage_season(date(2027, 1, 15)) == "withdrawal season"

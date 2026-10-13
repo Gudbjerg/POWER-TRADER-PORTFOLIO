@@ -59,7 +59,7 @@ def apply_dark_theme():
 
 PILL = {"critical": "pill-critical", "warn": "pill-warn", "ok": "pill-ok", "good": "pill-good"}
 BORDER = {"critical": "commentary-critical", "warn": "commentary-warn", "ok": "", "good": "commentary-good"}
-STATUS_LABEL = {"critical": "CRITICAL", "warn": "ELEVATED", "ok": "NORMAL", "good": "HEALTHY"}
+STATUS_LABEL = {"critical": "Critical", "warn": "Elevated", "ok": "Normal", "good": "Healthy"}
 _STATUS_TONE = {"critical": "critical", "warn": "warn", "ok": "info", "good": "good"}
 
 

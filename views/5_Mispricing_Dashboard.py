@@ -28,9 +28,9 @@ from utils.theme import ACCENTS, page_header, page_footer
 from config.settings import (
     COINT_ENTRY_Z, COINT_MIN_OBS,
 )
-from data.gas_storage import get_storage_data
+from data.gas_storage import get_storage_data, calendar_doy
 from data.prices import get_ttf_data
-from models.feature_assembly import assemble_features
+from models.feature_assembly import load_feature_matrix
 from models.ttf_backtest import fetch_ttf_history
 from models.supply_stack import build_stack, identify_marginal_fuel, fetch_eua_price
 
@@ -88,7 +88,7 @@ def _get_mispricing_signals() -> list[dict]:
     """Compute all mispricing signals. Returns list sorted by extremity (most off-centre first)."""
     signals: list[dict] = []
 
-    feat     = assemble_features(years=3)
+    feat     = load_feature_matrix(years=3)
     ttf_hist = fetch_ttf_history(years=7)
     storage  = get_storage_data()
 
@@ -97,7 +97,7 @@ def _get_mispricing_signals() -> list[dict]:
         if not ttf_hist.empty and "price" in ttf_hist.columns:
             _th = ttf_hist.copy()
             _th["date"] = pd.to_datetime(_th["date"])
-            _th["doy"]  = _th["date"].dt.dayofyear
+            _th["doy"]  = calendar_doy(_th["date"])
             _latest     = _th.sort_values("date").iloc[-1]
             _cur        = float(_latest["price"])
             _cur_doy    = int(_latest["doy"])
@@ -116,7 +116,7 @@ def _get_mispricing_signals() -> list[dict]:
                 "direction": _d,
                 "dlabel":   _dl,
                 "note":     f"vs same-DOY ±10d window, 7yr history ({len(_hist)} obs)",
-                "source":   "Tab 11",
+                "source":   "Quant: TTF Seasonal Norm",
             })
     except Exception:
         pass
@@ -129,7 +129,7 @@ def _get_mispricing_signals() -> list[dict]:
             _eu["date"] = pd.to_datetime(_eu["gasDayStart"])
             _eu["fill"] = pd.to_numeric(_eu["full"], errors="coerce")
             _eu = _eu.dropna(subset=["fill"]).sort_values("date").reset_index(drop=True)
-            _eu["doy"]  = _eu["date"].dt.dayofyear
+            _eu["doy"]  = calendar_doy(_eu["date"])
             _cur        = float(_eu["fill"].iloc[-1])
             _cur_doy    = int(_eu["doy"].iloc[-1])
             _doys       = set(range(_cur_doy - 7, _cur_doy + 8))
@@ -152,7 +152,7 @@ def _get_mispricing_signals() -> list[dict]:
                 "dlabel":   _dl,
                 "note":     (f"vs 5yr same-DOY ±7d mean ({_seas_mean:.1f}%)"
                              if not np.isnan(_seas_mean) else "vs seasonal mean"),
-                "source":   "Tab 1",
+                "source":   "Quant: Storage Monte Carlo",
             })
     except Exception:
         pass
@@ -193,7 +193,7 @@ def _get_mispricing_signals() -> list[dict]:
                     "direction": _d,
                     "dlabel":   _dl,
                     "note":     f"Expanding-window OU residual; entry at |z| > {COINT_ENTRY_Z}σ",
-                    "source":   "Tab 12 / Tab 13",
+                    "source":   "Quant: NO2/NL Cointegration",
                 })
     except Exception:
         pass
@@ -221,7 +221,7 @@ def _get_mispricing_signals() -> list[dict]:
                     "dlabel":   ("NO2 Rich" if _d == "up" else
                                  ("NO2 Cheap" if _d == "down" else "Fair Value")),
                     "note":     "NO2 residual from NO2 ~ α + β·TTF (2yr rolling OLS)",
-                    "source":   "Tab 2",
+                    "source":   "Quant: Gas-to-Power Regression",
                 })
     except Exception:
         pass
@@ -280,7 +280,7 @@ def _get_mispricing_signals() -> list[dict]:
                         "dlabel":   _dl,
                         "note":     (f"NO2 - TTF*{_CCGT_HEAT_RATE:.2f} - EUA*{_CCGT_EMISSION:.3f}"
                                      f"  (CCGT ~49% eff., latest EUA €{_cur_eua:.0f}/t)"),
-                        "source":   "Computed",
+                        "source":   "NO2, TTF and EUA prices",
                     })
     except Exception:
         pass
@@ -303,7 +303,7 @@ def _get_mispricing_signals() -> list[dict]:
                 "direction": _d,
                 "dlabel":   _dl,
                 "note":     "Reservoir as % of expanding max (3yr); low → bullish gas/power",
-                "source":   "Tab 10",
+                "source":   "Quant: Hydro Lead/Lag",
             })
     except Exception:
         pass
@@ -332,7 +332,7 @@ def _get_mispricing_signals() -> list[dict]:
                     "dlabel":   ("TTF Rich" if _d == "up" else
                                  ("TTF Cheap" if _d == "down" else "Fair Value")),
                     "note":     "TTF residual from TTF ~ α + β·StorageFill (2yr rolling OLS)",
-                    "source":   "Tab 9",
+                    "source":   "Quant: Storage–Price Regression",
                 })
     except Exception:
         pass
@@ -343,7 +343,7 @@ def _get_mispricing_signals() -> list[dict]:
         _ttf_now = float(_ttf_px["price"].iloc[-1]) if not _ttf_px.empty else 50.0
         _eua_now, _ = fetch_eua_price()
         if _eua_now is not None:
-            _demand = 60.0
+            _demand, _demand_src = 60.0, "reference demand"
             try:
                 from entsoe import EntsoePandasClient as _EP8
                 import pytz as _tz8
@@ -352,14 +352,27 @@ def _get_mispricing_signals() -> list[dict]:
                 if _key8:
                     _now8 = _dt8.now(_tz8.timezone("Europe/Berlin"))
                     _s8   = pd.Timestamp(_now8.date(), tz="Europe/Berlin")
-                    _ser8 = _EP8(api_key=_key8, timeout=ENTSOE_TIMEOUT_S).query_load(
-                        "10Y1001A1001A83F", start=_s8, end=_s8 + pd.Timedelta(days=1)
-                    )
-                    if _ser8 is not None and not (hasattr(_ser8, "empty") and _ser8.empty):
-                        _demand = float(np.clip(round(float(_ser8.mean()) / 1000.0), 30, 90))
+                    _cl8 = _EP8(api_key=_key8, timeout=ENTSOE_TIMEOUT_S)
+                    # Day-ahead load forecast (A65, covers the whole day); actual load as fallback
+                    for _q8, _lbl8 in ((_cl8.query_load_forecast, "ENTSO-E day-ahead load forecast"),
+                                       (_cl8.query_load, "ENTSO-E actual load")):
+                        try:
+                            from data.deadline import call_with_deadline as _dl8
+                            _ser8 = _dl8(_q8, "10Y1001A1001A83F", start=_s8, end=_s8 + pd.Timedelta(days=1), seconds=30)
+                        except Exception:
+                            continue
+                        if isinstance(_ser8, pd.DataFrame):
+                            _ser8 = _ser8.iloc[:, 0]
+                        if _ser8 is not None and not _ser8.dropna().empty:
+                            _demand = float(np.clip(round(float(_ser8.mean()) / 1000.0), 30, 90))
+                            _demand_src = _lbl8
+                            break
             except Exception:
                 pass
-            _stack = build_stack(_ttf_now, _eua_now)
+            from data.wind import fetch_de_renewables_today as _ren8
+            _ren = _ren8()
+            _stack = build_stack(_ttf_now, _eua_now,
+                                 {k: _ren[k] for k in ("wind", "solar") if k in _ren})
             _marg  = identify_marginal_fuel(_stack, _demand)
             _fuel  = _marg["fuel"]
             _d8    = ("up" if _fuel in ("gas", "oil")
@@ -378,8 +391,8 @@ def _get_mispricing_signals() -> list[dict]:
                 "clabel":   "Medium",
                 "direction": _d8,
                 "dlabel":   _dl8,
-                "note":     f"Merit-order stack at {_demand:.0f} GW DE demand",
-                "source":   "Tab 5",
+                "note":     f"Merit-order stack at {_demand:.0f} GW German demand ({_demand_src}, today's mean)",
+                "source":   "Quant: Supply Stack",
             })
     except Exception:
         pass
@@ -404,18 +417,18 @@ with st.spinner("Computing signals…"):
     _signals = _get_mispricing_signals()
 
 # Feature coverage line
-_feat_cov = assemble_features(years=3)
+_feat_cov = load_feature_matrix(years=3)
 _coverage = _feat_cov.attrs.get("coverage_report") or {}
 _missing_feat = [k for k, v in _coverage.items() if not v]
 if _missing_feat:
     st.caption(
         f"Feature groups unavailable: {', '.join(_missing_feat)}. "
-        "Some signals may be omitted. Check ENTSO-E key (hydro/wind) and AGSI key (storage)."
+        "Signals that depend on them are left out."
     )
 
 if not _signals:
     st.warning(
-        "No signals computed. Check ENTSO-E and AGSI API keys in the Space secrets.",
+        "No signals could be computed: the market data sources did not answer. Try again shortly.",
         icon="⚠️",
     )
     st.stop()
@@ -455,29 +468,29 @@ with _kc4:
 st.divider()
 
 # ── Direction pill helpers ────────────────────────────────────────────────────
-_UP_PILL  = ("<span style='background:#0f2a1a;color:#3fb950;border-radius:4px;"
+_UP_PILL  = ("<span style='background:#e2efe6;color:#2f7a47;border-radius:4px;"
              "padding:2px 8px;font-size:0.78rem;font-weight:600'>{}</span>")
-_DN_PILL  = ("<span style='background:#3d1515;color:#f85149;border-radius:4px;"
+_DN_PILL  = ("<span style='background:#f6e3df;color:#c2391f;border-radius:4px;"
              "padding:2px 8px;font-size:0.78rem;font-weight:600'>{}</span>")
-_NE_PILL  = ("<span style='background:#1c1c28;color:#8b949e;border-radius:4px;"
+_NE_PILL  = ("<span style='background:#e8e8f0;color:#667b83;border-radius:4px;"
              "padding:2px 8px;font-size:0.78rem;font-weight:600'>{}</span>")
 _D_PILLS  = {"up": _UP_PILL, "down": _DN_PILL, "neutral": _NE_PILL}
 
 _CONF_PILL = {
-    "high":   "<span style='color:#d4ac3a;font-size:0.76rem;font-weight:600'>High</span>",
-    "medium": "<span style='color:#58a6ff;font-size:0.76rem;font-weight:600'>Medium</span>",
-    "low":    "<span style='color:#484f58;font-size:0.76rem;font-weight:600'>Low</span>",
+    "high":   "<span style='color:#a86a12;font-size:0.76rem;font-weight:600'>High</span>",
+    "medium": "<span style='color:#2f45c6;font-size:0.76rem;font-weight:600'>Medium</span>",
+    "low":    "<span style='color:#93a3a8;font-size:0.76rem;font-weight:600'>Low</span>",
 }
 
 _CAT_COLORS = {
-    "Gas":          ("#1c2230", "#58a6ff"),
-    "Storage":      ("#1c2820", "#3fb950"),
-    "Power Spread": ("#2d1c1c", "#f85149"),
-    "Power / Gas":  ("#2a1c2d", "#d2a8ff"),
-    "Spread":       ("#28200e", "#d4ac3a"),
-    "Supply":       ("#1c2820", "#3fb950"),
-    "Gas / Storage":("#1a1c28", "#79c0ff"),
-    "Demand":       ("#2a1e10", "#e07b39"),
+    "Gas":          ("#e6ebef", "#2f45c6"),
+    "Storage":      ("#e2efe6", "#2f7a47"),
+    "Power Spread": ("#f6e3df", "#c2391f"),
+    "Power / Gas":  ("#eee4f3", "#8c6bbd"),
+    "Spread":       ("#f6ecd9", "#a86a12"),
+    "Supply":       ("#e2efe6", "#2f7a47"),
+    "Gas / Storage":("#e8e8f0", "#3e5bd8"),
+    "Demand":       ("#f6ecd9", "#c2611a"),
 }
 
 # ── Signal table ──────────────────────────────────────────────────────────────
@@ -485,22 +498,22 @@ st.markdown("#### Signal Table")
 
 _rows_html = []
 for _s in _signals:
-    _bg, _fc = _CAT_COLORS.get(_s["category"], ("#1c1c1c", "#8b949e"))
+    _bg, _fc = _CAT_COLORS.get(_s["category"], ("#132f38", "#667b83"))
     _cat_html = (f"<span style='background:{_bg};color:{_fc};border-radius:4px;"
                  f"padding:1px 6px;font-size:0.76rem;font-weight:500'>{_s['category']}</span>")
 
     _dp = _s["pctile"]
     if np.isnan(_dp):
-        _bar_html = "<span style='color:#484f58;font-size:0.80rem'>n/a</span>"
+        _bar_html = "<span style='color:#667b83;font-size:0.80rem'>regime, not ranked</span>"
     else:
-        _bar_clr = ({"up": "#3fb950", "down": "#f85149", "neutral": "#58a6ff"}
-                    .get(_s["direction"], "#58a6ff"))
+        _bar_clr = ({"up": "#2f7a47", "down": "#c2391f", "neutral": "#2f45c6"}
+                    .get(_s["direction"], "#2f45c6"))
         _bar_html = (
             f"<div style='display:flex;align-items:center;gap:6px'>"
-            f"<div style='flex:0 0 110px;height:6px;background:#21262d;border-radius:3px;overflow:hidden'>"
+            f"<div style='flex:0 0 110px;height:6px;background:#d3dbd6;border-radius:3px;overflow:hidden'>"
             f"<div style='width:{_dp:.1f}%;height:100%;background:{_bar_clr};border-radius:3px'></div>"
             f"</div>"
-            f"<span style='color:#8b949e;font-size:0.80rem;white-space:nowrap'>{ordinal(_dp)}</span>"
+            f"<span style='color:#667b83;font-size:0.80rem;white-space:nowrap'>{ordinal(_dp)}</span>"
             f"</div>"
         )
 
@@ -508,14 +521,14 @@ for _s in _signals:
     _cf_html  = _CONF_PILL.get(_s["conf"], _CONF_PILL["low"])
 
     _rows_html.append(
-        f"<tr style='border-bottom:1px solid #21262d'>"
+        f"<tr style='border-bottom:1px solid #d3dbd6'>"
         f"<td style='padding:9px 10px;vertical-align:top'>"
-        f"  <div style='font-weight:600;color:#e6edf3;font-size:0.92rem'>{_s['name']}</div>"
-        f"  <div style='color:#8b949e;font-size:0.78rem;margin-top:3px'>{_s['note']}</div>"
-        f"  <div style='margin-top:4px;color:#484f58;font-size:0.74rem'>source: {_s['source']}</div>"
+        f"  <div style='font-weight:600;color:#132f38;font-size:0.92rem'>{_s['name']}</div>"
+        f"  <div style='color:#667b83;font-size:0.78rem;margin-top:3px'>{_s['note']}</div>"
+        f"  <div style='margin-top:4px;color:#93a3a8;font-size:0.74rem'>source: {_s['source']}</div>"
         f"</td>"
         f"<td style='padding:9px 10px;vertical-align:top;white-space:nowrap'>{_cat_html}</td>"
-        f"<td style='padding:9px 10px;vertical-align:top;color:#e6edf3;font-weight:500;"
+        f"<td style='padding:9px 10px;vertical-align:top;color:#132f38;font-weight:500;"
         f"    white-space:nowrap;font-size:0.92rem'>{_s['current']}</td>"
         f"<td style='padding:9px 10px;vertical-align:top'>{_bar_html}</td>"
         f"<td style='padding:9px 10px;vertical-align:top'>{_d_html}</td>"
@@ -525,7 +538,7 @@ for _s in _signals:
 
 _tbl_header = (
     "<table style='width:100%;border-collapse:collapse;font-size:0.88rem;margin-top:4px'>"
-    "<thead><tr style='border-bottom:2px solid #30363d;color:#8b949e;text-align:left'>"
+    "<thead><tr style='border-bottom:2px solid #c5cfca;color:#667b83;text-align:left'>"
     "<th style='padding:6px 10px'>Signal</th>"
     "<th style='padding:6px 10px'>Category</th>"
     "<th style='padding:6px 10px'>Current value</th>"

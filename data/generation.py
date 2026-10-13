@@ -21,6 +21,7 @@ fourfold; it is no longer read.
 from __future__ import annotations
 
 from config.settings import ENTSOE_TIMEOUT_S
+from data.energy_units import MIN_HOURS_PER_DAY, daily_energy
 
 import os
 import threading
@@ -43,7 +44,7 @@ _CACHE_CSV   = os.path.join(_PERSIST_DIR, _CACHE_NAME)
 _SEED_CSV    = os.path.join(_BUNDLED_DIR, _CACHE_NAME)   # copy shipped with a deployment
 _CACHE_COLUMNS = ["date", "hard_coal_gwh", "lignite_gwh"]
 _CHUNK_TIMEOUT = 90   # seconds per quarterly ENTSO-E chunk before giving up
-_MIN_HOURS_PER_DAY = 23   # hourly readings needed before a day counts as published
+_MIN_HOURS_PER_DAY = MIN_HOURS_PER_DAY   # hourly readings needed before a day counts as published
 
 HARD_COAL_NAMES = {"Fossil Hard coal", "Hard coal"}
 LIGNITE_NAMES   = {"Fossil Brown coal/Lignite", "Brown coal/Lignite", "Lignite"}
@@ -132,15 +133,11 @@ def _daily_energy_gwh(power_mw: pd.DataFrame) -> pd.DataFrame:
     """
     if power_mw.empty:
         return pd.DataFrame(columns=_CACHE_COLUMNS)
-    power = power_mw.copy()
-    power.index = power.index.tz_convert("UTC")
-    hourly = power.resample("h").mean()
-    hours_reported = hourly.notna().any(axis=1).resample("D").sum()
-    daily = hourly.resample("D").sum(min_count=1) / 1_000
-    daily = daily[hours_reported.reindex(daily.index, fill_value=0) >= _MIN_HOURS_PER_DAY]
+    daily = daily_energy(power_mw[["hard_coal_mw", "lignite_mw"]], tz="UTC",
+                         min_hours=_MIN_HOURS_PER_DAY) / 1_000
     daily = daily.fillna(0.0).round(2)
     return pd.DataFrame({
-        "date":          daily.index.tz_localize(None),
+        "date":          daily.index,
         "hard_coal_gwh": daily["hard_coal_mw"].to_numpy(),
         "lignite_gwh":   daily["lignite_mw"].to_numpy(),
     })

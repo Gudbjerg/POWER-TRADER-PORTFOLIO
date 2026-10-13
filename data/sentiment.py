@@ -11,6 +11,7 @@ All are caught with graceful fallback messages if not installed.
 from __future__ import annotations
 
 import os
+import threading
 import pandas as pd
 import streamlit as st
 from datetime import datetime, timedelta, timezone
@@ -28,11 +29,21 @@ ENERGY_KEYWORDS = [
 
 # Fetched via requests (not feedparser URL) to avoid SSL cert issues on macOS Python.
 RSS_FEEDS = [
-    ("BBC Business",    "https://feeds.bbci.co.uk/news/business/rss.xml"),
-    ("Guardian Energy", "https://www.theguardian.com/environment/energy/rss"),
-    ("LNG World News",  "https://www.lngworldnews.com/feed/"),
-    ("Energy Monitor",  "https://www.energymonitor.ai/feed/"),
+    ("BBC Business",        "https://feeds.bbci.co.uk/news/business/rss.xml"),
+    ("Guardian Energy",     "https://www.theguardian.com/environment/energy/rss"),
+    ("LNG World News",      "https://www.lngworldnews.com/feed/"),
+    ("Energy Monitor",      "https://www.energymonitor.ai/feed/"),
+    ("Power Technology",    "https://www.power-technology.com/feed/"),
+    ("Offshore Technology", "https://www.offshore-technology.com/feed/"),
 ]
+
+# Feeds that serve older items page by page (WordPress "?paged=N"). They let the history be
+# rebuilt after a restart instead of waiting weeks for live headlines to accumulate.
+PAGED_FEEDS = {"Energy Monitor", "Power Technology", "Offshore Technology"}
+BACKFILL_MAX_PAGES = 30          # per feed
+SENTIMENT_MIN_DAYS = 21          # days of history the Granger and IC tests need
+BACKFILL_TARGET_DAYS = 60        # calendar days a backfill reaches back
+FEED_SOURCES_TEXT = ", ".join(name for name, _ in RSS_FEEDS)
 
 
 @st.cache_resource(show_spinner="Loading FinBERT model (first run only)…")
@@ -60,14 +71,72 @@ def _load_finbert():
         )
         return clf, None
     except ImportError:
-        return None, "transformers / torch not installed. Run: pip3 install transformers torch"
+        return None, ("The FinBERT model is not available in this environment "
+                      "(PyTorch and Transformers are not installed).")
     except Exception as e:
-        return None, f"FinBERT load failed: {e}"
+        return None, f"The FinBERT model could not be loaded ({type(e).__name__})."
 
 
 def _is_energy_relevant(text: str) -> bool:
     t = text.lower()
     return any(kw in t for kw in ENERGY_KEYWORDS)
+
+
+def _parse_feed(content: bytes, source: str, max_items: int | None = None) -> list[dict]:
+    """Energy-relevant headlines from one RSS document: {title, date, source}."""
+    import feedparser
+    feed = feedparser.parse(content)
+    out = []
+    for entry in feed.entries[:max_items]:
+        title   = entry.get("title", "").strip()
+        summary = entry.get("summary", "")
+        if not title or not _is_energy_relevant(title + " " + summary):
+            continue
+        pub = entry.get("published_parsed") or entry.get("updated_parsed")
+        if not pub:
+            continue
+        dt = datetime(*pub[:6], tzinfo=timezone.utc).replace(tzinfo=None)
+        out.append({"title": title, "date": dt.date(), "source": source})
+    return out
+
+
+def backfill_headlines(since: str) -> list[dict]:
+    """Older energy headlines from the paged feeds, back to ``since`` (YYYY-MM-DD)."""
+    try:
+        import feedparser  # noqa: F401
+        import requests as _req
+    except ImportError:
+        return []
+    cutoff = datetime.strptime(since, "%Y-%m-%d").date()
+    articles: list[dict] = []
+    for source, url in RSS_FEEDS:
+        if source not in PAGED_FEEDS:
+            continue
+        for page in range(1, BACKFILL_MAX_PAGES + 1):
+            try:
+                resp = _req.get(url, params={"paged": page}, timeout=15,
+                                headers={"User-Agent": "Mozilla/5.0"})
+                if resp.status_code != 200:
+                    break
+                import feedparser
+                entries = feedparser.parse(resp.content).entries
+                if not entries:
+                    break
+                articles.extend(a for a in _parse_feed(resp.content, source) if a["date"] >= cutoff)
+                oldest = min((e.get("published_parsed") or e.get("updated_parsed")
+                              for e in entries if e.get("published_parsed") or e.get("updated_parsed")),
+                             default=None)
+                if oldest is None or datetime(*oldest[:3]).date() < cutoff:
+                    break
+            except Exception:
+                break
+    seen: set = set()
+    unique = []
+    for a in articles:
+        if a["title"] not in seen:
+            seen.add(a["title"])
+            unique.append(a)
+    return sorted(unique, key=lambda x: x["date"], reverse=True)
 
 
 @st.cache_data(ttl=21600, show_spinner=False)
@@ -88,20 +157,7 @@ def fetch_energy_headlines(max_per_feed: int = 60) -> list[dict]:
     for source, url in RSS_FEEDS:
         try:
             resp = _req.get(url, timeout=10, headers={"User-Agent": "Mozilla/5.0"})
-            feed = feedparser.parse(resp.content)
-            for entry in feed.entries[:max_per_feed]:
-                title   = entry.get("title", "").strip()
-                summary = entry.get("summary", "")
-                if not title:
-                    continue
-                if not _is_energy_relevant(title + " " + summary):
-                    continue
-                pub = entry.get("published_parsed")
-                if pub:
-                    dt = datetime(*pub[:6], tzinfo=timezone.utc).replace(tzinfo=None)
-                else:
-                    dt = datetime.utcnow()
-                articles.append({"title": title, "date": dt.date(), "source": source})
+            articles.extend(_parse_feed(resp.content, source, max_per_feed))
         except Exception:
             continue
 
@@ -129,13 +185,21 @@ def score_headlines(headlines: list[dict]) -> pd.DataFrame:
     clf, err = _load_finbert()
     if clf is None:
         return pd.DataFrame()
+    return _score_with(clf, headlines)
 
+
+def _score_with(clf, headlines: list[dict]) -> pd.DataFrame:
+    """Score headlines with a loaded FinBERT pipeline (no Streamlit calls)."""
     records = []
-    for h in headlines:
+    titles = [h["title"][:512] for h in headlines]
+    try:
+        results = clf(titles, batch_size=16, truncation=True) if titles else []
+    except Exception:
+        results = []
+    for h, result in zip(headlines, results):
         try:
-            result = clf(h["title"][:512])
-            # result is [[{label: score}, ...]]
-            scores = {r["label"]: r["score"] for r in result[0]}
+            # result is [{label, score}, ...] for each of the three classes
+            scores = {r["label"]: r["score"] for r in result}
             records.append({
                 "date":          pd.Timestamp(h["date"]),
                 "title":         h["title"],
@@ -153,7 +217,8 @@ def score_headlines(headlines: list[dict]) -> pd.DataFrame:
 
 _PERSIST_DIR   = os.getenv("DATA_PERSIST_DIR", os.path.join(os.path.dirname(__file__), ".."))
 _HISTORY_FILE  = os.path.join(_PERSIST_DIR, ".sentiment_history.csv")
-_HISTORY_DAYS = 60  # keep rolling 60-day window on disk
+_HISTORY_DAYS = 120  # rolling window kept on disk (calendar days)
+_HISTORY_LOCK = threading.Lock()
 
 
 def _load_history() -> pd.DataFrame:
@@ -171,6 +236,11 @@ def _load_history() -> pd.DataFrame:
 
 def _save_history(scored: pd.DataFrame) -> None:
     """Merge new scored headlines into the persistent history file."""
+    with _HISTORY_LOCK:
+        _save_history_locked(scored)
+
+
+def _save_history_locked(scored: pd.DataFrame) -> None:
     try:
         path    = os.path.normpath(_HISTORY_FILE)
         if os.getenv("DATA_PERSIST_DIR"):
@@ -184,6 +254,52 @@ def _save_history(scored: pd.DataFrame) -> None:
         combined.to_csv(path, index=False)
     except Exception:
         pass
+
+
+def _history_days(hist: pd.DataFrame, window_days: int = BACKFILL_TARGET_DAYS) -> int:
+    if hist.empty or "date" not in hist.columns:
+        return 0
+    cutoff = pd.Timestamp.now().normalize() - pd.Timedelta(days=window_days)
+    return int(pd.to_datetime(hist["date"]).loc[lambda d: d >= cutoff].dt.normalize().nunique())
+
+
+_BACKFILL_LOCK = threading.Lock()
+_BACKFILL_STATE = {"running": False, "done": False}
+
+
+def _run_backfill(clf) -> None:
+    try:
+        since = (datetime.utcnow() - timedelta(days=BACKFILL_TARGET_DAYS)).strftime("%Y-%m-%d")
+        older = backfill_headlines(since)
+        if older:
+            scored = _score_with(clf, older)
+            if not scored.empty:
+                _save_history(scored)
+    finally:
+        with _BACKFILL_LOCK:
+            _BACKFILL_STATE.update(running=False, done=True)
+
+
+def backfill_running() -> bool:
+    return _BACKFILL_STATE["running"]
+
+
+def _ensure_history() -> None:
+    """Start a background backfill when the recent history is too short for the tests.
+
+    Paging the archives takes a minute or two, so it runs off the page's thread once per
+    process; the page shows the history it has and picks up the backfill on a later run.
+    """
+    if _history_days(_load_history()) >= SENTIMENT_MIN_DAYS:
+        return
+    with _BACKFILL_LOCK:
+        if _BACKFILL_STATE["running"] or _BACKFILL_STATE["done"]:
+            return
+        clf, _ = _load_finbert()
+        if clf is None:
+            return
+        _BACKFILL_STATE["running"] = True
+    threading.Thread(target=_run_backfill, args=(clf,), daemon=True).start()
 
 
 def get_sentiment_data() -> dict:
@@ -201,6 +317,7 @@ def get_sentiment_data() -> dict:
         fetched_at  : datetime
     """
     headlines = fetch_energy_headlines()
+    _ensure_history()
 
     if not headlines:
         # Even with no new articles, return history if we have it

@@ -1,6 +1,7 @@
 """
 GIE ALSI LNG terminal sendout fetcher.
-Covers NW European import terminals: BE (Zeebrugge), NL (Gate), GB (South Hook/Dragon), FR (Dunkirk/Montoir).
+Covers NW European import terminals: BE (Zeebrugge), NL (Gate), FR (Dunkirk/Montoir).
+Great Britain's terminals stopped reporting to ALSI at the end of 2020 (see config/settings.py).
 Uses the same AGSI_API_KEY (free registration at agsi.gie.eu).
 
 Requests go through data/gie.py (rate limits and gateway errors are retried). A country

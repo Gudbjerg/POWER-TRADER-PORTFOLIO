@@ -21,7 +21,7 @@ st.set_page_config(
 
 from utils.helpers import apply_dark_theme, kpi_card, delta_span
 from utils.theme import ACCENTS, CHART, PLOTLY_TEMPLATE, callout, page_header, page_footer, render
-from models.feature_assembly import assemble_features
+from models.feature_assembly import load_feature_matrix
 from config.settings import (
     BESS_FCR_N_EUR_PER_MW_YEAR,
     BESS_FCR_D_EUR_PER_MW_YEAR,
@@ -36,12 +36,12 @@ apply_dark_theme()
 
 # ── Colour palette (consistent with other pages) ──────────────────────────────
 _C = {
-    "dam":      "#58a6ff",
-    "fcr_n":    "#3fb950",
-    "fcr_d":    "#d4ac3a",
-    "intraday": "#d2a8ff",
-    "opex":     "#f85149",
-    "depr":     "#484f58",
+    "dam":      "#2f45c6",
+    "fcr_n":    "#2f7a47",
+    "fcr_d":    "#a86a12",
+    "intraday": "#8c6bbd",
+    "opex":     "#c2391f",
+    "depr":     "#93a3a8",
 }
 
 
@@ -245,13 +245,13 @@ render(callout(
 
 # ── Feature matrix (for DAM spread) ──────────────────────────────────────────
 with st.spinner("Loading market data for DAM spread estimation…"):
-    _feat = assemble_features(years=3)
+    _feat = load_feature_matrix(years=3)
 
 _spread = _dam_spread_from_features(_feat)
 if _spread["fallback"]:
     st.caption(
         "DAM spread estimated from Nordic historical averages (€22/MWh achievable, top-20% filter). "
-        "Feature matrix unavailable. Visit Layer 2 first to populate. FCR revenues are unaffected."
+        "The NO2 price history is unavailable right now. FCR revenues are unaffected."
     )
 else:
     st.caption(
@@ -449,9 +449,9 @@ _wf_measure = ["absolute"]
 _wf_measure += ["relative"] * (len(_wf_labels) - 3)
 _wf_measure += ["relative", "relative", "total"]
 
-_wf_colors = ["#3fb950"]  # Revenue
+_wf_colors = ["#2f7a47"]  # Revenue
 for _lab in _wf_labels[1:-3]:
-    _wf_colors.append(_C.get(_lab.lower().replace(" ", "_").replace("-", "_"), "#58a6ff"))
+    _wf_colors.append(_C.get(_lab.lower().replace(" ", "_").replace("-", "_"), "#2f45c6"))
 _wf_colors += [_C["opex"], _C["depr"], "#ffffff"]
 
 _fig_wf = go.Figure(go.Waterfall(
@@ -460,9 +460,9 @@ _fig_wf = go.Figure(go.Waterfall(
     x=_wf_labels,
     y=_wf_vals,
     connector=dict(line=dict(color=CHART["axis"], width=1)),
-    increasing=dict(marker=dict(color="#3fb950")),
-    decreasing=dict(marker=dict(color="#f85149")),
-    totals=dict(marker=dict(color="#58a6ff")),
+    increasing=dict(marker=dict(color="#2f7a47")),
+    decreasing=dict(marker=dict(color="#c2391f")),
+    totals=dict(marker=dict(color="#2f45c6")),
     texttemplate="€%{y:,.0f}",
     textposition="outside",
     textfont=dict(size=9, color=CHART["text"]),
@@ -496,13 +496,13 @@ _fig_cum = go.Figure()
 _fig_cum.add_trace(go.Scatter(
     x=_yr_axis, y=_cumud,
     name="Cumulative cash flow (undiscounted)",
-    line=dict(color="#58a6ff", width=2),
+    line=dict(color="#2f45c6", width=2),
     hovertemplate="Year %{x}: €%{y:,.0f}<extra></extra>",
 ))
 _fig_cum.add_trace(go.Scatter(
     x=_yr_axis, y=_cumnpv,
     name=f"Cumulative NPV (@ {_disc_pct:.0f}% discount)",
-    line=dict(color="#d4ac3a", width=2, dash="dot"),
+    line=dict(color="#a86a12", width=2, dash="dot"),
     hovertemplate="Year %{x} NPV: €%{y:,.0f}<extra></extra>",
 ))
 _fig_cum.add_hline(y=0, line=dict(color=CHART["zero"], width=1.2))
@@ -511,9 +511,9 @@ _fig_cum.add_hline(y=0, line=dict(color=CHART["zero"], width=1.2))
 _be = _m.get("breakeven_yr")
 if _be is not None and _be <= _lifetime:
     _fig_cum.add_vline(
-        x=_be, line=dict(color="#3fb950", width=1.5, dash="dot"),
+        x=_be, line=dict(color="#2f7a47", width=1.5, dash="dot"),
         annotation_text=f"  Breakeven yr {_be:.1f}",
-        annotation_font=dict(color="#3fb950", size=10),
+        annotation_font=dict(color="#2f7a47", size=10),
         annotation_position="top right",
     )
 

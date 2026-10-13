@@ -4,6 +4,7 @@ Norwegian hydro reservoir filling level fetcher via ENTSO-E.
 Uses the Hydro Reservoirs & Water Value data (document type B31, EIC 10YNO-0--------C).
 Returns weekly filling levels for Norway aggregated, with historical percentile bands.
 """
+from data.deadline import call_with_deadline
 from config.settings import ENTSOE_TIMEOUT_S
 import os
 import pandas as pd
@@ -48,7 +49,8 @@ def fetch_hydro_reservoirs(years: int = 6) -> pd.DataFrame:
     start = today - pd.Timedelta(days=365 * years)
 
     try:
-        raw = client.query_aggregate_water_reservoirs_and_hydro_storage(
+        raw = call_with_deadline(
+            client.query_aggregate_water_reservoirs_and_hydro_storage,
             country_code=NO_EIC,
             start=start,
             end=today,

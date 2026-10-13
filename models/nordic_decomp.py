@@ -41,10 +41,10 @@ FACTOR_LABELS: dict[str, str] = {
 }
 
 FACTOR_COLORS: dict[str, str] = {
-    "nl":          "#58a6ff",
-    "ttf":         "#e07b39",
-    "hydro_pct":   "#3fb950",
-    "de_wind_gwh": "#a371f7",
+    "nl":          "#2f45c6",
+    "ttf":         "#c2611a",
+    "hydro_pct":   "#2f7a47",
+    "de_wind_gwh": "#6e4a9e",
 }
 
 
@@ -214,7 +214,7 @@ def make_beta_chart(
 
     for col in feature_cols:
         label = FACTOR_LABELS.get(col, col)
-        color = FACTOR_COLORS.get(col, "#8b949e")
+        color = FACTOR_COLORS.get(col, "#667b83")
         fig.add_trace(go.Scatter(
             x=valid["date"],
             y=valid[f"beta_{col}"],
@@ -261,7 +261,7 @@ def make_contribution_bar(
     labels = [FACTOR_LABELS.get(k, k) for k in contributions]
     values = list(contributions.values())
     colors = [
-        (FACTOR_COLORS.get(k, "#8b949e") if v >= 0 else "#f85149")
+        (FACTOR_COLORS.get(k, "#667b83") if v >= 0 else "#c2391f")
         for k, v in contributions.items()
     ]
 
@@ -277,9 +277,9 @@ def make_contribution_bar(
     if no2_actual is not None:
         fig.add_hline(
             y=no2_actual,
-            line=dict(color="#e6edf3", width=1.5, dash="dot"),
+            line=dict(color="#132f38", width=1.5, dash="dot"),
             annotation_text=f"NO2 actual: €{no2_actual:.1f}/MWh",
-            annotation_font=dict(color="#e6edf3", size=11),
+            annotation_font=dict(color="#132f38", size=11),
             annotation_position="top right",
         )
 

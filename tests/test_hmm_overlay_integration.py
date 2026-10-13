@@ -1,8 +1,9 @@
 """
 Integration tests for the Layer 4 volatility overlay on top of a real (tiny)
 Gaussian HMM, trained into a temporary directory so the committed weights are
-never touched. Covers the trained path and the degradation paths: feature
-matrix without NO2, and an unloadable weights file (Git LFS pointer).
+never touched. Covers the trained path, the exact JSON round trip of the fitted
+parameters, and the degradation paths: feature matrix without NO2, and an unloadable
+parameters file.
 """
 import numpy as np
 import pandas as pd
@@ -35,7 +36,7 @@ def _synthetic_features(n: int = 260, seed: int = 11) -> pd.DataFrame:
 
 @pytest.fixture()
 def trained_model(tmp_path, monkeypatch):
-    monkeypatch.setattr(hmm_model, "_MODEL_PATH", str(tmp_path / "hmm_model.joblib"))
+    monkeypatch.setattr(hmm_model, "_MODEL_PATH", str(tmp_path / "hmm_params.json"))
     monkeypatch.setattr(hmm_model, "_META_PATH", str(tmp_path / "hmm_meta.json"))
     feats = _synthetic_features()
     meta = hmm_model.train_hmm(feats, FEATURES)
@@ -64,10 +65,25 @@ def test_inference_degrades_when_no2_features_missing(trained_model):
     assert hmm_model.get_regime_history(no_no2).empty
 
 
-def test_inference_degrades_with_lfs_pointer_weights(trained_model):
+def test_inference_degrades_with_unreadable_parameters(trained_model):
     feats, tmp_path = trained_model
-    (tmp_path / "hmm_model.joblib").write_text(
+    (tmp_path / "hmm_params.json").write_text(
         "version https://git-lfs.github.com/spec/v1\noid sha256:abc\nsize 3619\n"
     )
     assert hmm_model.predict_regime(feats) is None
     assert hmm_model.get_regime_history(feats).empty
+
+
+@pytest.mark.parametrize("covariance_type", ["full", "diag", "tied"])
+def test_parameters_round_trip_exactly(covariance_type):
+    from hmmlearn.hmm import GaussianHMM
+
+    feats = _synthetic_features()
+    X = feats[FEATURES].to_numpy(dtype=float)
+    fitted = GaussianHMM(n_components=3, covariance_type=covariance_type,
+                         n_iter=50, random_state=7).fit(X)
+    restored = hmm_model._params_from_json(hmm_model._params_to_json(fitted))
+
+    np.testing.assert_array_equal(restored.predict(X), fitted.predict(X))
+    np.testing.assert_allclose(restored.predict_proba(X), fitted.predict_proba(X), rtol=0, atol=1e-12)
+    assert restored.score(X) == pytest.approx(fitted.score(X), rel=1e-12)

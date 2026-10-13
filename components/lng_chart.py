@@ -5,19 +5,19 @@ Data source: GIE ALSI (same API key as AGSI).
 import plotly.graph_objects as go
 import streamlit as st
 import pandas as pd
-from config.settings import GIE_FAILURE_TTL_S, LNG_COUNTRIES
+from config.settings import GIE_FAILURE_TTL_S, LNG_COUNTRIES, LNG_GB_LAST_REPORTED
 from utils.helpers import has_agsi_key
 from utils.theme import CHART, PLOTLY_TEMPLATE
 
 COUNTRY_COLORS = {
-    "BE": "#e07b39",
-    "NL": "#2a9d8f",
-    "GB": "#b5a642",
-    "FR": "#4361ee",
+    "BE": "#c2611a",
+    "NL": "#0e7a7e",
+    "GB": "#8f8424",
+    "FR": "#2f45c6",
 }
 
 COLORS = {
-    "ma_line":  "#c0392b",
+    "ma_line":  "#b0301c",
     "grid":     CHART["grid"],
     "text":     CHART["text"],
     "bg":       CHART["bg"],
@@ -58,7 +58,6 @@ def render_lng_chart(lng_data: dict):
     for country, label in [
         ("BE", "Belgium (Zeebrugge)"),
         ("NL", "Netherlands (Gate LNG)"),
-        ("GB", "Great Britain"),
         ("FR", "France"),
     ]:
         subset = (
@@ -74,7 +73,7 @@ def render_lng_chart(lng_data: dict):
             x=subset["gasDayStart"],
             y=subset["sendOut"],
             name=label,
-            marker_color=COUNTRY_COLORS.get(country, "#888"),
+            marker_color=COUNTRY_COLORS.get(country, "#667b83"),
             hovertemplate=f"{label}: %{{y:,.1f}} GWh/d<extra></extra>",
         ))
 
@@ -111,21 +110,16 @@ def render_lng_chart(lng_data: dict):
             f"them out until the next successful fetch. {retry_note}"
         )
 
+    st.caption(
+        "Coverage: Belgium, the Netherlands and France. Great Britain's terminals (South Hook, "
+        f"Dragon, Isle of Grain) last reported send-out to GIE ALSI on {LNG_GB_LAST_REPORTED}, at "
+        "the end of the Brexit transition period, so the NW European total excludes them."
+    )
     if missing_countries:
-        _gb_missing = any("Great Britain" in c or c == "GB" for c in missing_countries)
-        if _gb_missing:
-            st.info(
-                "Great Britain (South Hook / Dragon LNG) data unavailable from GIE ALSI. "
-                "South Hook (21 bcm/yr) and Dragon LNG (5 bcm/yr) represent the largest "
-                "NW European LNG import cluster. The total shown above understates true sendout "
-                "until GB data resumes. Check terminal status at alsi.gie.eu.",
-                icon="ℹ️",
-            )
-        else:
-            st.caption(
-                f"No sendout data for: {', '.join(missing_countries)}. "
-                "GIE ALSI may not have reported data for this terminal in the selected window."
-            )
+        st.caption(
+            f"No send-out data for: {', '.join(missing_countries)}. "
+            "GIE ALSI has not reported these terminals in the last 60 days."
+        )
 
     if alert and wow_change is not None:
         st.error(

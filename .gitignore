@@ -18,13 +18,15 @@ env/
 .idea/
 
 # Runtime state. main ignores these caches; hf-deploy commits them so a fresh Space starts
-# warm (.sentiment_history.csv, models/data/features_*, data/generation_cache_v2.csv).
-# Version 1 of the coal cache overstated generation fourfold and is never shipped.
+# warm (.sentiment_history.csv, models/data/features_raw_v2.csv and features_meta.json,
+# data/generation_cache_v2.csv). Version 1 of the coal and feature caches overstated
+# energy fourfold and is never shipped.
 data/generation_cache.csv
-# model weights excluded on hf-deploy: HF rejects binary files (Xet policy)
-# weights are committed on main for Streamlit Cloud live inference
+models/data/features_cache.csv
+# Model weights are committed as JSON; binary formats are no longer written or read.
 models/weights/*.pt
 models/weights/*.joblib
+models/weights/*.tmp
 
 # Project-specific notes (personal context files)
 .extra_context.md

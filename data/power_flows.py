@@ -1,12 +1,23 @@
 """
-ENTSO-E cross-border physical flow fetcher.
-Uses entsoe-py library. Requires ENTSOE_API_KEY in .env.
+ENTSO-E physical cross-border flows (A11) on Norway's external corridors.
+Uses entsoe-py; requires ENTSOE_API_KEY.
+
+ENTSO-E reports each direction of a border separately as average power (MW) per market
+time unit, 15 minutes on these borders. For every corridor the two directions are put on
+the same clock (Europe/Oslo), averaged to hourly power and turned into energy per day, so
+the figures are MWh whatever the resolution. Sign convention: positive is a net import
+into Norway, negative a net export.
 """
-from config.settings import ENTSOE_TIMEOUT_S
-import os
+from __future__ import annotations
+
+from datetime import datetime
+
 import pandas as pd
 import streamlit as st
-from datetime import datetime
+
+from config.settings import ENTSOE_TIMEOUT_S
+from data.deadline import call_with_deadline
+from data.energy_units import MIN_HOURS_PER_DAY, hourly_power
 
 try:
     from entsoe import EntsoePandasClient
@@ -14,97 +25,122 @@ try:
 except ImportError:
     ENTSOE_PY_AVAILABLE = False
 
-# Bidding zone EIC codes
+FLOW_TZ = "Europe/Oslo"
+
+# Bidding zone EIC codes. Germany's side of NordLink is the DE-LU bidding zone; the
+# country code (10Y1001A1001A83F) returns no flow data for this border.
 ZONES = {
-    "NO1": "10YNO-1--------2",
-    "NO2": "10YNO-2--------T",
-    "SE3": "10Y1001A1001A46L",
-    "DE":  "10Y1001A1001A83F",
-    "NL":  "10YNL----------L",
-    "DK1": "10YDK-1--------W",
-    "GB":  "10YGB----------A",
+    "NO1":   "10YNO-1--------2",
+    "NO2":   "10YNO-2--------T",
+    "SE3":   "10Y1001A1001A46L",
+    "DE_LU": "10Y1001A1001A82H",
+    "NL":    "10YNL----------L",
+    "DK1":   "10YDK-1--------W",
+    "GB":    "10YGB----------A",
 }
 
-# Pairs: (from_zone, to_zone) — positive = export from first zone
-FLOW_PAIRS = [
-    ("NO1", "SE3"),
-    ("NO2", "SE3"),
-    ("NO2", "DK1"),
-    ("NO2", "DE"),
-    ("NO2", "NL"),
-    ("NO2", "GB"),   # NSN cable (Kvilldal–Blyth, 1.4 GW) — Marius's handelsbalanse corridor
-    ("NO1", "GB"),
+# Norway's external corridors: (Norwegian zone, neighbour zone, label, link)
+CORRIDORS: list[tuple[str, str, str, str]] = [
+    ("NO1", "SE3",   "NO1→SE3", "AC interconnection (Hasle)"),
+    ("NO2", "DK1",   "NO2→DK1", "Skagerrak 1-4"),
+    ("NO2", "NL",    "NO2→NL",  "NorNed"),
+    ("NO2", "DE_LU", "NO2→DE",  "NordLink"),
+    ("NO2", "GB",    "NO2→GB",  "North Sea Link"),
 ]
+FLOW_PAIRS = [(no, nb) for no, nb, _, _ in CORRIDORS]
+
+_COLUMNS = ["date", "pair", "net_flow_mwh", "import_mwh", "export_mwh", "abs_net_mwh"]
 
 
 def _client():
+    import os
     key = os.getenv("ENTSOE_API_KEY", "")
     if not key or not ENTSOE_PY_AVAILABLE:
         return None
     return EntsoePandasClient(api_key=key, timeout=ENTSOE_TIMEOUT_S)
 
 
+def corridor_daily(export_mw: pd.Series, import_mw: pd.Series, label: str) -> pd.DataFrame:
+    """Daily energy for one corridor from its two directional power series.
+
+    ``export_mw`` flows out of Norway and ``import_mw`` into it, each with a tz-aware index.
+    An hour where only one direction reported counts the other as zero (ENTSO-E reports
+    the idle direction as 0, so a gap there is a publication gap). Days with fewer than
+    ``MIN_HOURS_PER_DAY`` hours are left out. Returns the columns in ``_COLUMNS``.
+    """
+    parts = {}
+    if not export_mw.empty:
+        parts["exp"] = hourly_power(export_mw.astype(float), FLOW_TZ)
+    if not import_mw.empty:
+        parts["imp"] = hourly_power(import_mw.astype(float), FLOW_TZ)
+    if not parts:
+        return pd.DataFrame(columns=_COLUMNS)
+    hours = pd.concat(parts, axis=1)
+    for col in ("exp", "imp"):
+        if col not in hours.columns:
+            hours[col] = float("nan")
+    reported = hours.notna().any(axis=1)
+    hours = hours[reported].fillna(0.0)
+    if hours.empty:
+        return pd.DataFrame(columns=_COLUMNS)
+    hours["net"] = hours["imp"] - hours["exp"]
+    hours["abs_net"] = hours["net"].abs()
+    counts = reported[reported].resample("D").sum()
+    daily = hours.resample("D").sum()
+    daily = daily[counts.reindex(daily.index, fill_value=0) >= MIN_HOURS_PER_DAY]
+    if daily.empty:
+        return pd.DataFrame(columns=_COLUMNS)
+    return pd.DataFrame({
+        "date":         daily.index.tz_localize(None).date,
+        "pair":         label,
+        "net_flow_mwh": daily["net"].round(1).to_numpy(),
+        "import_mwh":   daily["imp"].round(1).to_numpy(),
+        "export_mwh":   daily["exp"].round(1).to_numpy(),
+        "abs_net_mwh":  daily["abs_net"].round(1).to_numpy(),
+    })
+
+
+def _directional(client, frm: str, to: str, start, end) -> pd.Series:
+    try:
+        s = call_with_deadline(client.query_crossborder_flows, ZONES[frm], ZONES[to], start=start, end=end)
+    except Exception as exc:
+        import sys
+        print(f"[flows] ENTSO-E {frm}->{to} unavailable: {type(exc).__name__}", file=sys.stderr)
+        return pd.Series(dtype=float)
+    if isinstance(s, pd.DataFrame):
+        s = s.iloc[:, 0]
+    return pd.to_numeric(s, errors="coerce").dropna()
+
+
 @st.cache_data(ttl=3600)
 def fetch_all_flows(days: int = 30) -> pd.DataFrame:
-    """Fetch net daily cross-border flows for Nordic corridor pairs."""
+    """Net daily flows (MWh) on Norway's external corridors over the last ``days`` days."""
     client = _client()
     if client is None:
-        return pd.DataFrame()
+        return pd.DataFrame(columns=_COLUMNS)
 
-    today = pd.Timestamp.now(tz="Europe/Oslo").normalize()
-    start = today - pd.Timedelta(days=days)
+    end = pd.Timestamp.now(tz=FLOW_TZ).normalize()
+    start = end - pd.Timedelta(days=days)
 
-    records = []
-    for zone_a, zone_b in FLOW_PAIRS:
-        label = f"{zone_a}→{zone_b}"
-        eic_a = ZONES[zone_a]
-        eic_b = ZONES[zone_b]
-        try:
-            # Export: A → B
-            exp = client.query_crossborder_flows(
-                country_code_from=eic_a,
-                country_code_to=eic_b,
-                start=start,
-                end=today,
-            )
-            # Import: B → A
-            imp = client.query_crossborder_flows(
-                country_code_from=eic_b,
-                country_code_to=eic_a,
-                start=start,
-                end=today,
-            )
-            # Resample to daily, net = import - export (positive = net import into A)
-            if not exp.empty and not imp.empty:
-                net = imp.resample("D").sum() - exp.resample("D").sum()
-            elif not imp.empty:
-                net = imp.resample("D").sum()
-            elif not exp.empty:
-                net = -exp.resample("D").sum()
-            else:
-                continue
+    # Ten directional requests, five at a time (ENTSO-E can take tens of seconds each)
+    from concurrent.futures import ThreadPoolExecutor
+    legs = [(a, b) for no_zone, nb_zone, _, _ in CORRIDORS for a, b in ((no_zone, nb_zone), (nb_zone, no_zone))]
+    with ThreadPoolExecutor(max_workers=5) as ex:
+        series = dict(zip(legs, ex.map(lambda leg: _directional(client, leg[0], leg[1], start, end), legs)))
 
-            for date, val in net.items():
-                records.append({"date": date.date(), "pair": label, "net_flow_mwh": float(val)})
+    frames = []
+    for no_zone, nb_zone, label, _ in CORRIDORS:
+        daily = corridor_daily(series[(no_zone, nb_zone)], series[(nb_zone, no_zone)], label)
+        if not daily.empty:
+            frames.append(daily)
 
-        except Exception as _exc:
-            import sys
-            print(f"[flows] ENTSO-E pair {zone_a}→{zone_b} failed: {type(_exc).__name__}: {_exc}",
-                  file=sys.stderr)
-            continue
-
-    if not records:
-        return pd.DataFrame()
-
-    return pd.DataFrame(records).sort_values(["pair", "date"]).reset_index(drop=True)
+    if not frames:
+        return pd.DataFrame(columns=_COLUMNS)
+    return pd.concat(frames, ignore_index=True).sort_values(["pair", "date"]).reset_index(drop=True)
 
 
 def get_flow_data() -> dict:
     df = fetch_all_flows()
-    n_pairs = len(FLOW_PAIRS)
-    n_ok    = df["pair"].nunique() if not df.empty else 0
-    source  = (
-        f"ENTSO-E ({n_ok}/{n_pairs} pairs)"
-        if n_ok > 0 else "unavailable"
-    )
+    n_ok = df["pair"].nunique() if not df.empty else 0
+    source = f"ENTSO-E ({n_ok}/{len(CORRIDORS)} corridors)" if n_ok > 0 else "unavailable"
     return {"flows": df, "source": source, "fetched_at": datetime.utcnow()}

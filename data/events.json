@@ -197,6 +197,14 @@
     "source": "https://www.euronews.com/2026/09/27/eu-tells-countries-to-curb-energy-demand-as-gas-prices-face-winter-squeeze"
   },
   {
+    "date": "2026-10-08",
+    "label": "ENTSOG: winter covered despite low storage",
+    "description": "ENTSOG's Winter Supply Outlook 2026/27 and the Commission's Gas Coordination Group conclude that the EU gas system can meet winter demand even with storage well below historical levels, provided LNG imports rise to offset it; the Commission keeps storage, supply and prices under close watch through the winter.",
+    "category": "policy",
+    "impact": "warn",
+    "source": "https://energy.ec.europa.eu/news/eu-gas-system-prepared-winter-despite-lower-storage-levels-2026-10-08_en"
+  },
+  {
     "date": "2026-10-09",
     "label": "IRGC strikes tanker in Hormuz",
     "description": "The IRGC strikes the tanker MV Sun Shine in the southern Strait of Hormuz for using an unauthorised route and threatens vessels beyond the strait. At least 12 incidents against tankers and gas carriers were recorded from 28 September to 5 October, the highest weekly count since the war began; US Central Command says the main lanes are cleared of mines.",

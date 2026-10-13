@@ -8,13 +8,13 @@ import pandas as pd
 from utils.theme import CHART, PLOTLY_TEMPLATE
 
 COLORS = {
-    "hard_coal": "#4b5563",   # dark slate (sort kull); near-black reads as empty on the dark panel
-    "lignite":   "#c0754a",   # amber-brown (brunkull)
+    "hard_coal": "#667b83",   # dark slate (sort kull); near-black reads as empty on the dark panel
+    "lignite":   "#b0623a",   # amber-brown (brunkull)
     "grid":      CHART["grid"],
     "text":      CHART["text"],
     "bg":        CHART["bg"],
     "panel_bg":  CHART["panel_bg"],
-    "ttf_line":  "#e8c547",
+    "ttf_line":  "#b08d00",
 }
 
 

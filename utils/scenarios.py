@@ -6,7 +6,9 @@ from __future__ import annotations
 from datetime import date
 import pandas as pd
 
-# EU storage regulation target used in the commentary: 90% full by 1 November.
+# EU storage target used in the commentary: 90% full on any day between 1 October and
+# 1 December (Regulation (EU) 2022/1032 as amended in 2025). Refill pace is measured to
+# 1 November, the usual end of net injections.
 STORAGE_TARGET_PCT = 90.0
 
 
@@ -45,7 +47,8 @@ def storage_status(
                     f"next summer's refill requirement grows with every week of deficit. "
                 )
                 + f"A cold snap or LNG supply disruption could rapidly tighten balances. "
-                f"Watch the EU storage target ({STORAGE_TARGET_PCT:.0f}% by 1 November). The gap to target is significant."
+                f"Watch the EU storage target ({STORAGE_TARGET_PCT:.0f}% on any day between 1 October and 1 December). "
+                f"The gap to target is significant."
             ),
         )
     elif gap_to_mean < -15:
@@ -55,7 +58,7 @@ def storage_status(
             (
                 f"Storage is {abs(gap_to_mean):.1f}pp below the 5-year average for this date. "
                 f"While above the historical minimum, the pace of injection required to reach "
-                f"{STORAGE_TARGET_PCT:.0f}% by 1 November is well above seasonal norms. "
+                f"{STORAGE_TARGET_PCT:.0f}% within the EU target window (1 October to 1 December) is well above seasonal norms. "
                 + (
                     "Higher TTF prices are likely to incentivise LNG cargoes and pipeline volumes."
                     if injecting else
@@ -121,9 +124,10 @@ def storage_refill_pace(
     }
     if required <= 0 or bands is None or bands.empty:
         return out
+    from data.gas_storage import calendar_doy
     by_doy = bands.set_index("day_of_year")["mean"]
-    today_doy = pd.Timestamp(today).dayofyear
-    nov1_doy = pd.Timestamp(nov1).dayofyear
+    today_doy = calendar_doy(today)
+    nov1_doy = calendar_doy(nov1)
     if today_doy not in by_doy.index or nov1_doy not in by_doy.index:
         return out
     norm = float(by_doy.loc[nov1_doy]) - float(by_doy.loc[today_doy])
@@ -196,13 +200,15 @@ def ttf_status(price: float, ma30: float, ma90: float, spike: bool, spike_pct: f
 
 # ── Nordic–Continental Price Spread ─────────────────────────────────────────
 
-def spread_status(nordic_avg: float, continental_avg: float) -> tuple[str, str, str]:
+def spread_status(nordic_avg: float, continental_avg: float,
+                  continental_label: str = "Continental") -> tuple[str, str, str]:
     spread = continental_avg - nordic_avg   # positive = Continent more expensive
+    cl = continental_label
 
     if spread > 25:
         return (
             "warn",
-            f"Wide Nordic-NL spread: NL €{spread:.0f}/MWh above Nordic (DE-LU unavailable, NL used as proxy)",
+            f"Wide Nordic-Continental spread: {cl} €{spread:.0f}/MWh above Nordic",
             (
                 f"A spread of this magnitude implies interconnectors (NordLink, NorNed, NSN, NordBalt) "
                 f"are likely operating at or near full capacity. "
@@ -213,18 +219,18 @@ def spread_status(nordic_avg: float, continental_avg: float) -> tuple[str, str, 
     elif spread > 10:
         return (
             "ok",
-            f"Moderate export premium: NL €{spread:.0f}/MWh above Nordic",
+            f"Moderate export premium: {cl} €{spread:.0f}/MWh above Nordic",
             (
-                f"NL prices are materially above Nordic, providing a clear export incentive "
+                f"{cl} prices are materially above Nordic, providing a clear export incentive "
                 f"for Norwegian hydro. Flows are likely running at high utilisation on key cables."
             ),
         )
     elif spread < -10:
         return (
             "warn",
-            f"Reversed spread: Nordic prices €{abs(spread):.0f}/MWh above NL",
+            f"Reversed spread: Nordic prices €{abs(spread):.0f}/MWh above {cl}",
             (
-                f"Nordic prices above NL is atypical and may signal hydro scarcity "
+                f"Nordic prices above {cl} are atypical and may signal hydro scarcity "
                 f"(low reservoir levels), a cable outage, or unusually high Nordic demand. "
                 f"Check Norwegian reservoir data and interconnector availability."
             ),
@@ -232,7 +238,7 @@ def spread_status(nordic_avg: float, continental_avg: float) -> tuple[str, str, 
     else:
         return (
             "ok",
-            f"Nordic-NL spread narrow at €{spread:+.0f}/MWh",
+            f"Nordic-Continental spread narrow at €{spread:+.0f}/MWh",
             f"Markets are broadly coupled. Normal flow conditions on interconnectors.",
         )
 
@@ -292,6 +298,7 @@ def market_summary(
     de_pct: float | None, de_min: float | None, de_mean: float | None,
     ttf_price: float, ttf_ma30: float,
     nordic_avg: float | None, continental_avg: float | None,
+    continental_label: str = "Continental",
 ) -> str:
     """Generate a one-paragraph market commentary from live data."""
     parts = []
@@ -336,8 +343,8 @@ def market_summary(
         if abs(spread) > 8:
             direction = "above" if spread > 0 else "below"
             parts.append(
-                f"NL day-ahead prices are <strong>€{abs(spread):.0f}/MWh {direction}</strong> the Nordic average "
-                f"(DE-LU unavailable via Nord Pool; NL used as continental proxy), "
+                f"{continental_label} day-ahead prices are <strong>€{abs(spread):.0f}/MWh {direction}</strong> "
+                f"the Nordic average, "
                 f"{'incentivising Norwegian hydro exports' if spread > 0 else 'an unusual reversal suggesting Nordic supply stress'}."
             )
 
