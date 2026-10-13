@@ -130,17 +130,22 @@ ttf_spike_pct = ttf["spike_pct"]
 nordic_avg = continental_avg = None
 continental_label = "Continental"
 if not spot_df.empty:
-    # Latest delivery day with both a Nordic and a Continental price (tomorrow's auction
-    # result can arrive from one source before the other)
-    for latest_date in sorted(spot_df["date"].unique(), reverse=True):
-        latest = spot_df[spot_df["date"] == latest_date].set_index("zone")["price_eur_mwh"]
+    # Latest delivery day with Nordic and Continental prices. Tomorrow's DE-LU price
+    # reaches ENTSO-E later than the Nordic ones, so a day with both DE-LU and NL is
+    # preferred when it is at most one day older than the newest day.
+    _dates = sorted(spot_df["date"].unique(), reverse=True)
+    _by_day = {d: spot_df[spot_df["date"] == d].set_index("zone")["price_eur_mwh"] for d in _dates[:5]}
+    _full = [d for d in _dates[:2] if {"NO1", "NO2", "DE-LU", "NL"} <= set(_by_day[d].index)]
+    _candidates = _full or [d for d in _dates[:5]
+                            if {"NO1", "NO2"} & set(_by_day[d].index) and {"DE-LU", "NL"} & set(_by_day[d].index)]
+    if _candidates:
+        latest_date = _candidates[0]
+        latest = _by_day[latest_date]
         n_zones = [z for z in ["NO1", "NO2"] if z in latest.index]
         c_zones = [z for z in ["DE-LU", "NL"] if z in latest.index]
-        if n_zones and c_zones:
-            nordic_avg      = float(latest[n_zones].mean())
-            continental_avg = float(latest[c_zones].mean())
-            continental_label = "/".join(c_zones)
-            break
+        nordic_avg      = float(latest[n_zones].mean())
+        continental_avg = float(latest[c_zones].mean())
+        continental_label = "/".join(c_zones)
 
 # LNG KPI
 lng_total_today = None

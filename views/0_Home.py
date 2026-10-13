@@ -24,12 +24,14 @@ def _link_prices() -> tuple[dict, dict, str, str | None, str | None]:
     df = fetch_dayahead(("NO2", "DE-LU", "NL"), 7)
     if df.empty:
         return {}, {}, "DE-LU", None, None
-    for day in sorted(df["date"].unique(), reverse=True):
-        row = df[df["date"] == day].set_index("zone")["price_eur_mwh"]
-        if "NO2" not in row.index:
-            continue
-        for zone in ("DE-LU", "NL"):
-            if zone in row.index:
+    days = sorted(df["date"].unique(), reverse=True)
+    rows = {d: df[df["date"] == d].set_index("zone")["price_eur_mwh"] for d in days[:5]}
+    # NordLink when DE-LU is published for one of the two newest days (it reaches ENTSO-E
+    # after the Nordic prices); NorNed otherwise
+    for zone, window in (("DE-LU", days[:2]), ("NL", days[:5])):
+        for day in window:
+            row = rows[day]
+            if "NO2" in row.index and zone in row.index:
                 return ({"NO2": float(row["NO2"])}, {zone: float(row[zone])}, zone,
                         day.strftime("%d %b %Y") if hasattr(day, "strftime") else str(day), None)
     return {}, {}, "DE-LU", None, None
