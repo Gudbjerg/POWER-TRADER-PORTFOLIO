@@ -255,7 +255,7 @@ with tab_geo:
         st.markdown(
             f'<div class="commentary {border_cls}" style="border-left-color:{color};">'
             f'<strong>{date_s}: {ev["label"]}</strong><br>'
-            f'<span style="color:#667b83;font-size:0.78rem;text-transform:uppercase;'
+            f'<span style="color:#667b83;font-size:0.78rem;'
             f'letter-spacing:.5px;">{cat}</span><br>'
             f'{ev["description"]}</div>',
             unsafe_allow_html=True,

@@ -10,28 +10,27 @@
     "wind_de_z"
   ],
   "n_states": 4,
-  "n_obs": 482,
-  "date_min": "2024-04-08",
-  "date_max": "2026-03-27",
+  "n_obs": 499,
+  "date_min": "2024-10-14",
+  "date_max": "2026-10-08",
   "regime_labels": {
-    "3": "Gas-driven",
-    "1": "Renewables-driven",
-    "2": "Hydro-driven",
-    "0": "Geopolitical stress"
+    "0": "Geopolitical stress",
+    "1": "Hydro-driven",
+    "3": "Renewables-driven",
+    "2": "Gas-driven"
   },
   "state_pcts": {
-    "Geopolitical stress": 27.4,
-    "Renewables-driven": 26.1,
-    "Hydro-driven": 40.2,
-    "Gas-driven": 6.4
+    "Geopolitical stress": 21.6,
+    "Hydro-driven": 11.8,
+    "Gas-driven": 45.3,
+    "Renewables-driven": 21.2
   },
   "state_durations": {
-    "Geopolitical stress": 21.1,
-    "Renewables-driven": 135.0,
-    "Hydro-driven": 37.5,
-    "Gas-driven": 30.0
+    "Geopolitical stress": 103.9,
+    "Hydro-driven": 59.0,
+    "Gas-driven": 113.0,
+    "Renewables-driven": 35.4
   },
-  "log_prob": -5341.77,
-  "trained_at": "2026-04-06T14:43:05.858777",
-  "relabeled_at": "2026-04-06T15:42:43.909426"
+  "log_prob": -5342.82,
+  "trained_at": "2026-10-13T14:29:26.527707"
 }

@@ -456,7 +456,7 @@ _PILL = {
 def _score_card_html(name: str, value: str, direction: str, note: str) -> str:
     pill = _PILL[direction]
     return (
-        f"<div style='background:#f5f7f4;border:1px solid #c5cfca;border-radius:8px;"
+        f"<div style='background:#f5f7f4;border:1px solid #c5cfca;border-radius:3px;"
         f"padding:14px 16px;height:100%;'>"
         f"<div style='color:#667b83;font-size:0.74rem;margin-bottom:4px;'>{name}</div>"
         f"<div style='font-size:1.05rem;font-weight:700;color:#132f38;"

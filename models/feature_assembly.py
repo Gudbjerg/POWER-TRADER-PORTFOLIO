@@ -341,10 +341,11 @@ def features_from_raw(raw: pd.DataFrame) -> pd.DataFrame:
     base["date"] = pd.to_datetime(base["date"])
     base = _compute_features(base)
 
-    # Forward-fill short gaps in optional features (max 5 days)
+    # Forward-fill short gaps in optional features: five days, except hydro, which ENTSO-E
+    # publishes weekly with a lag of up to two weeks and which moves slowly.
     for col in _OPTIONAL_FILLED:
         if col in base.columns:
-            base[col] = base[col].ffill(limit=5)
+            base[col] = base[col].ffill(limit=14 if col.startswith("hydro") else 5)
 
     base = base.dropna(subset=REQUIRED_RAW).reset_index(drop=True)
     base.attrs["coverage_report"] = get_available_feature_sets(base)

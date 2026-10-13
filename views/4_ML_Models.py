@@ -103,22 +103,22 @@ with c1:
 **Architecture:**
 - Two-layer LSTM: 64 units → 32 units, with 0.2 dropout between layers
 - Input window: 21 days of daily features (rolling)
-- Output: scalar next-day average price (regression)
+- Output: next-day change in the average price, added to the last observed price (regression)
 - Framework: PyTorch
 
 **Input features (per day):**
 | Feature | Source | Rationale |
 |---|---|---|
-| Day-ahead price (target zone) | Nord Pool | Autoregressive signal |
+| Day-ahead price (target zone) | ENTSO-E A44 | Autoregressive signal |
 | TTF gas price | Yahoo Finance | Marginal cost driver |
-| Nordic-Continental spread | Nord Pool | Cross-border arbitrage signal |
+| Nordic-Continental spread | ENTSO-E A44 | Cross-border arbitrage signal |
 | Norwegian hydro reservoir level | ENTSO-E B31 | Supply capacity |
-| Wind generation (DE + NO) | ENTSO-E B16 | Displacement of gas plant |
+| Wind generation (DE) | ENTSO-E B18/B19 | Displacement of gas plant |
 | Gas storage fill (EU) | GIE AGSI+ | Supply buffer tightness |
 | Calendar features | Derived | Seasonality, weekday, holiday |
 
 **Training setup:**
-- Sample: 3 years of overlapping daily data (approximately 1,000 observations)
+- Sample: 3 years of daily data on trading days (about 750 observations)
 - Train/validation/test split: 70% / 15% / 15% (time-ordered, no shuffling)
 - Loss: mean absolute error (MAE), robust to outliers vs MSE
 - Optimiser: Adam, learning rate 1e-3 with ReduceLROnPlateau scheduler
@@ -143,8 +143,8 @@ with c2:
     _wind_note = "incl. wind" if _avail.get("wind") else "wind unavailable"
     st.markdown(
         f"""
-<div style="background:#f5f7f4;border:1px solid rgba(19,47,56,0.08);border-radius:8px;padding:16px;margin-bottom:8px;">
-  <div style="color:#2f45c6;font-size:0.72rem;text-transform:uppercase;letter-spacing:1px;font-weight:600;margin-bottom:8px;">Status</div>
+<div style="background:#f5f7f4;border:1px solid rgba(19,47,56,0.08);border-radius:3px;padding:16px;margin-bottom:8px;">
+  <div style="color:#2f45c6;font-size:0.72rem;font-weight:600;margin-bottom:8px;">Status</div>
   <div style="color:{_lstm_status_color};font-size:0.88rem;margin-bottom:12px;">{_lstm_status_label}</div>
   <div style="color:#667b83;font-size:0.82rem;line-height:1.7;">
     Training rows: {_n_rows}<br>
@@ -153,8 +153,8 @@ with c2:
     Wind (ENTSO-E B18/B19): {"available" if _avail.get("wind") else "unavailable"}
   </div>
 </div>
-<div style="background:#f5f7f4;border:1px solid rgba(19,47,56,0.08);border-radius:8px;padding:16px;">
-  <div style="color:#2f45c6;font-size:0.72rem;text-transform:uppercase;letter-spacing:1px;font-weight:600;margin-bottom:8px;">Why This Matters</div>
+<div style="background:#f5f7f4;border:1px solid rgba(19,47,56,0.08);border-radius:3px;padding:16px;">
+  <div style="color:#2f45c6;font-size:0.72rem;font-weight:600;margin-bottom:8px;">Why This Matters</div>
   <div style="color:#667b83;font-size:0.82rem;line-height:1.7;">
     A trader with a directionally accurate price signal (even just 55% correct)
     can size positions on intraday vs day-ahead spreads. The model is not intended to
@@ -325,7 +325,7 @@ with c3:
 |---|---|---|
 | Hydro-driven | High Norwegian reservoir levels, strong exports, low Nordic prices | NO2 at significant discount to NL |
 | Gas-driven | Gas prices dominant, thermal plant on the margin, moderate hydro | NL closely tracks TTF (high R²) |
-| Wind-driven | High wind penetration DE/SE, renewables suppressing midday prices | Intraday price spread very wide; solar cannibalisation effect strong |
+| Renewables-driven | High wind penetration DE/SE, renewables suppressing midday prices | Intraday price spread very wide; solar cannibalisation effect strong |
 | Geopolitical stress | Low storage, tight LNG supply, supply chain disruption | All zones elevated; TTF spike correlation high |
 
 **Architecture:**
@@ -359,8 +359,8 @@ with c4:
     _hmm_feat_list = get_hmm_feature_cols(_features_df) if not _features_df.empty else []
     st.markdown(
         f"""
-<div style="background:#f5f7f4;border:1px solid rgba(19,47,56,0.08);border-radius:8px;padding:16px;margin-bottom:8px;">
-  <div style="color:#2f45c6;font-size:0.72rem;text-transform:uppercase;letter-spacing:1px;font-weight:600;margin-bottom:8px;">Status</div>
+<div style="background:#f5f7f4;border:1px solid rgba(19,47,56,0.08);border-radius:3px;padding:16px;margin-bottom:8px;">
+  <div style="color:#2f45c6;font-size:0.72rem;font-weight:600;margin-bottom:8px;">Status</div>
   <div style="color:{_hmm_status_color};font-size:0.88rem;margin-bottom:12px;">{_hmm_status_label}</div>
   <div style="color:#667b83;font-size:0.82rem;line-height:1.7;">
     Training rows: {_n_rows}<br>
@@ -369,8 +369,8 @@ with c4:
     Wind z-score: {"available" if _avail.get("wind") else "unavailable"}
   </div>
 </div>
-<div style="background:#f5f7f4;border:1px solid rgba(19,47,56,0.08);border-radius:8px;padding:16px;">
-  <div style="color:#2f45c6;font-size:0.72rem;text-transform:uppercase;letter-spacing:1px;font-weight:600;margin-bottom:8px;">Why This Matters</div>
+<div style="background:#f5f7f4;border:1px solid rgba(19,47,56,0.08);border-radius:3px;padding:16px;">
+  <div style="color:#2f45c6;font-size:0.72rem;font-weight:600;margin-bottom:8px;">Why This Matters</div>
   <div style="color:#667b83;font-size:0.82rem;line-height:1.7;">
     Physical traders need to understand which fundamental factor is driving the market
     on any given day. A regime signal compresses multiple data sources into a single
@@ -401,7 +401,7 @@ with st.expander("Live Model 2: Train and Classify", expanded=hmm_is_trained()):
             if _reg:
                 reg_color = _reg["regime_color"]
                 st.markdown(
-                    f"""<div style="background:#f5f7f4;border:2px solid {reg_color};border-radius:8px;
+                    f"""<div style="background:#f5f7f4;border:2px solid {reg_color};border-radius:3px;
                     padding:14px 18px;margin-bottom:12px;display:inline-block;">
                     <span style="color:{reg_color};font-size:1.1rem;font-weight:700;">{_reg["regime"]}</span>
                     <span style="color:#667b83;font-size:0.82rem;margin-left:12px;">
@@ -716,8 +716,8 @@ st.markdown("### Model 3: NLP Energy News Sentiment Signal")
 # Exploratory badge
 st.markdown(
     """<div style="display:inline-block;background:rgba(168,106,18,0.15);border:1px solid rgba(168,106,18,0.4);
-    border-radius:6px;padding:6px 14px;margin-bottom:14px;">
-    <span style="color:#a86a12;font-size:0.78rem;font-weight:600;text-transform:uppercase;letter-spacing:1px;">
+    border-radius:3px;padding:6px 14px;margin-bottom:14px;">
+    <span style="color:#a86a12;font-size:0.78rem;font-weight:600;">
     Exploratory: Live Prototype</span>
     <span style="color:#667b83;font-size:0.78rem;margin-left:10px;">
     Pipeline is running. Scoring builds up over time as headlines accumulate.</span>
@@ -766,8 +766,8 @@ with c6:
     _sent_status = ("Active (experimental)", "#2f7a47") if _TORCH_AVAILABLE else ("Not available here", "#667b83")
     st.markdown(
         f"""
-<div style="background:#f5f7f4;border:1px solid rgba(19,47,56,0.08);border-radius:8px;padding:16px;margin-bottom:8px;">
-  <div style="color:#2f45c6;font-size:0.72rem;text-transform:uppercase;letter-spacing:1px;font-weight:600;margin-bottom:8px;">Status</div>
+<div style="background:#f5f7f4;border:1px solid rgba(19,47,56,0.08);border-radius:3px;padding:16px;margin-bottom:8px;">
+  <div style="color:#2f45c6;font-size:0.72rem;font-weight:600;margin-bottom:8px;">Status</div>
   <div style="color:{_sent_status[1]};font-size:0.88rem;margin-bottom:12px;">{_sent_status[0]}</div>
   <div style="color:#667b83;font-size:0.82rem;line-height:1.7;">
     FinBERT: {_finbert_line}<br>
@@ -777,8 +777,8 @@ with c6:
     ENTSO-E: not required
   </div>
 </div>
-<div style="background:#f5f7f4;border:1px solid rgba(19,47,56,0.08);border-radius:8px;padding:16px;">
-  <div style="color:#2f45c6;font-size:0.72rem;text-transform:uppercase;letter-spacing:1px;font-weight:600;margin-bottom:8px;">Why This Matters</div>
+<div style="background:#f5f7f4;border:1px solid rgba(19,47,56,0.08);border-radius:3px;padding:16px;">
+  <div style="color:#2f45c6;font-size:0.72rem;font-weight:600;margin-bottom:8px;">Why This Matters</div>
   <div style="color:#667b83;font-size:0.82rem;line-height:1.7;">
     Energy prices react to news faster than fundamentals update. The 2026 Hormuz
     escalation (a 40% TTF spike in three days) would have been detectable as a

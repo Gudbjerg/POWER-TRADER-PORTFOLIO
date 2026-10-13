@@ -52,10 +52,9 @@ GitHub.
 The deploy therefore pushes one new commit whose tree is the `hf-deploy` tree minus
 every binary file, on top of the Space's previous head, so no pushed commit ever
 contains a binary. The Space needs none of them: the screenshots are for GitHub, and
-the `models/weights/*.pt` and `*.joblib` files are in `.gitignore` on `hf-deploy`.
-
-Layer 4 (LSTM/HMM) shows "Ready to train" on the live Space because no weights are
-deployed. Layers 1 to 3 are unaffected.
+model weights are stored as JSON (`models/weights/lstm_weights.json` and
+`hmm_params.json`), which are text files and deploy normally, so the Space opens Layer 4
+with trained models.
 
 ---
 
@@ -64,24 +63,29 @@ deployed. Layers 1 to 3 are unaffected.
 | Branch | Remote | Purpose |
 |--------|--------|---------|
 | `main` | `origin/main` (GitHub) | Primary development; a Streamlit Community Cloud app also builds from it (sign-in required, not linked publicly) |
-| `hf-deploy` | `origin/hf-deploy` (GitHub) | Mirror of `main` plus HF-only files: warm-start caches and HF config, no model weights |
+| `hf-deploy` | `origin/hf-deploy` (GitHub) | Mirror of `main` plus HF-only files: warm-start caches (coal generation, feature matrix, sentiment history) and HF config |
 | `hf-squash-*` | `hf/main` (HuggingFace) | Local record of each HF deploy commit |
 
 ---
 
 ## Cache refresh (monthly)
 
-`hf-deploy` ships `data/generation_cache_v2.csv` (German coal generation since 2019) so a
-fresh Space only fetches the days since the cache ends instead of the whole history. The
-file is ignored on `main`, where the local app keeps it up to date. Commit it from a
+`hf-deploy` ships three warm-start files so a fresh Space only fetches what is newer
+than them: `data/generation_cache_v2.csv` (German coal generation since 2019),
+`models/data/features_raw_v2.csv` with `features_meta.json` (the raw daily inputs of the
+feature matrix) and `.sentiment_history.csv` (FinBERT-scored headlines). They are ignored
+on `main`, where the local app keeps them up to date. Commit it from a
 separate worktree: checking out `main` again in the main checkout would delete the ignored
 local copy, because `hf-deploy` tracks it.
 
 ```bash
 git worktree add ../hf-deploy-wt hf-deploy
 cp data/generation_cache_v2.csv ../hf-deploy-wt/data/
-git -C ../hf-deploy-wt add data/generation_cache_v2.csv
-git -C ../hf-deploy-wt commit -m "Refresh the bundled coal generation cache"
+cp models/data/features_raw_v2.csv models/data/features_meta.json ../hf-deploy-wt/models/data/
+cp .sentiment_history.csv ../hf-deploy-wt/
+git -C ../hf-deploy-wt add -f data/generation_cache_v2.csv models/data/features_raw_v2.csv \
+  models/data/features_meta.json .sentiment_history.csv
+git -C ../hf-deploy-wt commit -m "Refresh the bundled warm-start caches"
 git -C ../hf-deploy-wt push origin hf-deploy
 git worktree remove ../hf-deploy-wt
 # Then run step 3 of the close-of-session checklist above
@@ -139,6 +143,8 @@ Everything confirmed live on HuggingFace Space and `origin/main`. Rows labelled 
 | v2 · Energy Globe | Page 8 | CesiumJS 3D globe embedded in the platform (`views/8_Energy_Globe.py`): Norwegian shelf facilities and export pipelines (Sodir, NLOD), 38 European LNG import terminals (GEM, CC BY 4.0) with live GIE ALSI send-out, utilisation and tank stocks per gas day, 10 maritime chokepoints with EIA flows; curated views linked from the overview, Layer 1, Layer 3 and the Risk Dashboard (`data/energy_globe.py`, `components/energy_globe.py`, `data/globe/`) |
 | v2.1 · Coal generation | Layer 1 | German hard coal and lignite are energy from hourly mean power: the 15-minute ENTSO-E A75 readings had been summed as if they were hourly MWh, which overstated every coal figure fourfold. The disk cache moved to `generation_cache_v2.csv` (version 1 is no longer read), fresh rows replace cached ones in the seven-day overlap, days still being published are left out, and `hf-deploy` ships the cache so the Live Monitor renders on a fresh Space without fetching the history since 2019 first |
 | v2.1 · GIE resilience | Layer 1, 2, 4, 5 | AGSI+ and ALSI requests share `data/gie.py`: HTTP 429 (GIE allows 60 requests per minute per address, and the Space shares its egress address with other tenants) and gateway errors are retried with the server's Retry-After, a history that fails part-way raises instead of returning a partial series, and a failed fetch is remembered for five minutes instead of an hour. The Live Monitor no longer says "AGSI key required" when the key is set but GIE did not answer, and the NW EU LNG send-out card shows n/a, naming the missing country, instead of a partial total |
+| v2.2 · Data audit | All pages | Full audit of every page and data source. Energy from 15-minute ENTSO-E series is hourly mean power summed per day (power flows, wind); Norway's real corridors with the DE-LU code for NordLink and one clock for both directions; one shared, hourly feature matrix for Quant, ML, Mispricing, Risk and BESS with an incremental tail refresh and a schema-2 cache (`features_raw_v2.csv`); day-ahead prices from ENTSO-E first (NO1-NO5, DE-LU) with Nord Pool for SYS and gaps; amended EU storage target (90% on any day 1 Oct to 1 Dec, 10 pp flexibility, to end-2027) and leap-year-safe seasonal bands; merit order on available capacity with today's wind and solar forecast; GB LNG excluded (no ALSI data since end-2020); Henry Hub replaces the dead API2 coal ticker; LSTM on next-day price changes and LSTM/HMM weights as JSON; FinBERT on the Space with a background backfill from paged feed archives; visitor-facing wording in place of developer messages |
+| v2.2 · Survey-sheet design | All pages | New visual identity in `utils/theme.py` and `.streamlit/config.toml`: cool engineering paper with a measuring grid, petrol ink, fjord teal (Nordic hydro) and cobalt (Continental gas), Big Shoulders Display and Archivo; busbar page headers, meters instead of cards, register tabs, a NordLink interconnector hero with live prices and a single-line diagram of the platform on the landing page |
 
 ---
 
