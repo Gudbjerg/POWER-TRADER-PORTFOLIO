@@ -14,6 +14,8 @@ from config.settings import ENTSOE_TIMEOUT_S
 import os
 import pandas as pd
 import streamlit as st
+
+from data.deadline import cache_unless_empty
 from datetime import datetime, timedelta
 
 try:
@@ -140,7 +142,7 @@ def _fetch_energy_charts(days: int) -> pd.DataFrame:
     return merged.groupby("hour")[["price", "solar_mw"]].mean().reset_index()
 
 
-@st.cache_data(ttl=3600)
+@cache_unless_empty(ttl=3600)
 def fetch_solar_cannibalisation(days: int = 14) -> dict:
     """
     Fetch hourly solar cannibalisation data, trying ENTSO-E first.

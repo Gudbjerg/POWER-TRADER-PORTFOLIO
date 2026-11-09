@@ -33,3 +33,59 @@ def call_with_deadline(fn: Callable[..., Any], *args, seconds: float = ENTSOE_DE
     if "error" in box:
         raise box["error"]
     return box.get("value")
+
+
+class _NoData(Exception):
+    """Raised inside a cached loader so an empty result is not cached for the full lifetime."""
+
+    def __init__(self, value: Any):
+        super().__init__("no data")
+        self.value = value
+
+
+def _is_empty(value: Any) -> bool:
+    import pandas as pd
+    if value is None:
+        return True
+    if isinstance(value, pd.DataFrame):
+        return value.empty
+    if isinstance(value, dict):
+        frames = [v for v in value.values() if isinstance(v, pd.DataFrame)]
+        return bool(frames) and all(f.empty for f in frames)
+    return False
+
+
+def cache_unless_empty(ttl: int = 3600, retry_after: int = 300):
+    """Like ``st.cache_data(ttl=ttl)``, but an empty result is remembered only for ``retry_after``.
+
+    A source that is briefly down (ENTSO-E often is) would otherwise blank its panel for the
+    whole cache lifetime. A full result is cached for ``ttl``; an empty one (an empty frame,
+    or a dict whose frames are all empty) is served for at most ``retry_after`` seconds and
+    then fetched again. Streamlit does not cache a call that raises, which is what keeps the
+    empty result out of the long-lived cache.
+    """
+    import streamlit as st
+
+    def deco(fn):
+        def _full(*args, **kwargs):
+            out = fn(*args, **kwargs)
+            if _is_empty(out):
+                raise _NoData(out)
+            return out
+
+        def wrapper(*args, **kwargs):
+            try:
+                return _full(*args, **kwargs)
+            except _NoData as empty:
+                return empty.value
+
+        # Streamlit keys a cache on the function's module and qualified name. Both inner
+        # functions are given the loader's own, so two loaders never share a cache entry.
+        for inner, suffix in ((_full, "__full"), (wrapper, "")):
+            inner.__module__ = fn.__module__
+            inner.__qualname__ = fn.__qualname__ + suffix
+            inner.__name__ = fn.__name__ + suffix
+        _full = st.cache_data(ttl=ttl, show_spinner=False)(_full)
+        wrapper.__doc__ = fn.__doc__
+        return st.cache_data(ttl=retry_after, show_spinner=False)(wrapper)
+    return deco
