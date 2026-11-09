@@ -50,20 +50,29 @@ def fetch_hydro_reservoirs(years: int = 6) -> pd.DataFrame:
     today = pd.Timestamp.now(tz="Europe/Oslo").normalize()
     start = today - pd.Timedelta(days=365 * years)
 
-    try:
-        raw = call_with_deadline(
-            client.query_aggregate_water_reservoirs_and_hydro_storage,
-            country_code=NO_EIC,
-            start=start,
-            end=today,
-        )
-    except Exception as _exc:
-        import sys
-        print(f"[hydro] ENTSO-E B31 failed: {type(_exc).__name__}", file=sys.stderr)   # no message: it can carry the API token
-        return pd.DataFrame()
+    # One request for six years regularly runs past the deadline on a loaded Transparency
+    # Platform; yearly requests side by side each finish well inside it. A year that still
+    # fails is left out (the percentile bands then rest on the other years).
+    from concurrent.futures import ThreadPoolExecutor
 
-    if raw is None or (hasattr(raw, "empty") and raw.empty):
+    edges = [start + pd.Timedelta(days=365 * i) for i in range(years)] + [today]
+
+    def _year(lo, hi):
+        try:
+            return call_with_deadline(client.query_aggregate_water_reservoirs_and_hydro_storage,
+                                      country_code=NO_EIC, start=lo, end=hi)
+        except Exception as _exc:
+            import sys
+            print(f"[hydro] ENTSO-E B31 {lo:%Y-%m} failed: {type(_exc).__name__}", file=sys.stderr)  # no message: it can carry the API token
+            return None
+
+    with ThreadPoolExecutor(max_workers=3) as pool:
+        parts = list(pool.map(lambda e: _year(*e), zip(edges[:-1], edges[1:])))
+    parts = [x for x in parts if x is not None and not (hasattr(x, "empty") and x.empty)]
+    if not parts:
         return pd.DataFrame()
+    raw = pd.concat(parts)
+    raw = raw[~raw.index.duplicated(keep="last")].sort_index()
 
     # entsoe-py may return a Series or DataFrame
     if isinstance(raw, pd.Series):
