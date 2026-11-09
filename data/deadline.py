@@ -64,24 +64,28 @@ def cache_unless_empty(ttl: int = 3600, retry_after: int = 300):
     then fetched again. Streamlit does not cache a call that raises, which is what keeps the
     empty result out of the long-lived cache.
     """
-    import functools
     import streamlit as st
 
     def deco(fn):
-        @st.cache_data(ttl=ttl, show_spinner=False)
         def _full(*args, **kwargs):
             out = fn(*args, **kwargs)
             if _is_empty(out):
                 raise _NoData(out)
             return out
 
-        @st.cache_data(ttl=retry_after, show_spinner=False)
-        @functools.wraps(fn)
         def wrapper(*args, **kwargs):
             try:
                 return _full(*args, **kwargs)
             except _NoData as empty:
                 return empty.value
 
-        return wrapper
+        # Streamlit keys a cache on the function's module and qualified name. Both inner
+        # functions are given the loader's own, so two loaders never share a cache entry.
+        for inner, suffix in ((_full, "__full"), (wrapper, "")):
+            inner.__module__ = fn.__module__
+            inner.__qualname__ = fn.__qualname__ + suffix
+            inner.__name__ = fn.__name__ + suffix
+        _full = st.cache_data(ttl=ttl, show_spinner=False)(_full)
+        wrapper.__doc__ = fn.__doc__
+        return st.cache_data(ttl=retry_after, show_spinner=False)(wrapper)
     return deco
