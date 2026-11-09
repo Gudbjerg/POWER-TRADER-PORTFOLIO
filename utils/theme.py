@@ -533,6 +533,9 @@ section[data-testid="stSidebar"] h3, section[data-testid="stSidebar"] h4 {
 
 /* Interconnector (landing page hero) */
 .ptp-ic { margin-top: 1.6rem; }
+/* The cause-and-effect chain keeps a legible size on phones and scrolls sideways instead */
+.ptp-chain { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+.ptp-chain svg { min-width: 640px; }
 .ptp-ic svg { width: 100%; height: auto; display: block; overflow: visible; }
 .ptp-ic__flow { stroke-dasharray: 14 10; animation: ptp-flow 1.6s linear infinite; }
 .ptp-ic__flow--rev { animation-direction: reverse; }

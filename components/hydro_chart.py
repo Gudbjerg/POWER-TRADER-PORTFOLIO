@@ -115,25 +115,25 @@ def render_hydro_chart(hydro_data: dict):
                 if latest_twh < p10:
                     st.error(
                         f"Hydro alert: Norwegian reservoirs at {latest_twh:.1f} TWh "
-                        f"({latest_date.strftime('%b %d')}), below the historical 10th percentile "
+                        f"(week {latest_date.isocalendar().week}, {latest_date:%d %b} to {latest_date + pd.Timedelta(days=6):%d %b}), below the historical 10th percentile "
                         f"({p10:.1f} TWh). Producers value the remaining water higher, which "
                         "lifts NO1/NO2 prices toward the Continent and narrows the export margin."
                     )
                 elif latest_twh < p50:
                     st.warning(
-                        f"Reservoirs at {latest_twh:.1f} TWh ({latest_date.strftime('%b %d')}), "
+                        f"Reservoirs at {latest_twh:.1f} TWh (week {latest_date.isocalendar().week}, {latest_date:%d %b} to {latest_date + pd.Timedelta(days=6):%d %b}), "
                         f"{abs(diff):.1f} TWh below the historical median ({p50:.1f} TWh). "
                         "Below-average hydro supports higher Nordic prices."
                     )
                 else:
                     st.caption(
-                        f"Reservoirs at {latest_twh:.1f} TWh ({latest_date.strftime('%b %d')}), "
+                        f"Reservoirs at {latest_twh:.1f} TWh (week {latest_date.isocalendar().week}, {latest_date:%d %b} to {latest_date + pd.Timedelta(days=6):%d %b}), "
                         f"{abs(diff):.1f} TWh {rel} the historical median ({p50:.1f} TWh). "
                         f"{'Supportive for Norwegian exports.' if diff >= 0 else 'Monitor for price implications.'}"
                     )
         else:
             st.caption(
-                f"Reservoir content: {latest_twh:.1f} TWh as of {latest_date.strftime('%b %d, %Y')}."
+                f"Reservoir content: {latest_twh:.1f} TWh in week {latest_date.isocalendar().week} ({latest_date:%d %b} to {latest_date + pd.Timedelta(days=6):%d %b %Y})."
             )
 
     if fetched_at:
