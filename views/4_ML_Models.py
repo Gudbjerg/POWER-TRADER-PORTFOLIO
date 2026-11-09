@@ -897,8 +897,8 @@ else:
 
         if len(merged) >= 21:
             try:
-                from statsmodels.tsa.stattools import grangercausalitytests
-                gc = grangercausalitytests(merged[["return", "net_sentiment"]], maxlag=2, verbose=False)
+                from utils.helpers import granger_test
+                gc = granger_test(merged[["return", "net_sentiment"]], maxlag=2)
                 p_lag1 = gc[1][0]["ssr_ftest"][1]
                 p_lag2 = gc[2][0]["ssr_ftest"][1]
                 gc_result = f"Lag 1: p={p_lag1:.3f}  Lag 2: p={p_lag2:.3f}"
