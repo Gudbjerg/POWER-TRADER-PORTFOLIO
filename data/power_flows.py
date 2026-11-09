@@ -15,6 +15,8 @@ from datetime import datetime
 import pandas as pd
 import streamlit as st
 
+from data.deadline import cache_unless_empty
+
 from config.settings import ENTSOE_TIMEOUT_S
 from data.deadline import call_with_deadline
 from data.energy_units import MIN_HOURS_PER_DAY, hourly_power
@@ -112,7 +114,7 @@ def _directional(client, frm: str, to: str, start, end) -> pd.Series:
     return pd.to_numeric(s, errors="coerce").dropna()
 
 
-@st.cache_data(ttl=3600)
+@cache_unless_empty(ttl=3600)
 def fetch_all_flows(days: int = 30) -> pd.DataFrame:
     """Net daily flows (MWh) on Norway's external corridors over the last ``days`` days."""
     client = _client()

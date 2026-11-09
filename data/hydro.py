@@ -9,6 +9,8 @@ from config.settings import ENTSOE_TIMEOUT_S
 import os
 import pandas as pd
 import streamlit as st
+
+from data.deadline import cache_unless_empty
 from datetime import datetime
 
 try:
@@ -27,7 +29,7 @@ def _client():
     return EntsoePandasClient(api_key=key, timeout=ENTSOE_TIMEOUT_S)
 
 
-@st.cache_data(ttl=3600)
+@cache_unless_empty(ttl=3600)
 def fetch_hydro_reservoirs(years: int = 6) -> pd.DataFrame:
     """
     Fetch weekly Norwegian hydro reservoir filling levels.
@@ -57,7 +59,7 @@ def fetch_hydro_reservoirs(years: int = 6) -> pd.DataFrame:
         )
     except Exception as _exc:
         import sys
-        print(f"[hydro] ENTSO-E B31 failed: {type(_exc).__name__}: {_exc}", file=sys.stderr)
+        print(f"[hydro] ENTSO-E B31 failed: {type(_exc).__name__}", file=sys.stderr)   # no message: it can carry the API token
         return pd.DataFrame()
 
     if raw is None or (hasattr(raw, "empty") and raw.empty):
