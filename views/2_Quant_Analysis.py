@@ -1666,8 +1666,8 @@ with tab_stack:
         - Demand default: **{_default_demand:.0f} GW**, from {"today's mean load (" + _load_src + ")" if _live_load_gw is not None else "a 60 GW reference (" + _load_src + ")"}
         - Wind and solar availability: {("today's ENTSO-E day-ahead forecast, wind " + str(_ren_today.get("wind", "n/a")) + " GW and solar " + str(_ren_today.get("solar", "n/a")) + " GW (daily mean)") if _ren_today else "average capacity factors (wind 25%, solar 11%) because no forecast was available"}
 
-        **Static inputs (Bundesnetzagentur 2024, installed):**
-        - Wind: 66 GW | Solar: 73 GW | Hydro: 4.5 GW | Biomass: 8.5 GW
+        **Static inputs (installed):** wind and solar from energy-charts.info (November 2026), other plant from Bundesnetzagentur 2024
+        - Wind: 83.4 GW | Solar: 120.6 GW | Hydro: 4.5 GW | Biomass: 8.5 GW
         - Lignite: 17 GW (€20/MWh) | Hard coal: 23 GW | Gas CCGT/OCGT: 30 GW | Oil peakers: 2.5 GW
         - Nuclear: 0 GW (all plants retired April 2023)
         - Each block is drawn at its available capacity: thermal plant at 85-90% availability,
@@ -1676,10 +1676,10 @@ with tab_stack:
         **EUA source:** {eua_source}
 
         **Key simplifications:**
-        - This model shows installed capacity, not available capacity. Typical thermal availability
-          is 85-90%; renewables depend on weather conditions.
+        - Thermal availability is a typical rate (85-90%), not today's outages; renewables depend on
+          weather conditions.
         - Wind and solar produce at weather-dependent output levels; their effective capacity at any
-          given hour is not 66/73 GW. The stack shows the structural position, not real-time dispatch.
+          given hour is far below the installed 83/121 GW. The stack shows the structural position, not real-time dispatch.
         - No cross-border imports or exports. Germany regularly imports from France and Scandinavia,
           which can suppress the clearing price below the domestic marginal fuel SRMC.
         - No must-run obligations, ramp constraints, or reserve requirements.

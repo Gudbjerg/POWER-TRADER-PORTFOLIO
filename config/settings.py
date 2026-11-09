@@ -105,8 +105,15 @@ ALUM_TTF_TO_ELEC_FACTOR  = 2.0    # TTF→electricity proxy (CCGT marginal cost 
 ALUM_EURUSD_APPROX       = 1.10   # fixed EUR/USD for revenue conversion (stated assumption)
 
 # ── BESS Optimiser (Phase E) ────────────────────────────────────────────────
-BESS_FCR_N_EUR_PER_MW_YEAR = 8_000.0    # Nordic FCR-N average (€/MW/year); approximate, varies by auction
-BESS_FCR_D_EUR_PER_MW_YEAR = 12_000.0   # Nordic FCR-D average (€/MW/year); approximate
+# Reserve capacity prices (EUR per MW per hour). FCR-N: median NO2 price, June to August 2025
+# (Magnus Energy, Balancing Market Watch Summer 2025). FCR-D: Swedish average, February 2025
+# (Gridcog, The Nordic Power Markets), used as a proxy because no Norwegian figure is published
+# in the same form. Both fell through 2025 as batteries entered the markets; they are planning
+# assumptions, not forecasts.
+BESS_FCR_N_EUR_PER_MW_H    = 14.4
+BESS_FCR_D_EUR_PER_MW_H    = 3.0
+BESS_FCR_N_EUR_PER_MW_YEAR = BESS_FCR_N_EUR_PER_MW_H * 8760   # if sold every hour of the year
+BESS_FCR_D_EUR_PER_MW_YEAR = BESS_FCR_D_EUR_PER_MW_H * 8760
 BESS_FCR_D_AVAIL_DISC      = 0.30       # FCR-D availability discount (battery must hold ~50% SoC)
 BESS_DAM_VIABLE_DAYS_PCT   = 0.20       # fraction of days with viable DAM spread (top-20% filter)
 BESS_DAM_DISPATCH_HOURS    = 2.0        # hours of peak dispatch per DAM cycle

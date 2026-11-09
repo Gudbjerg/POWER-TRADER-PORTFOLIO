@@ -38,7 +38,7 @@ def test_sourced_events_are_well_formed(raw_events):
     assert sourced, "expanded entries carry a source URL"
     for ev in sourced:
         assert ev["source"].startswith("https://")
-        assert "2026-04-20" <= ev["date"] <= "2026-10-10"
+        assert "2026-04-20" <= ev["date"] <= "2026-11-09"
     # Every entry added for the 2026-04-20 onwards window carries a source
     assert all("source" in ev for ev in raw_events if ev["date"] >= "2026-04-20")
 
