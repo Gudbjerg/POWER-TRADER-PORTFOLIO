@@ -1,0 +1,21 @@
+name: keep-warm
+
+# Opens the Hugging Face Space every six hours. Free Spaces sleep after 48 hours without
+# visitors, and a cold start makes the first visitor wait for the container and every data
+# source; a regular visit keeps the container up and starts the background cache warm-up.
+on:
+  schedule:
+    - cron: "17 */6 * * *"
+  workflow_dispatch:
+
+jobs:
+  visit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - run: pip install playwright && python -m playwright install --with-deps chromium
+      - run: python -m scripts.keep_warm

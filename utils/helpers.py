@@ -111,3 +111,18 @@ def eur(value: float, signed: bool = False, decimals: int = 0) -> str:
         return "n/a"
     sign = "-" if v < 0 else ("+" if signed and v > 0 else "")
     return f"{sign}€{abs(v):,.{decimals}f}"
+
+
+def granger_test(data, maxlag: int) -> dict:
+    """statsmodels Granger causality results, the same on every statsmodels version.
+
+    The ``verbose`` argument was deprecated and then removed, so it is not passed; the
+    function's printed tables are captured instead. Returns the statsmodels result dict.
+    """
+    import contextlib
+    import io
+    import warnings
+    from statsmodels.tsa.stattools import grangercausalitytests
+    with warnings.catch_warnings(), contextlib.redirect_stdout(io.StringIO()):
+        warnings.simplefilter("ignore")
+        return grangercausalitytests(data, maxlag=maxlag)

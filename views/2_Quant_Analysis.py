@@ -22,7 +22,7 @@ st.set_page_config(
     initial_sidebar_state="collapsed",
 )
 
-from utils.helpers import ordinal, apply_dark_theme, kpi_card, delta_span, commentary, has_entsoe_key
+from utils.helpers import granger_test, ordinal, apply_dark_theme, kpi_card, delta_span, commentary, has_entsoe_key
 from utils.theme import ACCENTS, CHART, PLOTLY_TEMPLATE, page_header, page_footer
 from config.settings import (
     SCORE_RISK_PREMIUM_EUR, SCORE_SEASONAL_HI_PCT, SCORE_SEASONAL_LO_PCT,
@@ -90,8 +90,7 @@ def _run_sc_ols_cached(sc_m_df: pd.DataFrame) -> float:
 
 @st.cache_data(show_spinner=False)
 def _run_sc_granger_cached(gc_df: pd.DataFrame) -> tuple:
-    from statsmodels.tsa.stattools import grangercausalitytests as _gct
-    _gc    = _gct(gc_df[["return", "net_sentiment"]], maxlag=2, verbose=False)
+    _gc    = granger_test(gc_df[["return", "net_sentiment"]], maxlag=2)
     _min_p = min(_gc[1][0]["ssr_ftest"][1], _gc[2][0]["ssr_ftest"][1])
     return _min_p, float(gc_df["net_sentiment"].iloc[-7:].mean())
 
@@ -2134,10 +2133,7 @@ with tab_granger:
                 # ── Run Granger test ──────────────────────────────────────────
                 _maxlag = min(7, _n_merged // 7)
                 try:
-                    from statsmodels.tsa.stattools import grangercausalitytests
-                    _gc = grangercausalitytests(
-                        _merged[["return", "net_sentiment"]], maxlag=_maxlag, verbose=False
-                    )
+                    _gc = granger_test(_merged[["return", "net_sentiment"]], maxlag=_maxlag)
                     _p_vals = {
                         lag: _gc[lag][0]["ssr_ftest"][1]
                         for lag in range(1, _maxlag + 1)

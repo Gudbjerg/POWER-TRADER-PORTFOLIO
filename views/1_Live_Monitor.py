@@ -83,15 +83,33 @@ def _fetch_norwegian_zonal(days: int = 90) -> pd.DataFrame:
 
 
 # ── Load all data (cached) ─────────────────────────────────────────────────
-with st.spinner(""):
-    storage    = get_storage_data()
-    ttf        = get_ttf_data()
-    flows      = get_flow_data()
-    spots      = get_spot_price_data()
-    solar      = get_solar_data()
-    lng        = get_lng_data()
-    hydro      = get_hydro_data()
-    generation = get_generation_data()
+# The eight sources are independent, so they are fetched side by side: a cold page waits
+# for the slowest source instead of the sum of all eight. Each loader is cached, so a warm
+# page returns at once either way.
+import threading as _threading
+from concurrent.futures import ThreadPoolExecutor as _Pool
+from streamlit.runtime.scriptrunner import add_script_run_ctx as _add_ctx, get_script_run_ctx as _get_ctx
+
+_ctx = _get_ctx()
+
+
+def _attach_ctx():
+    # Workers share this session's context, so a loader's own warning still reaches the page
+    if _ctx is not None:
+        _add_ctx(_threading.current_thread(), _ctx)
+
+
+_LOADERS = {
+    "storage": get_storage_data, "ttf": get_ttf_data, "flows": get_flow_data,
+    "spots": get_spot_price_data, "solar": get_solar_data, "lng": get_lng_data,
+    "hydro": get_hydro_data, "generation": get_generation_data,
+}
+with st.spinner("Loading live market data…"):
+    with _Pool(max_workers=len(_LOADERS), initializer=_attach_ctx) as _pool:
+        _futures = {k: _pool.submit(fn) for k, fn in _LOADERS.items()}
+        _loaded = {k: f.result() for k, f in _futures.items()}
+storage, ttf, flows, spots = _loaded["storage"], _loaded["ttf"], _loaded["flows"], _loaded["spots"]
+solar, lng, hydro, generation = _loaded["solar"], _loaded["lng"], _loaded["hydro"], _loaded["generation"]
 
 _ttf_spot = float(ttf["prices"]["price"].iloc[-1]) if not ttf["prices"].empty else 0.0
 fwd = get_forward_curve_data(_ttf_spot)

@@ -61,4 +61,9 @@ PAGES = {
 }
 
 pg = st.navigation(PAGES, position="top")
+
+# Fill the shared data caches in the background while the first page renders.
+from utils.warmup import start_warmup  # noqa: E402
+
+start_warmup()
 pg.run()
