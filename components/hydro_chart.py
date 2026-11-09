@@ -116,8 +116,8 @@ def render_hydro_chart(hydro_data: dict):
                     st.error(
                         f"Hydro alert: Norwegian reservoirs at {latest_twh:.1f} TWh "
                         f"({latest_date.strftime('%b %d')}), below the historical 10th percentile "
-                        f"({p10:.1f} TWh). Strongly bullish for NO1/NO2 prices; "
-                        "Norway likely importing power from the Continent."
+                        f"({p10:.1f} TWh). Producers value the remaining water higher, which "
+                        "lifts NO1/NO2 prices toward the Continent and narrows the export margin."
                     )
                 elif latest_twh < p50:
                     st.warning(
