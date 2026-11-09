@@ -17,7 +17,7 @@ from plotly.subplots import make_subplots
 load_dotenv()
 
 st.set_page_config(page_title="Weather Desk", page_icon="⚡", layout="wide",
-                   initial_sidebar_state="expanded")
+                   initial_sidebar_state="collapsed")
 
 from data import weather as W
 from models import weather_impact as M

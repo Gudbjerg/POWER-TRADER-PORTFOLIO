@@ -83,7 +83,10 @@ def fetch_hydro_reservoirs(years: int = 6) -> pd.DataFrame:
         df = raw[[col]].rename(columns={col: "filling_mwh"}).reset_index()
         df.columns = ["week_start", "filling_mwh"]
 
-    df["week_start"]  = pd.to_datetime(df["week_start"]).dt.tz_localize(None)
+    # ENTSO-E stamps each week at its start in UTC (Sunday 23:00 in winter); read on the
+    # Norwegian clock that is Monday 00:00, the first day of the ISO week the figure covers.
+    _ws = pd.to_datetime(df["week_start"], utc=True)
+    df["week_start"]  = _ws.dt.tz_convert("Europe/Oslo").dt.tz_localize(None).dt.normalize()
     df["filling_mwh"] = pd.to_numeric(df["filling_mwh"], errors="coerce")
     df = df.dropna(subset=["filling_mwh"])
 

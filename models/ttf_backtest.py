@@ -42,7 +42,7 @@ def fetch_ttf_history(years: int = 7) -> pd.DataFrame:
 
     try:
         ticker = yf.Ticker(TTF_TICKER)
-        df = ticker.history(start=start.strftime("%Y-%m-%d"), end=end.strftime("%Y-%m-%d"))
+        df = ticker.history(start=start.strftime("%Y-%m-%d"), end=(end + timedelta(days=1)).strftime("%Y-%m-%d"))   # end is exclusive: include today's bar
         if df.empty:
             return pd.DataFrame()
         df = df[["Close"]].rename(columns={"Close": "price"})
