@@ -230,3 +230,28 @@ def hydro_anomaly(outlook: pd.DataFrame, normals: pd.DataFrame, climate_years: s
                                "temp_c": outlook["temp_c"], "temp_normal_c": norm["temp_c"]}),
         "climate_years": climate_years,
     }
+
+
+def load_weather_model() -> WeatherModel:
+    """The calibrated chain on the standard 120-day window, cached for six hours.
+
+    Shared by the Weather Desk and the background warm-up, so both use one cache entry.
+    """
+    return _load_weather_model_cached()
+
+
+def _cached(fn):
+    try:
+        import streamlit as st
+        return st.cache_data(ttl=6 * 3600, show_spinner=False)(fn)
+    except Exception:
+        return fn
+
+
+@_cached
+def _load_weather_model_cached() -> WeatherModel:
+    from data import weather as W
+    from models.ttf_backtest import fetch_ttf_history
+    start, end = W.calibration_window(120)
+    return fit_weather_model(W.fetch_hindcast_indices(start, end), W.fetch_de_actuals(start, end),
+                             fetch_ttf_history(years=7))

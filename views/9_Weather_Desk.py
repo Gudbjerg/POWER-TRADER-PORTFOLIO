@@ -46,13 +46,8 @@ page_header(
 
 # ── Data and model ────────────────────────────────────────────────────────────
 
-@st.cache_data(ttl=6 * 3600, show_spinner=False)
 def _calibrated_model():
-    start, end = W.calibration_window(120)
-    hindcast = W.fetch_hindcast_indices(start, end)
-    actuals = W.fetch_de_actuals(start, end)
-    ttf = fetch_ttf_history(years=7)
-    return M.fit_weather_model(hindcast, actuals, ttf)
+    return M.load_weather_model()
 
 
 @st.cache_data(ttl=3600, show_spinner=False)
