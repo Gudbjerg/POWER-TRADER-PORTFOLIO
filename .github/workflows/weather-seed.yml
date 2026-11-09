@@ -1,0 +1,30 @@
+name: weather-seed
+
+# Rebuilds the files the Weather Desk ships with (archived ECMWF forecast indices and the
+# ERA5 catchment normals) on a fresh runner and attaches them to the run as an artifact.
+on:
+  workflow_dispatch:
+    inputs:
+      days:
+        description: Days of archived forecasts
+        default: "180"
+  push:
+    branches: [seed/weather]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - run: pip install requests pandas numpy streamlit
+      - run: python -m scripts.build_weather_seed ${{ github.event.inputs.days || '180' }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: weather-seed
+          path: |
+            data/weather_hindcast_v1.csv
+            data/weather_hydro_normals_v1.csv
