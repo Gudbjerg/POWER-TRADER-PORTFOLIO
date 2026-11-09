@@ -211,5 +211,37 @@
     "category": "geopolitical",
     "impact": "warn",
     "source": "https://www.euronews.com/2026/10/09/irans-irgc-strikes-tanker-and-threatens-to-target-vessels-beyond-hormuz"
+  },
+  {
+    "date": "2026-10-28",
+    "label": "TTF above €100 for the first time since 2022",
+    "description": "The front-month TTF contract trades above €100/MWh for the first time since December 2022, against about €32 before the Iran war. Energy Commissioner Dan Jørgensen warns that Europe faces another energy crisis. EU storage was 75% full on 21 October (ACER) after a winter that ended at 28%, and almost no Qatari LNG reached the EU over the summer.",
+    "category": "supply",
+    "impact": "critical",
+    "source": "https://www.euronews.com/2026/10/28/european-gas-price-crosses-100-for-first-time-since-2022-as-eu-warns-of-new-crisis"
+  },
+  {
+    "date": "2026-11-02",
+    "label": "US strikes Qeshm; Iran sends nuclear proposal",
+    "description": "US strikes hit Iran's Qeshm Island in the Strait of Hormuz, the first there since June, while Iran sends a nuclear proposal to Washington through Qatar, conditioned on seven demands including an end to the blockade. Tanker attacks continue at a near-record rate.",
+    "category": "geopolitical",
+    "impact": "warn",
+    "source": "https://www.petroleum-economist.com/magazine/2026/november-2026/digital-exclusives/the-stories-that-matter-9-november-2026/"
+  },
+  {
+    "date": "2026-11-04",
+    "label": "Visund fire cuts Norwegian gas exports",
+    "description": "A fire in an electrical system shuts Equinor's Visund platform in the Norwegian North Sea. Gassco takes all 13.2 mcm/d of Visund's gas export capacity out of service with no restart date; about 70 of 128 people on board are evacuated and no one is hurt.",
+    "category": "supply",
+    "impact": "warn",
+    "source": "https://www.oilandgasmiddleeast.com/news/visund-platform-fire-shutdown"
+  },
+  {
+    "date": "2026-11-05",
+    "label": "TTF slides 15% on Iran diplomacy hopes",
+    "description": "TTF falls to about €85/MWh, more than 15% below the four-year high above €101 reached the week before, as traders price in diplomacy on Iran. The balance stays tight: QatarEnergy extends force majeure on LNG deliveries to at least the end of December, and EU storage is about 74% full against a five-year average of about 86%.",
+    "category": "geopolitical",
+    "impact": "warn",
+    "source": "https://www.tradingandinvestmentnews.co.uk/european-gas-prices-slide-more-than-15-from-a-4-year-high-on-iran-deal-hopes/"
   }
 ]

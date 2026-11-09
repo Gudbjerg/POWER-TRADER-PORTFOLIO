@@ -4,7 +4,8 @@ German merit order / supply stack model.
 Represents the structural German generation portfolio ordered by short-run
 marginal cost (SRMC). Gas CCGT cost is dynamic (live TTF). Carbon cost is
 dynamic (EUA via yfinance). All other costs are static from market averages.
-Capacities from Bundesnetzagentur Kraftwerksliste 2024 (rounded, in-service).
+Capacities: wind and solar from energy-charts.info installed power (Fraunhofer ISE,
+November 2026); other plant from Bundesnetzagentur Kraftwerksliste 2024 (rounded, in-service).
 
 Output: merit order step chart, marginal fuel annotation, theoretical implied
 price vs NL day-ahead actual, scarcity premium KPI card.
@@ -18,7 +19,7 @@ Assumptions logged in methodology expander on the page:
   wind and solar at today's ENTSO-E day-ahead forecast when the page passes it, otherwise
   at their average German capacity factors (wind 25%, solar 11%); thermal plant at typical
   availability (85-90%). Stacking installed wind and solar at zero cost would place
-  140 GW of renewables in front of every demand level and make them marginal all year.
+  200 GW of renewables in front of every demand level and make them marginal all year.
 - Hard coal fuel cost estimated at ~11 EUR/MWh_thermal (API2 reference ~80
   USD/t, calorific value 6.98 MWh/t, EUR/USD 0.93).
 - EUA emission intensities: gas 0.37 tCO2/MWh_el (CCGT 55% eff),
@@ -38,14 +39,15 @@ except ImportError:
 
 
 # ── Merit order definition ────────────────────────────────────────────────────
-# Source: Bundesnetzagentur Kraftwerksliste 2024, rounded installed GW.
+# Wind and solar: energy-charts.info installed power, November 2026 (wind onshore 71.8 GW +
+# offshore 11.7 GW; solar 120.6 GW AC). Other plant: Bundesnetzagentur Kraftwerksliste 2024.
 # Germany exited nuclear in April 2023; lignite retirement ongoing.
 # Gas fleet includes CCGT and open-cycle gas turbine (OCGT) — blended average.
 
 _FUELS: list[tuple] = [
     # (key, display_label, capacity_gw, color)
-    ("wind",    "Wind (onshore + offshore)", 66.0, "#2f7a47"),
-    ("solar",   "Solar PV",                  73.0, "#b08d00"),
+    ("wind",    "Wind (onshore + offshore)", 83.4, "#2f7a47"),
+    ("solar",   "Solar PV",                 120.6, "#b08d00"),
     ("hydro",   "Hydro run-of-river",          4.5, "#2f45c6"),
     ("biomass", "Biomass / biogas",             8.5, "#6e4a9e"),
     ("lignite", "Lignite",                    17.0, "#7a5a12"),

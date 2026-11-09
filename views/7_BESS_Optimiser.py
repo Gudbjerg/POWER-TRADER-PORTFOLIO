@@ -23,8 +23,8 @@ from utils.helpers import eur, apply_dark_theme, kpi_card, delta_span
 from utils.theme import ACCENTS, CHART, PLOTLY_TEMPLATE, callout, page_header, page_footer, render
 from models.feature_assembly import load_feature_matrix
 from config.settings import (
-    BESS_FCR_N_EUR_PER_MW_YEAR,
-    BESS_FCR_D_EUR_PER_MW_YEAR,
+    BESS_FCR_N_EUR_PER_MW_H,
+    BESS_FCR_D_EUR_PER_MW_H,
     BESS_FCR_D_AVAIL_DISC,
     BESS_DAM_VIABLE_DAYS_PCT,
     BESS_DAM_DISPATCH_HOURS,
@@ -130,10 +130,18 @@ def _run_model(
 
     dam_y1 = (spread["achievable"] * energy_per_cycle * eff * viable_days
                if markets["dam"] else 0.0)
-    fcr_n_y1 = (power_mw * BESS_FCR_N_EUR_PER_MW_YEAR if markets["fcr_n"] else 0.0)
-    fcr_d_y1 = (power_mw * BESS_FCR_D_EUR_PER_MW_YEAR * (1.0 - BESS_FCR_D_AVAIL_DISC)
-                if markets["fcr_d"] else 0.0)
     id_y1    = dam_y1 * 0.50 if markets["intraday"] else 0.0
+    # One battery, one MW: the hours spent on arbitrage cannot also be sold as reserve, and
+    # FCR-N and FCR-D cannot both hold the same MW in the same hour. Reserve hours are the year
+    # less the arbitrage hours, split evenly between the reserve products selected.
+    arb_hours = ((viable_days * BESS_DAM_DISPATCH_HOURS if markets["dam"] else 0.0)
+                 * (1.5 if markets["intraday"] else 1.0))
+    reserve_hours = max(8760.0 - arb_hours, 0.0)
+    n_fcr = int(markets["fcr_n"]) + int(markets["fcr_d"])
+    fcr_hours = reserve_hours / n_fcr if n_fcr else 0.0
+    fcr_n_y1 = (power_mw * BESS_FCR_N_EUR_PER_MW_H * fcr_hours if markets["fcr_n"] else 0.0)
+    fcr_d_y1 = (power_mw * BESS_FCR_D_EUR_PER_MW_H * fcr_hours * (1.0 - BESS_FCR_D_AVAIL_DISC)
+                if markets["fcr_d"] else 0.0)
     total_y1 = dam_y1 + fcr_n_y1 + fcr_d_y1 + id_y1
 
     # Per-year data (with degradation on energy-related revenues)
@@ -299,9 +307,9 @@ st.sidebar.divider()
 st.sidebar.markdown("**Market participation**")
 _do_dam = st.sidebar.checkbox("DAM arbitrage (day-ahead)", value=True, key="bess_dam")
 _do_fcr_n = st.sidebar.checkbox(
-    f"FCR-N (Normal, ≈€{BESS_FCR_N_EUR_PER_MW_YEAR/1000:.0f}k/MW/yr)", value=True, key="bess_fcrn")
+    f"FCR-N (Normal, €{BESS_FCR_N_EUR_PER_MW_H:.1f}/MW/h)", value=True, key="bess_fcrn")
 _do_fcr_d = st.sidebar.checkbox(
-    f"FCR-D (Disturbed, ≈€{BESS_FCR_D_EUR_PER_MW_YEAR/1000:.0f}k/MW/yr, −30% avail. disc.)",
+    f"FCR-D (Disturbed, €{BESS_FCR_D_EUR_PER_MW_H:.1f}/MW/h, −30% avail. disc.)",
     value=True, key="bess_fcrd")
 _do_id = st.sidebar.checkbox("Intraday arbitrage (50% of DAM proxy)", value=True, key="bess_id")
 
@@ -582,11 +590,17 @@ with st.expander("Model methodology and assumptions", expanded=False):
     Intraday proxy = 50% of DAM (intraday spreads smaller but more frequent; see Löhndorf & Wozabal 2024).
 
     **FCR-N (Frequency Containment Reserve, Normal):**
-    Always-on symmetric response at ±0.1 Hz. Revenue = power rating × €{BESS_FCR_N_EUR_PER_MW_YEAR:,.0f}/MW/year
-    (approximate Nordic/NordREG market average). This is a capacity payment, not degraded by battery age.
+    Symmetric response at ±0.1 Hz. Revenue = power × €{BESS_FCR_N_EUR_PER_MW_H:.1f}/MW/h × reserve hours
+    (median NO2 price June to August 2025, Magnus Energy Balancing Market Watch). This is a capacity
+    payment, not degraded by battery age.
+
+    **Shared capacity:** the battery sells each MW once per hour. Reserve hours are the year less
+    the hours used for day-ahead and intraday arbitrage, split evenly between FCR-N and FCR-D when
+    both are selected, so revenues are not stacked on the same MW.
 
     **FCR-D (Frequency Containment Reserve, Disturbed):**
-    Asymmetric, activated on frequency deviation > 0.5 Hz. Revenue = power × €{BESS_FCR_D_EUR_PER_MW_YEAR:,.0f}/MW/year
+    Asymmetric, activated on frequency deviation > 0.5 Hz. Revenue = power × €{BESS_FCR_D_EUR_PER_MW_H:.1f}/MW/h × reserve hours
+    (Swedish average February 2025, Gridcog, as a proxy for Norway)
     × (1 − {BESS_FCR_D_AVAIL_DISC:.0%} availability discount). The discount reflects the constraint that
     the battery must maintain ≈50% SoC to participate symmetrically in upward and downward regulation.
 
@@ -622,8 +636,8 @@ with st.expander("Model methodology and assumptions", expanded=False):
 page_footer(
     [
         ("DAM data", "ENTSO-E A44 / Nord Pool (NO2)"),
-        ("FCR prices", f"Nordic/NordREG market averages (FCR-N ≈ €{BESS_FCR_N_EUR_PER_MW_YEAR:,.0f}/MW/yr, "
-                       f"FCR-D ≈ €{BESS_FCR_D_EUR_PER_MW_YEAR:,.0f}/MW/yr), approximate, varies by auction"),
+        ("FCR prices", f"FCR-N €{BESS_FCR_N_EUR_PER_MW_H:.1f}/MW/h (NO2 median, summer 2025, Magnus Energy), "
+                       f"FCR-D €{BESS_FCR_D_EUR_PER_MW_H:.1f}/MW/h (Sweden, February 2025, Gridcog); planning assumptions"),
     ],
     note="For analytical and educational purposes only. Consult project-specific grid connection studies, "
          "PPA terms, and contracted FCR volumes for investment-grade projections.",
