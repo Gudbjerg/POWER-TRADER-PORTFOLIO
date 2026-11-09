@@ -586,13 +586,13 @@ else:
             _pl     = _d * _impact * _n
             _sc_total += _pl
             if _n > 0 and abs(_pl) > 0.01:
-                _breakdown.append(f"{_SIG_BY_ID[_sid]['label']}: €{_pl:+,.0f}")
+                _breakdown.append(f"{_SIG_BY_ID[_sid]['label']}: {eur(_pl, signed=True, decimals=0)}")
 
         with _sc_cols[_ci % 2]:
             _arrow = "▼" if _sc_total < 0 else ("▲" if _sc_total > 0 else "–")
             _col   = "red" if _sc_total < 0 else ("green" if _sc_total > 0 else "blue")
             st.markdown(
-                kpi_card(_sc_name, f"{_arrow} €{_sc_total:+,.0f}",
+                kpi_card(_sc_name, f"{_arrow} {eur(_sc_total, signed=True, decimals=0)}",
                          delta_span(_sc["label"], _col)),
                 unsafe_allow_html=True,
             )

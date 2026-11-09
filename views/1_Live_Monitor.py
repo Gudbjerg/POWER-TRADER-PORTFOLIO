@@ -38,12 +38,12 @@ from components.coal_chart           import render_coal_chart
 from utils.globe     import globe_link
 from utils.helpers   import (
     has_entsoe_key, has_agsi_key, apply_dark_theme,
-    pill, commentary, kpi_card, delta_span,
+    pill, commentary, kpi_card, delta_span, eur,
 )
 from utils.theme     import ACCENTS, CHART, PLOTLY_TEMPLATE, page_header, page_footer
 from utils.scenarios import (
     storage_status, ttf_status, spread_status, lng_status, market_summary,
-    storage_refill_pace,
+    storage_refill_pace, storage_winter_path, target_sentence,
 )
 import pandas as pd
 from datetime import date as _date, timedelta as _timedelta
@@ -156,11 +156,23 @@ if not lng_totals.empty and "total_sendout" in lng_totals.columns:
 
 
 # ── Scenarios ──────────────────────────────────────────────────────────────
+def _season_peak(df: pd.DataFrame) -> float | None:
+    """Highest fill since 1 September of the current gas year (the injection-season peak)."""
+    if df is None or df.empty or "full" not in df.columns or "gasDayStart" not in df.columns:
+        return None
+    _t = _date.today()
+    _start = pd.Timestamp(_t.year if _t.month >= 9 else _t.year - 1, 9, 1)
+    _d = df[pd.to_datetime(df["gasDayStart"]) >= _start]["full"].dropna()
+    return float(_d.max()) if not _d.empty else None
+
+
 eu_status, eu_headline, eu_detail = (
-    storage_status(eu_pct, eu_min, eu_mean, "EU") if eu_pct is not None else ("ok", "", "")
+    storage_status(eu_pct, eu_min, eu_mean, "EU", season_peak=_season_peak(eu_df))
+    if eu_pct is not None else ("ok", "", "")
 )
 de_status, de_headline, de_detail = (
-    storage_status(de_pct, de_min, de_mean, "Germany") if de_pct is not None else ("ok", "", "")
+    storage_status(de_pct, de_min, de_mean, "Germany", season_peak=_season_peak(de_df))
+    if de_pct is not None else ("ok", "", "")
 )
 ttf_stat, ttf_headline, ttf_detail = (
     ttf_status(ttf_price, ttf_ma30, ttf_ma90, ttf_spike, ttf_spike_pct)
@@ -251,7 +263,7 @@ with k5:
         else:
             sub = "markets aligned"
         d = delta_span(sub, color)
-        st.markdown(kpi_card("N-C Spread (EUR/MWh)", f"€{spread:+.0f}", d), unsafe_allow_html=True)
+        st.markdown(kpi_card("N-C Spread (EUR/MWh)", f"{eur(spread, signed=True, decimals=0)}", d), unsafe_allow_html=True)
     else:
         st.markdown(kpi_card("N-C Spread (EUR/MWh)", "n/a", ""), unsafe_allow_html=True)
 
@@ -344,9 +356,9 @@ with tab_overview:
 
     w1, w2, w3 = st.columns(3)
     with w1:
-        st.markdown("**Storage refill pace**")
+        _winter = (eu_pct is not None and not (4 <= _today.month <= 10))
+        st.markdown("**Storage drawdown path**" if _winter else "**Storage refill pace**")
         if eu_pct is not None:
-            _pace_info = storage_refill_pace(eu_pct, build_seasonal_bands(eu_df), _today)
             if ttf_price is not None and ttf_price > 35:
                 _lng_note = f"TTF at €{ttf_price:.0f}/MWh supports LNG cargo diversion to Europe over Asia."
             elif ttf_price is not None and ttf_price > 20:
@@ -355,30 +367,43 @@ with tab_overview:
                 _lng_note = f"TTF at €{ttf_price:.0f}/MWh; LNG import economics are weak at current prices."
             else:
                 _lng_note = ""
-            if _pace_info["verdict"] == "met":
-                _pace_text = (
-                    f"With EU storage at {eu_pct:.1f}%, the target is already met "
-                    f"({_pace_info['days']} days before 1 November). "
-                )
-            elif _pace_info["norm_pp"] is not None:
-                _pace_text = (
-                    f"With EU storage at {eu_pct:.1f}% and {_pace_info['days']} days remaining, "
-                    f"the required net injection is approximately {_pace_info['required_pp']:.0f}pp "
-                    f"({_pace_info['required_per_day']:.2f}pp/day), {_pace_info['verdict']} the "
-                    f"5-year average for the same window ({max(_pace_info['norm_pp'], 0.0):.0f}pp, "
-                    f"{max(_pace_info['norm_per_day'], 0.0):.2f}pp/day). "
-                )
+            _target = target_sentence(eu_pct, _today, _season_peak(eu_df))
+            if _winter:
+                _path = storage_winter_path(eu_pct, build_seasonal_bands(eu_df), _today)
+                if _path:
+                    _pace_text = (
+                        f"Withdrawal season: EU stocks are {eu_pct:.1f}% against a 5-year mean of "
+                        f"{_path['mean_today']:.1f}% for today. If withdrawals match the 5-year average "
+                        f"over the {_path['days']} days to 1 April ({_path['avg_draw_pp']:.0f}pp), stocks end "
+                        f"the winter near {_path['projected_pct']:.0f}%, against a 5-year mean of "
+                        f"{_path['norm_end_pct']:.0f}% and a minimum of {_path['min_end_pct']:.0f}% on that date. "
+                    )
+                else:
+                    _pace_text = f"Withdrawal season: EU stocks are {eu_pct:.1f}%. "
+                st.caption(_pace_text + _target + " " + _lng_note)
             else:
-                _pace_text = (
-                    f"With EU storage at {eu_pct:.1f}% and {_pace_info['days']} days remaining, "
-                    f"the required net injection is approximately {_pace_info['required_pp']:.0f}pp "
-                    f"({_pace_info['required_per_day']:.2f}pp/day); the 5-year comparison is unavailable. "
-                )
-            st.caption(
-                EU_TARGET_SENTENCE + " Pace is measured to 1 November, the usual end of injections. "
-                + _pace_text
-                + _lng_note
-            )
+                _pace_info = storage_refill_pace(eu_pct, build_seasonal_bands(eu_df), _today)
+                if _pace_info["verdict"] == "met":
+                    _pace_text = (
+                        f"With EU storage at {eu_pct:.1f}%, the target is already met "
+                        f"({_pace_info['days']} days before 1 November). "
+                    )
+                elif _pace_info["norm_pp"] is not None:
+                    _pace_text = (
+                        f"With EU storage at {eu_pct:.1f}% and {_pace_info['days']} days to 1 November, "
+                        f"the required net injection is approximately {_pace_info['required_pp']:.0f}pp "
+                        f"({_pace_info['required_per_day']:.2f}pp/day), {_pace_info['verdict']} the "
+                        f"5-year average for the same window ({max(_pace_info['norm_pp'], 0.0):.0f}pp, "
+                        f"{max(_pace_info['norm_per_day'], 0.0):.2f}pp/day). "
+                    )
+                else:
+                    _pace_text = (
+                        f"With EU storage at {eu_pct:.1f}% and {_pace_info['days']} days to 1 November, "
+                        f"the required net injection is approximately {_pace_info['required_pp']:.0f}pp "
+                        f"({_pace_info['required_per_day']:.2f}pp/day); the 5-year comparison is unavailable. "
+                    )
+                st.caption(_target + " Pace is measured to 1 November, the usual end of injections. "
+                           + _pace_text + _lng_note)
         else:
             _storage_hint = (
                 "Add AGSI_API_KEY to see current storage level." if not has_agsi_key()
@@ -416,7 +441,7 @@ with tab_overview:
             else:
                 st.caption(
                     f"Nordic €{nordic_avg:.0f}/MWh and {continental_label} €{continental_avg:.0f}/MWh broadly aligned "
-                    f"(spread: €{spread:+.0f}/MWh). No strong directional flow incentive."
+                    f"(spread: {eur(spread, signed=True, decimals=0)}/MWh). No strong directional flow incentive."
                 )
         else:
             st.caption("Spot price data required to calculate export incentive.")
@@ -508,7 +533,7 @@ with tab_lng:
             st.markdown(
                 kpi_card(
                     "TTF minus JKM",
-                    f"€{_jkm_l1_s['spread']:+.2f}/MWh",
+                    f"{eur(_jkm_l1_s['spread'], signed=True, decimals=2)}/MWh",
                     delta_span(f"{_jkm_l1_s['regime']}{_jkm_l1_pct}",
                                "green" if _jkm_l1_s["spread"] > 0 else "red"),
                 ),
@@ -621,7 +646,7 @@ with tab_prices:
             st.markdown(
                 kpi_card(
                     "Current NL–NO2 spread",
-                    f"€{_current_spread:+.1f}/MWh",
+                    f"{eur(_current_spread, signed=True, decimals=1)}/MWh",
                     delta_span(_sp_label, _sp_color),
                 ),
                 unsafe_allow_html=True,
@@ -865,7 +890,7 @@ with tab_prices:
             st.markdown(
                 kpi_card(
                     "FI minus IT-North (latest)",
-                    f"€{_fs['latest_spread']:+.1f}/MWh",
+                    f"{eur(_fs['latest_spread'], signed=True, decimals=1)}/MWh",
                     delta_span(
                         f"{_fiit_date_s}: FI €{_fs['latest_fi']:.1f}, IT-North €{_fs['latest_it_north']:.1f}",
                         "blue",
@@ -877,7 +902,7 @@ with tab_prices:
             st.markdown(
                 kpi_card(
                     f"{_FIIT_AVG_D}-day average spread",
-                    f"€{_fs['avg']:+.1f}/MWh",
+                    f"{eur(_fs['avg'], signed=True, decimals=1)}/MWh",
                     delta_span(f"FI below IT-North on {_fs['n_fi_below']} of {_fs['n_avg']} days", "blue"),
                 ),
                 unsafe_allow_html=True,
@@ -885,7 +910,7 @@ with tab_prices:
         with _fk3:
             if _fiit_z_ok:
                 _fiit_z_col = "red" if abs(_fiit_z) >= 2 else ("amber" if abs(_fiit_z) >= 1 else "green")
-                _fiit_z_note = f"vs {_fiit_win_lbl} mean €{_fs['z_mean']:+.1f}, σ €{_fs['z_std']:.1f}"
+                _fiit_z_note = f"vs {_fiit_win_lbl} mean {eur(_fs['z_mean'], signed=True, decimals=1)}, σ €{_fs['z_std']:.1f}"
                 if not _fs["z_full_window"]:
                     _fiit_z_note += " (partial year)"
                 st.markdown(
@@ -904,7 +929,7 @@ with tab_prices:
             st.markdown(
                 kpi_card(
                     f"{_fiit_win_lbl.capitalize()} spread range",
-                    f"€{_fs['window_min']:+.0f} to €{_fs['window_max']:+.0f}",
+                    f"{eur(_fs['window_min'], signed=True, decimals=0)} to {eur(_fs['window_max'], signed=True, decimals=0)}",
                     delta_span(f"{_fs['n_z']} delivery days", "blue"),
                 ),
                 unsafe_allow_html=True,
@@ -972,15 +997,15 @@ with tab_prices:
         # Commentary: every figure below is computed from the series above
         _fiit_text = (
             f"On {_fiit_date_s}, Finland cleared at €{_fs['latest_fi']:.1f}/MWh against "
-            f"€{_fs['latest_it_north']:.1f}/MWh in IT-North, a spread of €{_fs['latest_spread']:+.1f}/MWh. "
+            f"€{_fs['latest_it_north']:.1f}/MWh in IT-North, a spread of {eur(_fs['latest_spread'], signed=True, decimals=1)}/MWh. "
             f"Across the {_fs['n_avg']} delivery days in the trailing {_FIIT_AVG_D}-day window the spread "
-            f"averaged €{_fs['avg']:+.1f}/MWh, with Finland pricing below IT-North on "
+            f"averaged {eur(_fs['avg'], signed=True, decimals=1)}/MWh, with Finland pricing below IT-North on "
             f"{_fs['n_fi_below']} of {_fs['n_avg']} days. "
         )
         if _fiit_z_ok:
             _fiit_text += (
                 f"The latest reading is {_fiit_z:+.2f}σ from its {_fiit_win_lbl} mean of "
-                f"€{_fs['z_mean']:+.1f}/MWh. "
+                f"{eur(_fs['z_mean'], signed=True, decimals=1)}/MWh. "
             )
         _fiit_text += (
             "A deeply negative FI minus IT-North spread is the expected configuration when Italian "

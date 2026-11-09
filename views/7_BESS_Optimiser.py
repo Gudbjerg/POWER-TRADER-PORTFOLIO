@@ -19,7 +19,7 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
-from utils.helpers import apply_dark_theme, kpi_card, delta_span
+from utils.helpers import eur, apply_dark_theme, kpi_card, delta_span
 from utils.theme import ACCENTS, CHART, PLOTLY_TEMPLATE, callout, page_header, page_footer, render
 from models.feature_assembly import load_feature_matrix
 from config.settings import (
@@ -345,7 +345,7 @@ with _k3:
     st.markdown(
         kpi_card(
             f"NPV @ {_disc_pct:.0f}%",
-            f"€{_npv_val / 1e6:+.2f}M",
+            f"{eur(_npv_val / 1e6, signed=True, decimals=2)}M",
             delta_span(f"{_lifetime}-year lifetime", _npv_col),
         ),
         unsafe_allow_html=True,
@@ -431,28 +431,27 @@ st.divider()
 # ═══════════════════════════════════════════════════════════════════════════════
 st.markdown("#### Year-1 Cash Flow Waterfall")
 
-_wf_labels  = ["Revenue"] + (["DAM"] if _do_dam else [])
-_wf_labels += (["FCR-N"] if _do_fcr_n else [])
-_wf_labels += (["FCR-D"] if _do_fcr_d else [])
-_wf_labels += (["Intraday"] if _do_id else [])
-_wf_labels += ["OPEX", "Depreciation (non-cash)", "Net cash flow"]
+# Revenue streams build up to total revenue; OPEX takes it to the operating cash flow.
+# Depreciation is a non-cash charge, so it appears after the cash flow total as the step
+# down to operating profit rather than inside the cash bridge.
+_wf_labels, _wf_vals = [], []
+for _flag, _lab, _key in ((_do_dam, "DAM", "dam_y1"), (_do_fcr_n, "FCR-N", "fcr_n_y1"),
+                          (_do_fcr_d, "FCR-D", "fcr_d_y1"), (_do_id, "Intraday", "id_y1")):
+    if _flag:
+        _wf_labels.append(_lab)
+        _wf_vals.append(_m[_key])
+_wf_measure = ["relative"] * len(_wf_labels)
+_wf_labels += ["Revenue", "OPEX", "Net cash flow", "Depreciation (non-cash)", "Operating profit"]
+_wf_vals   += [0, -_m["opex_yr"], 0, -_m["depr_yr"], 0]
+_wf_measure += ["total", "relative", "total", "relative", "total"]
 
-_wf_vals = [_m["total_y1"]]
-if _do_dam:    _wf_vals.append(_m["dam_y1"])
-if _do_fcr_n:  _wf_vals.append(_m["fcr_n_y1"])
-if _do_fcr_d:  _wf_vals.append(_m["fcr_d_y1"])
-if _do_id:     _wf_vals.append(_m["id_y1"])
-_wf_vals += [-_m["opex_yr"], -_m["depr_yr"],
-              _m["total_y1"] - _m["opex_yr"]]
-
-_wf_measure = ["absolute"]
-_wf_measure += ["relative"] * (len(_wf_labels) - 3)
-_wf_measure += ["relative", "relative", "total"]
-
-_wf_colors = ["#2f7a47"]  # Revenue
-for _lab in _wf_labels[1:-3]:
-    _wf_colors.append(_C.get(_lab.lower().replace(" ", "_").replace("-", "_"), "#2f45c6"))
-_wf_colors += [_C["opex"], _C["depr"], "#132f38"]
+_wf_text, _run = [], 0.0
+for _v, _ms in zip(_wf_vals, _wf_measure):
+    if _ms == "total":
+        _wf_text.append(eur(_run))
+    else:
+        _run += _v
+        _wf_text.append(eur(_v, signed=True))
 
 _fig_wf = go.Figure(go.Waterfall(
     orientation="v",
@@ -463,15 +462,15 @@ _fig_wf = go.Figure(go.Waterfall(
     increasing=dict(marker=dict(color="#2f7a47")),
     decreasing=dict(marker=dict(color="#c2391f")),
     totals=dict(marker=dict(color="#2f45c6")),
-    texttemplate="€%{y:,.0f}",
+    text=_wf_text,
     textposition="outside",
-    textfont=dict(size=9, color=CHART["text"]),
-    hovertemplate="%{x}: €%{y:,.0f}<extra></extra>",
+    textfont=dict(size=10, color=CHART["text"]),
+    hovertemplate="%{x}<extra></extra>",
 ))
 _fig_wf.update_layout(
     template=PLOTLY_TEMPLATE,
     paper_bgcolor=CHART["bg"], plot_bgcolor=CHART["panel_bg"],
-    height=300,
+    height=340,
     margin=dict(l=60, r=20, t=30, b=50),
     xaxis=dict(tickfont=dict(size=10, color=CHART["muted"])),
     yaxis=dict(title="EUR", gridcolor=CHART["grid"],
@@ -479,7 +478,8 @@ _fig_wf.update_layout(
     showlegend=False,
 )
 st.plotly_chart(_fig_wf, width="stretch")
-st.caption("Depreciation shown for reference. Non-cash item; does not affect cash flow or NPV calculation.")
+st.caption(f"Revenue {eur(_m['total_y1'])}, net cash flow {eur(_m['total_y1'] - _m['opex_yr'])}. "
+           "Depreciation is shown after the cash flow total: it is a non-cash charge and does not enter the NPV.")
 
 st.divider()
 
@@ -559,10 +559,10 @@ for _var, _label, _kwarg in [
     )
     _sens_rows.append({
         "Variable":    _label,
-        "−20%":        f"€{_lo / 1e6:+.2f}M",
-        "Base":        f"€{_base_npv / 1e6:+.2f}M",
-        "+20%":        f"€{_hi / 1e6:+.2f}M",
-        "NPV range":   f"€{(_hi - _lo) / 1e6:.2f}M",
+        "−20%":        f"{eur(_lo / 1e6, signed=True, decimals=2)}M",
+        "Base":        f"{eur(_base_npv / 1e6, signed=True, decimals=2)}M",
+        "+20%":        f"{eur(_hi / 1e6, signed=True, decimals=2)}M",
+        "NPV range":   f"€{abs(_hi - _lo) / 1e6:.2f}M",
     })
 
 st.dataframe(pd.DataFrame(_sens_rows), width="stretch", hide_index=True)

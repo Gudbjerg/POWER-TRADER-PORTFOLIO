@@ -17,10 +17,10 @@ pinned: false
 [![Live Demo](https://img.shields.io/badge/Live%20Demo-HuggingFace%20Spaces-orange)](https://huggingface.co/spaces/TobGud/power-trader-portfolio)
 [![Tests](https://github.com/Gudbjerg/POWER-TRADER-PORTFOLIO/actions/workflows/tests.yml/badge.svg)](https://github.com/Gudbjerg/POWER-TRADER-PORTFOLIO/actions/workflows/tests.yml)
 [![Python](https://img.shields.io/badge/Python-3.11%2B-blue)](https://www.python.org/)
-![Pages](https://img.shields.io/badge/8%20pages-36%20analytical%20modules-lightgrey)
-![Sources](https://img.shields.io/badge/9%20data%20sources-live%20feeds-green)
+![Pages](https://img.shields.io/badge/9%20pages-37%20analytical%20modules-lightgrey)
+![Sources](https://img.shields.io/badge/10%20data%20sources-live%20feeds-green)
 
-The platform integrates live fundamental data from ENTSO-E Transparency, GIE AGSI+/ALSI, Nord Pool, and ICE/Yahoo Finance into a unified analytical environment covering storage balances, forward curve dynamics, cross-commodity price transmission, machine learning regime detection, portfolio risk simulation, and battery storage project economics. All models are implemented from scratch in Python; no third-party signal providers or data vendors are used beyond the public API layer. The architecture escalates from raw market observation in Layer 1 to actionable composite signals in Layer 5, following the analytical hierarchy a physical desk would apply before taking a position.
+The platform integrates live fundamental data from ENTSO-E Transparency, GIE AGSI+/ALSI, Nord Pool, ICE/Yahoo Finance and ECMWF weather forecasts into a unified analytical environment covering storage balances, forward curve dynamics, cross-commodity price transmission, machine learning regime detection, weather-driven price outlooks, portfolio risk simulation, and battery storage project economics. All models are implemented from scratch in Python; no third-party signal providers or data vendors are used beyond the public API layer. The architecture escalates from raw market observation in Layer 1 to actionable composite signals in Layer 5, following the analytical hierarchy a physical desk would apply before taking a position.
 
 ---
 
@@ -37,6 +37,7 @@ Representative outputs from runs between June and October 2026. Live values move
 | Forward Curve PCA (Layer 2) | PC1 (level) explains approximately 85-90% of M+1-M+18 panel variance; PC2 (slope/storage carry) and PC3 (curvature) generate calendar-spread and butterfly trade signals when z-score exceeds ±2σ | [views/2_Quant_Analysis.py](views/2_Quant_Analysis.py) |
 | 7x7 Cross-Commodity Correlation Grid (Layer 3) | 90-day rolling Pearson ρ(TTF, Brent) approximately +0.59; ρ(copper, aluminium) approximately +0.45; lead-lag sweep ±10 days across all 21 pairs | [views/3_Macro_Signals.py](views/3_Macro_Signals.py) |
 | D4 Risk Dashboard (Page 6) | 95% and 99% 1-day VaR and Expected Shortfall via non-parametric bootstrap on 6-signal portfolio; 4 named stress scenarios (cold snap, Norwegian outage, Hormuz extension, EUR/USD shock) | [views/6_Risk_Dashboard.py](views/6_Risk_Dashboard.py) |
+| Weather Desk (Page 9) | ECMWF forecast read through a model calibrated on 120 days of the German fleet: wind R² 0.92, solar 0.93, demand 0.88, DE-LU price on residual load and TTF 0.90; out of sample (10 Oct to 8 Nov 2026) the daily price error was €22.7/MWh against €33.8/MWh for yesterday's price, with 70% of day-on-day moves called in the right direction | [models/weather_impact.py](models/weather_impact.py) |
 | BESS Optimiser (Page 7) | NPV, IRR (bisection method), and simple payback for Nordic BESS across DAM arbitrage, FCR-N (EUR 8,000/MW/yr), and FCR-D (EUR 12,000/MW/yr); sensitivity table across ±20% CAPEX, FCR prices, and energy spread | [views/7_BESS_Optimiser.py](views/7_BESS_Optimiser.py) |
 
 ---
@@ -99,6 +100,13 @@ A [Dockerfile](Dockerfile) and [render.yaml](render.yaml) are included for self-
 </details>
 
 <details>
+<summary>Page 9: Weather Desk</summary>
+
+![Weather Desk: forecast to price chain, ten-day outlook with ensemble band, overnight revisions](files/screenshots/weather_desk.png)
+
+</details>
+
+<details>
 <summary>Page 7: BESS Optimiser</summary>
 
 ![BESS NPV and cash flow](files/screenshots/bess_npv.png)
@@ -122,7 +130,7 @@ A [Dockerfile](Dockerfile) and [render.yaml](render.yaml) are included for self-
 |------|-------|----------|
 | Overview | Landing page: market snapshot, data-source status, layer directory | `/` |
 | Markets | Live Monitor (Layer 1), Macro Signals (Layer 3), Energy Globe (3D infrastructure) | `/Live_Monitor`, `/Macro_Signals`, `/Energy_Globe` |
-| Analytics | Quant Analysis (Layer 2), ML Models (Layer 4) | `/Quant_Analysis`, `/ML_Models` |
+| Analytics | Quant Analysis (Layer 2), ML Models (Layer 4), Weather Desk | `/Quant_Analysis`, `/ML_Models`, `/Weather_Desk` |
 | Signals & Risk | Mispricing Dashboard (Layer 5), Risk Dashboard (D4) | `/Mispricing_Dashboard`, `/Risk_Dashboard` |
 | Projects | BESS Optimiser | `/BESS_Optimiser` |
 
@@ -151,7 +159,7 @@ Other pages link straight into a view through [utils/globe.py](utils/globe.py) (
 
 Optional: with `GLOBE_URL` pointing at a running instance of the stand-alone gods-eye-view globe (where the datasets were first built), the page also offers each view there, encoding the camera and the globe's share-link layer tokens in the URL hash.
 
-The visual language lives in [utils/theme.py](utils/theme.py). The concept is a survey sheet from a grid operator's drawing office: cool engineering paper with a measuring grid, petrol ink, fjord teal for the Nordic hydro system and cobalt for the Continental gas-fired system, Big Shoulders Display for titles and figures and Archivo for text. Structure is drawn like a single-line diagram: a busbar under every page title, meters instead of cards, and a landing page that lays the eight pages out as taps on a bus. The module holds the design tokens, the global stylesheet, reusable components (page header, section header, meter with optional sparkline, callout, tag, meter strip, interconnector, diagram tap, footer) and a registered Plotly template (`ptp`) that every chart uses. [.streamlit/config.toml](.streamlit/config.toml) mirrors the same tokens in Streamlit's native theme. The helpers in [utils/helpers.py](utils/helpers.py) (`kpi_card`, `commentary`, `pill`, `delta_span`) keep their signatures and render through the design system.
+The visual language lives in [utils/theme.py](utils/theme.py). The concept is a survey sheet from a grid operator's drawing office: cool engineering paper with a measuring grid, petrol ink, fjord teal for the Nordic hydro system and cobalt for the Continental gas-fired system, Big Shoulders Display for titles and figures and Archivo for text. Structure is drawn like a single-line diagram: a busbar under every page title, meters instead of cards, and a landing page that lays the pages out as taps on a bus, and cause-and-effect chains (forecast to output to residual load to price) drawn the same way. The module holds the design tokens, the global stylesheet, reusable components (page header, section header, meter with optional sparkline, callout, tag, meter strip, interconnector, diagram tap, footer) and a registered Plotly template (`ptp`) that every chart uses. [.streamlit/config.toml](.streamlit/config.toml) mirrors the same tokens in Streamlit's native theme. The helpers in [utils/helpers.py](utils/helpers.py) (`kpi_card`, `commentary`, `pill`, `delta_span`) keep their signatures and render through the design system.
 
 ---
 
@@ -163,6 +171,7 @@ The visual language lives in [utils/theme.py](utils/theme.py). The concept is a 
                     │  ENTSO-E A44/A65/A69/A75/B09/B16/B19/B31            │
                     │  GIE AGSI+ · GIE ALSI · Nord Pool · ICE/Yahoo       │
                     │  Fraunhofer ISE (incl. SMARD data) · FinBERT RSS    │
+                    │  ECMWF IFS + ERA5 via Open-Meteo                    │
                     └───────────────────────┬─────────────────────────────┘
                                             │
           ┌─────────────────────────────────▼──────────────────────────────────┐
@@ -214,6 +223,13 @@ The visual language lives in [utils/theme.py](utils/theme.py). The concept is a 
           └────────────────────────────────────────────────┘  └─────────────────────────────────┘
 
           ┌────────────────────────────────────────────────────────────────────┐
+          │  Page 9: Weather Desk  (ECMWF forecast to DE-LU price)             │
+          │  Wind, solar, demand calibrated on the German fleet → residual     │
+          │  load → price, 51-member ensemble band, overnight run revisions,   │
+          │  Norwegian catchment precipitation and snow against ERA5 normals   │
+          └────────────────────────────────────────────────────────────────────┘
+
+          ┌────────────────────────────────────────────────────────────────────┐
           │  Page 8: Energy Globe  (3D physical infrastructure, CesiumJS)      │
           │  Norwegian shelf facilities and export pipelines (Sodir)           │
           │  38 European LNG terminals with live GIE ALSI send-out and stocks  │
@@ -222,7 +238,7 @@ The visual language lives in [utils/theme.py](utils/theme.py). The concept is a 
           └────────────────────────────────────────────────────────────────────┘
 ```
 
-The layered model reflects how a physical desk processes information: raw observation (Layer 1) feeds quantitative model estimation (Layer 2), which contextualises within the macro and geopolitical regime (Layer 3), cross-validates against statistical learning signals (Layer 4), and synthesises into a ranked composite view (Layer 5). Pages 6 and 7 apply that signal infrastructure to portfolio risk and project evaluation respectively, and Page 8 maps the physical system behind the prices.
+The layered model reflects how a physical desk processes information: raw observation (Layer 1) feeds quantitative model estimation (Layer 2), which contextualises within the macro and geopolitical regime (Layer 3), cross-validates against statistical learning signals (Layer 4), and synthesises into a ranked composite view (Layer 5). Pages 6 and 7 apply that signal infrastructure to portfolio risk and project evaluation respectively, Page 8 maps the physical system behind the prices, and Page 9 looks forward: it reads the weather forecast that will set the next ten days of residual load.
 
 ---
 
@@ -239,7 +255,7 @@ The layered model reflects how a physical desk processes information: raw observ
 | Nordic Cross-Border Flows | Layer 1 | ENTSO-E B09/B10 physical flows: NordLink (1,400 MW), NorNed (700 MW), NSN (1,400 MW), Skagerrak (1,700 MW); daily utilisation % | [data/power_flows.py](data/power_flows.py) |
 | German Solar Duck Curve | Layer 1 | ENTSO-E B16 (primary); Fraunhofer ISE energy-charts.info (fallback); hourly mean over 14-day window; cannibalisation signal | [data/solar.py](data/solar.py) |
 | German Coal Generation | Layer 1 | ENTSO-E A75 average power per 15-minute interval converted to energy (hourly mean MW summed per UTC day); hard coal and lignite quarterly TWh and 90-day daily trend; incremental daily cache with a seven-day revision overlap, shipped with the Space; fuel-switching indicator at TTF > 50 EUR/MWh | [data/generation.py](data/generation.py) |
-| Storage Refill Monte Carlo | Layer 2 | Empirical bootstrap, 1,000 paths; daily injection draws by calendar month from 5-year AGSI history (no look-ahead); P10/P25/P50/P75/P90 fan chart | [models/storage_monte_carlo.py](models/storage_monte_carlo.py) |
+| Storage Monte Carlo | Layer 2 | Empirical bootstrap, 1,000 paths to the next 1 November; net daily changes (injection and withdrawal) drawn by calendar month from earlier AGSI years (no look-ahead), so a path started in winter runs through the drawdown before the refill; winter-low meter; P10/P25/P50/P75/P90 fan chart | [models/storage_monte_carlo.py](models/storage_monte_carlo.py) |
 | Gas-to-Power OLS Regression | Layer 2 | OLS of NL day-ahead on TTF; expanding-window residual z-score; R² as regime indicator (low R² = renewables-marginal) | [models/gas_power_regression.py](models/gas_power_regression.py) |
 | Price Spike Detector | Layer 2 | Rolling 30-day z-score across NO1/NO2/SE3/NL/FI; alert threshold |z| > 2.5, warning |z| > 1.5 | [models/spike_detector.py](models/spike_detector.py) |
 | TTF Seasonal Strategy | Layer 2 | Rules-based injection-withdrawal: buy summer average, sell winter average when spread exceeds round-trip storage cost; annual P&L, Sharpe, ex-crisis stats | [models/ttf_backtest.py](models/ttf_backtest.py) |
@@ -265,6 +281,7 @@ The layered model reflects how a physical desk processes information: raw observ
 | FinBERT Sentiment | Layer 4 | ProsusAI/finbert (HuggingFace); energy-filtered RSS headlines from six feeds (BBC Business, Guardian Energy, LNG World News, Energy Monitor, Power Technology, Offshore Technology); daily net sentiment (positive - negative); 120-day history, rebuilt from the paged feed archives in the background when it holds fewer than 21 days | [data/sentiment.py](data/sentiment.py) |
 | Mispricing Dashboard | Layer 5 | 8-signal composite scorecard; each signal: current value, historical percentile (expanding window, 2-7 year history), Bullish/Bearish/Neutral badge, High/Medium/Low confidence; sorted by extremity from median | [views/5_Mispricing_Dashboard.py](views/5_Mispricing_Dashboard.py) |
 | Risk Dashboard (D4) | Page 6 | 6-signal backtestable portfolio; non-parametric 1,000-path bootstrap for 95%/99% 1-day VaR and Expected Shortfall; 4 named stress scenarios; 30-day rolling signal correlation matrix | [views/6_Risk_Dashboard.py](views/6_Risk_Dashboard.py) |
+| Weather Desk | Page 9 | ECMWF IFS 0.25° (Open-Meteo): hub-height wind through a generic power curve at ten sites weighted to the German fleet, irradiance at six, heating degree days at five load centres; OLS calibration on archived ECMWF forecasts against energy-charts.info output, load and DE-LU prices; residual load to price with the previous TTF close; 51-member ensemble band; overnight revision of the newest run against the run 24 hours earlier with its price effect; western Norwegian catchment precipitation and snow share against ERA5 2016-2025 normals; 30-day out-of-sample test against persistence | [data/weather.py](data/weather.py), [models/weather_impact.py](models/weather_impact.py), [views/9_Weather_Desk.py](views/9_Weather_Desk.py) |
 | BESS Optimiser | Page 7 | Multi-market revenue stack: DAM arbitrage (historical NO2 spread, top-20% dispatch days), FCR-N + FCR-D (capacity-based, Nordic market averages); linear degradation on energy revenues; NPV, IRR (bisection 0-300%), simple payback; ±20% sensitivity table | Hameed and Træholt (2025); Lohndorf and Wozabal (2024); [views/7_BESS_Optimiser.py](views/7_BESS_Optimiser.py) |
 | Energy Globe | Page 8 | CesiumJS 3D globe of Norwegian shelf facilities and export pipelines (Sodir), European LNG import terminals (GEM) joined to live GIE ALSI send-out, utilisation (send-out / DTRS) and tank stocks (inventory / DTMI) through an EIC crosswalk, and EIA chokepoint flows; paced and cached ALSI pass; curated views linked from other pages | [data/energy_globe.py](data/energy_globe.py), [components/energy_globe.py](components/energy_globe.py), [views/8_Energy_Globe.py](views/8_Energy_Globe.py) |
 
@@ -291,12 +308,13 @@ The layered model reflects how a physical desk processes information: raw observ
 | ICE/Yahoo Finance | yfinance (TTF=F, BZ=F, CO2.L, NBP=F) | Daily | TTF spot, Brent crude, EU carbon (EUA), NBP gas |
 | Yahoo Finance | yfinance (JKM=F, EURUSD=X) | Daily | Platts JKM LNG front month (USD/MMBtu) and EUR/USD for the TTF vs JKM spread |
 | Yahoo Finance | yfinance (HG=F, ALI=F, BDRY) | Daily | LME copper proxy, LME aluminium proxy, Baltic Dry (BDRY ETF) |
-| Fraunhofer ISE | energy-charts.info REST API | Hourly | German solar generation and DE-LU price fallback (no key required) |
+| Fraunhofer ISE | energy-charts.info REST API | Hourly | German solar generation and DE-LU price fallback; Weather Desk calibration (German wind, solar, load, DE-LU prices); no key required |
 | Bundesnetzagentur SMARD (via energy-charts.info) | energy-charts.info price API (bzn=IT-North) | 15-minute (hourly before 1 Oct 2025) | IT-North day-ahead prices for the FI minus IT-North spread; CC BY 4.0, attribution: Bundesnetzagentur \| SMARD.de (no key required) |
+| ECMWF via Open-Meteo | forecast, ensemble, single-runs, historical-forecast and ERA5 archive APIs (CC BY 4.0) | 3-hourly cache (forecasts), 6-hourly (calibration) | Weather Desk: wind, irradiance, temperature and catchment precipitation; archived forecasts and ERA5 normals ship with the app and only new days are fetched |
 | ProsusAI FinBERT | HuggingFace Transformers | On-demand | Energy headline classification: positive/negative/neutral |
 | RSS News Feeds | BBC Business, Guardian Energy, LNG World News, Energy Monitor, Power Technology, Offshore Technology | 6-hourly cache | Raw headline text for FinBERT pipeline |
 
-**Notes on data availability.** Gas storage (GIE), ENTSO-E flows, hydro, wind, solar, and generation all require free API keys. The platform degrades gracefully without them: all Nord Pool spot, energy-charts.info (IT-North) and yfinance data loads without credentials, covering approximately 15 of the 36 modules (the Energy Globe's static layers need no key). The public Nord Pool endpoint only serves roughly the latest two months of delivery days (older dates return HTTP 401), so keyless histories built on it (the FI leg of the FI minus IT-North spread, and the feature matrix fallback used by Layers 2 and 4) are limited to that window until `ENTSOE_API_KEY` is set. API2 Rotterdam coal futures (MTF=F) are no longer served by Yahoo Finance, so the 7x7 correlation grid uses Henry Hub natural gas (NG=F) in that slot. GIE allows 60 requests per minute per address, and the Hugging Face Space shares its outbound address with other tenants, so a GIE request can be refused: [data/gie.py](data/gie.py) retries rate limits and gateway errors, and a fetch that still fails is retried within five minutes instead of being cached for an hour.
+**Notes on data availability.** Gas storage (GIE), ENTSO-E flows, hydro, wind, solar, and generation all require free API keys. The platform degrades gracefully without them: all Nord Pool spot, energy-charts.info (IT-North) and yfinance data loads without credentials, covering approximately 16 of the 37 modules, including the keyless Weather Desk (the Energy Globe's static layers need no key). The public Nord Pool endpoint only serves roughly the latest two months of delivery days (older dates return HTTP 401), so keyless histories built on it (the FI leg of the FI minus IT-North spread, and the feature matrix fallback used by Layers 2 and 4) are limited to that window until `ENTSOE_API_KEY` is set. API2 Rotterdam coal futures (MTF=F) are no longer served by Yahoo Finance, so the 7x7 correlation grid uses Henry Hub natural gas (NG=F) in that slot. GIE allows 60 requests per minute per address, and the Hugging Face Space shares its outbound address with other tenants, so a GIE request can be refused: [data/gie.py](data/gie.py) retries rate limits and gateway errors, and a fetch that still fails is retried within five minutes instead of being cached for an hour.
 
 ---
 
@@ -385,7 +403,7 @@ AI shortens the path from an idea to a working feature; it does not replace chec
 
 ## Running Locally
 
-The platform requires Python 3.11+ and Streamlit 1.56 or later (top navigation, horizontal containers and the theme options in `.streamlit/config.toml`). API keys for GIE AGSI+ (agsi.gie.eu) and ENTSO-E Transparency (transparency.entsoe.eu) are free to register and unlock the full feature set. Without keys, approximately 15 of the 36 modules load using public data only.
+The platform requires Python 3.11+ and Streamlit 1.56 or later (top navigation, horizontal containers and the theme options in `.streamlit/config.toml`). API keys for GIE AGSI+ (agsi.gie.eu) and ENTSO-E Transparency (transparency.entsoe.eu) are free to register and unlock the full feature set. Without keys, approximately 16 of the 37 modules (the Weather Desk among them) load using public data only.
 
 ```bash
 git clone https://github.com/Gudbjerg/POWER-TRADER-PORTFOLIO.git

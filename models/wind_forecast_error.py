@@ -184,50 +184,33 @@ def make_error_bar_chart(
     last_n_days: int = 60,
 ) -> go.Figure:
     """
-    Daily forecast error bar chart per zone (last N days).
-    Positive = over-forecast; negative = under-forecast.
+    Daily forecast error per zone (last N days), one panel per zone so each keeps its scale.
+    Positive (red) = over-forecast; negative (green) = under-forecast.
     """
-    fig = go.Figure()
+    from plotly.subplots import make_subplots
 
     cutoff = pd.Timestamp.now() - pd.Timedelta(days=last_n_days)
     df = error_df[pd.to_datetime(error_df["date"]) >= cutoff].copy()
-
-    for zone in zones:
-        col = f"{zone}_error_gwh"
-        if col not in df.columns:
-            continue
-        vals   = df[col]
-        colors = ["#c2391f" if v > 0 else "#2f7a47" for v in vals]
+    zones = [z for z in zones if f"{z}_error_gwh" in df.columns]
+    rows = max(len(zones), 1)
+    fig = make_subplots(rows=rows, cols=1, shared_xaxes=True, vertical_spacing=0.06,
+                        subplot_titles=[ZONE_LABELS.get(z, z) for z in zones] or None)
+    for i, zone in enumerate(zones, start=1):
+        vals = df[f"{zone}_error_gwh"]
         fig.add_trace(go.Bar(
-            x=df["date"],
-            y=vals,
-            name=ZONE_LABELS.get(zone, zone),
-            marker_color=colors,
-            opacity=0.75,
+            x=df["date"], y=vals, name=ZONE_LABELS.get(zone, zone),
+            marker_color=["#c2391f" if v > 0 else "#2f7a47" for v in vals],
             hovertemplate=f"<b>{ZONE_LABELS.get(zone, zone)}</b><br>Error: %{{y:.1f}} GWh<extra></extra>",
-        ))
-
-    fig.add_hline(y=0, line=dict(color=CHART["zero"], width=1))
-
+        ), row=i, col=1)
+        fig.add_hline(y=0, line=dict(color=CHART["zero"], width=1), row=i, col=1)
+        fig.update_yaxes(title_text="GWh", gridcolor=CHART["grid"],
+                         tickfont=dict(size=10, color=CHART["muted"]), row=i, col=1)
     fig.update_layout(
-        template=PLOTLY_TEMPLATE,
-        paper_bgcolor=CHART["bg"],
-        plot_bgcolor=CHART["panel_bg"],
-        barmode="group",
-        height=320,
-        margin=dict(l=55, r=20, t=20, b=40),
-        xaxis=dict(gridcolor=CHART["grid"], tickfont=dict(size=10, color=CHART["muted"])),
-        yaxis=dict(
-            title="Forecast error (GWh)  [positive = over-forecast]",
-            gridcolor=CHART["grid"],
-            tickfont=dict(size=10, color=CHART["muted"]),
-        ),
-        legend=dict(
-            orientation="h", yanchor="bottom", y=1.02, xanchor="left", x=0,
-            font=dict(size=10, color=CHART["muted"]),
-        ),
-        hovermode="x unified",
+        template=PLOTLY_TEMPLATE, paper_bgcolor=CHART["bg"], plot_bgcolor=CHART["panel_bg"],
+        height=170 + 170 * rows, showlegend=False,
+        margin=dict(l=55, r=20, t=30, b=40), hovermode="x unified",
     )
+    fig.update_xaxes(gridcolor=CHART["grid"], tickfont=dict(size=10, color=CHART["muted"]))
     return fig
 
 
