@@ -61,9 +61,10 @@ with st.container(key="ptp_hero"):
         '<div class="ptp-hero__lead">Norway prices power off water in reservoirs; Germany prices it off '
         "gas, coal and wind. The interconnector between them is where the two systems meet, and this "
         "platform is built to explain the price on each end.</div>"
-        '<div class="ptp-hero__body">Eight pages follow a trader\'s workflow: live fundamentals, '
-        "quantitative models, macro and geopolitics, machine learning, ranked rich and cheap signals, "
-        "portfolio risk, battery project economics and a 3D globe of the infrastructure.</div>"
+        '<div class="ptp-hero__body">Nine pages follow a trader\'s workflow: live fundamentals, '
+        "quantitative models, macro and geopolitics, machine learning, a weather desk that reads the "
+        "ECMWF forecast into a price, ranked rich and cheap signals, portfolio risk, battery project "
+        "economics and a 3D globe of the infrastructure.</div>"
         "</div>"
     )
     _ic_slot = st.empty()
@@ -139,6 +140,11 @@ _GROUPS = [
              title="ML Models", stat="3 models",
              desc="An LSTM next-day price forecaster judged against a naive baseline, a four-state regime "
                   "model with a volatility overlay, and FinBERT news sentiment with Granger tests."),
+        dict(key="weather", page="views/9_Weather_Desk.py", link="Open Weather Desk",
+             title="Weather Desk", stat="10-day outlook",
+             desc="The ECMWF forecast read through a model calibrated on the German fleet: wind, solar and "
+                  "demand to residual load and a DE-LU price with an ensemble band, overnight run revisions "
+                  "before the auction, and rain and snow over the Norwegian reservoirs."),
     ]),
     ("Act on it", [
         dict(key="l5", page="views/5_Mispricing_Dashboard.py", link="Open Mispricing Dashboard",

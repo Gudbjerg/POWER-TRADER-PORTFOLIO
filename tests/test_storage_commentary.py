@@ -66,9 +66,19 @@ def test_critical_wording_follows_the_season():
     assert "before the winter withdrawal season" in autumn
     assert "summer" not in autumn
     assert "end of the withdrawal season" in winter
+    assert "target window (1 October to 1 December) is open" in autumn
+    assert "target window closed on 1 December" in winter
     for text in (autumn, winter):
-        assert "90% on any day between 1 October and 1 December" in text
         assert "—" not in text
+
+
+def test_target_sentence_by_date_and_peak():
+    from utils.scenarios import target_sentence
+    assert "remain to inject" in target_sentence(70.0, date(2026, 7, 1))
+    assert "was met at 91.0%" in target_sentence(85.0, date(2026, 10, 20), season_peak=91.0)
+    assert "80% floor with the full flexibility was reached" in target_sentence(80.0, date(2026, 11, 5), season_peak=83.0)
+    late = target_sentence(72.7, date(2026, 12, 15), season_peak=75.0)
+    assert "closed on 1 December" in late and "below even the 80%" in late
 
 
 def test_lng_commentary_follows_the_season():
@@ -107,3 +117,16 @@ def test_storage_season_wording():
     assert storage_season(date(2026, 6, 1)) == "injection season"
     assert storage_season(date(2026, 10, 12)) == "EU target window"
     assert storage_season(date(2027, 1, 15)) == "withdrawal season"
+
+
+def test_winter_path_projects_end_of_winter_level():
+    import pandas as pd
+    from utils.scenarios import storage_winter_path
+    doy = range(1, 367)
+    mean = [60 - 0.3 * d if d <= 90 else 40 for d in doy]   # simple winter decline into April
+    bands = pd.DataFrame({"day_of_year": list(doy), "mean": mean, "min": [m - 10 for m in mean],
+                          "max": [m + 10 for m in mean]})
+    out = storage_winter_path(50.0, bands, date(2027, 1, 10))
+    assert out["days"] == 81
+    assert out["avg_draw_pp"] > 0 and out["projected_pct"] < 50.0
+    assert storage_winter_path(50.0, bands, date(2027, 6, 1)) is None

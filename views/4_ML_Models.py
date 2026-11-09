@@ -880,8 +880,14 @@ else:
         st.plotly_chart(fig_s, width="stretch")
 
     # Granger causality (requires ≥21 days)
-    if not daily.empty and not ttf["prices"].empty and len(daily) >= 21:
-        ttf_df = ttf["prices"][["date", "price"]].copy()
+    _ttf_px = ttf["prices"]
+    if _ttf_px.empty:
+        from models.ttf_backtest import fetch_ttf_history as _fth
+        _ttf_px = _fth(years=1)
+    if len(daily) >= 21 and _ttf_px.empty:
+        st.caption("TTF prices are unavailable right now, so the Granger test is not run.")
+    if not daily.empty and not _ttf_px.empty and len(daily) >= 21:
+        ttf_df = _ttf_px[["date", "price"]].copy()
         ttf_df["date"] = pd.to_datetime(ttf_df["date"])
         ttf_df["return"] = ttf_df["price"].pct_change() * 100
 
@@ -907,8 +913,13 @@ else:
                     ),
                     unsafe_allow_html=True,
                 )
-            except Exception:
-                pass
+            except Exception as _gc_exc:
+                st.caption(f"The Granger test could not be computed ({type(_gc_exc).__name__}).")
+        else:
+            st.caption(
+                f"Granger test pending: {len(merged)} days have both a sentiment score and a TTF "
+                "settlement; 21 are needed."
+            )
     elif len(daily) < 21:
         st.caption(
             f"Granger causality and rolling IC tests require ≥21 days of history. "
@@ -922,6 +933,7 @@ else:
                 ["date", "source", "net_sentiment", "title"]
             ].copy()
             display["net_sentiment"] = display["net_sentiment"].round(3)
+            display["date"] = pd.to_datetime(display["date"]).dt.strftime("%d %b %Y")
             display.columns = ["Date", "Source", "Net sentiment", "Headline"]
             st.dataframe(display.set_index("Date"), width="stretch")
 

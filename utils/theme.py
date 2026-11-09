@@ -74,6 +74,7 @@ ACCENTS: dict[str, str] = {
     "risk":  "#8f5a1c",   # Risk Dashboard: umber
     "bess":  "#2f7a47",   # BESS Optimiser: moss
     "globe": "#1c8fb0",   # Energy Globe: sea
+    "weather": "#3b6e8f", # Weather Desk: slate rain
 }
 
 # Semantic tones shared by chips, callouts and status marks.
@@ -321,7 +322,7 @@ section[data-testid="stSidebar"] h3, section[data-testid="stSidebar"] h4 {
   background: var(--ptp-surface-2); border: 1px solid var(--ptp-border-soft); padding: 0.06em 0.34em; border-radius: 2px;
 }
 [data-testid="stCaptionContainer"], [data-testid="stCaptionContainer"] p {
-  color: #4f6670 !important; font-size: 0.84rem !important; line-height: 1.55;
+  color: #3a5560 !important; font-size: 0.86rem !important; line-height: 1.55;
 }
 [data-testid="stMarkdownContainer"] hr, hr {
   border: none !important; border-top: 1px solid var(--ptp-border-strong) !important;
@@ -856,6 +857,48 @@ def interconnector(left: dict, right: dict, link: str, capacity: str | None = No
     )
     when = f" Delivery day {as_of}." if as_of else ""
     return f'<div class="ptp-ic">{svg}<div class="ptp-ic__caption">{_esc(direction)}{_esc(when)}</div></div>'
+
+
+def transmission_chain(steps: Sequence[dict], caption: str | None = None) -> str:
+    """A cause-and-effect chain drawn as a single-line diagram.
+
+    Each step is a dict with ``label`` (short name), ``value`` (display text) and an
+    optional ``note`` (one line) and ``tone`` (key of ``TONES``). Steps sit on one busbar,
+    joined by transformer symbols, so the reader follows the effect from left to right.
+    """
+    steps = list(steps)
+    n = len(steps)
+    if n == 0:
+        return ""
+    width, ink = 1000, COLORS["text"]
+    xs = [70 + i * (width - 140) / max(n - 1, 1) for i in range(n)]
+    parts = [f'<path d="M{xs[0]:.0f} 96 L{xs[-1]:.0f} 96" stroke="{ink}" stroke-width="6" fill="none"/>']
+    for a, b in zip(xs, xs[1:]):
+        mid = (a + b) / 2
+        parts.append(
+            f'<circle cx="{mid - 9:.0f}" cy="96" r="13" fill="{COLORS["surface_1"]}" stroke="{ink}" stroke-width="3"/>'
+            f'<circle cx="{mid + 9:.0f}" cy="96" r="13" fill="none" stroke="{ink}" stroke-width="3"/>'
+        )
+    for i, (x, step) in enumerate(zip(xs, steps)):
+        color = _tone(step.get("tone")) if step.get("tone") else ink
+        anchor = "start" if i == 0 else ("end" if i == n - 1 else "middle")
+        parts.append(
+            f'<rect x="{x - 9:.0f}" y="78" width="18" height="36" fill="{color}" stroke="{ink}" stroke-width="3"/>'
+            f'<text x="{x:.0f}" y="54" text-anchor="{anchor}" font-family="{_attr(FONT_DISPLAY)}" '
+            f'font-weight="800" font-size="38" fill="{color}">{_esc(step.get("value", ""))}</text>'
+            f'<text x="{x:.0f}" y="142" text-anchor="{anchor}" font-family="{_attr(FONT_SANS)}" '
+            f'font-weight="600" font-size="15" fill="{ink}">{_esc(step.get("label", ""))}</text>'
+        )
+        if step.get("note"):
+            parts.append(
+                f'<text x="{x:.0f}" y="162" text-anchor="{anchor}" font-family="{_attr(FONT_SANS)}" '
+                f'font-size="13" fill="{COLORS["muted"]}">{_esc(step["note"])}</text>'
+            )
+    label = "; ".join(f'{st_.get("label", "")} {st_.get("value", "")}' for st_ in steps)
+    svg = (f'<svg viewBox="0 0 {width} 172" role="img" aria-label="{_attr(label)}">'
+           + "".join(parts) + "</svg>")
+    cap = f'<div class="ptp-ic__caption">{_esc(caption)}</div>' if caption else ""
+    return f'<div class="ptp-ic ptp-chain">{svg}{cap}</div>'
 
 
 # ══════════════════════════════════════════════════════════════════════════════

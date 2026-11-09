@@ -45,6 +45,8 @@ PAGES = {
                 icon=":material/query_stats:", url_path="Quant_Analysis"),
         st.Page("views/4_ML_Models.py", title="ML Models",
                 icon=":material/memory:", url_path="ML_Models"),
+        st.Page("views/9_Weather_Desk.py", title="Weather Desk",
+                icon=":material/air:", url_path="Weather_Desk"),
     ],
     "Signals & Risk": [
         st.Page("views/5_Mispricing_Dashboard.py", title="Mispricing Dashboard",

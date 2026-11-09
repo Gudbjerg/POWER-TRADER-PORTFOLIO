@@ -19,12 +19,43 @@ def _injection_season(today: date) -> bool:
     return 4 <= today.month <= 10
 
 
+TARGET_FLEX_PP = 10.0   # deviation allowed in difficult market conditions
+
+
+def target_sentence(pct: float, today: date, season_peak: float | None = None) -> str:
+    """One sentence on the 90% target that fits the date.
+
+    Before 1 October the target lies ahead; from 1 October to 1 December the window is open;
+    afterwards the window has closed and ``season_peak`` (the highest fill since 1 September)
+    says whether the target, or the floor with the full flexibility, was reached.
+    """
+    floor = STORAGE_TARGET_PCT - TARGET_FLEX_PP
+    window_open = date(today.year, 10, 1) <= today <= date(today.year, 12, 1)
+    before = date(today.year, 4, 1) <= today < date(today.year, 10, 1)
+    if before:
+        return (f"The EU target is {STORAGE_TARGET_PCT:.0f}% on any day between 1 October and 1 December "
+                f"({floor:.0f}% with the full flexibility); {max(STORAGE_TARGET_PCT - pct, 0):.1f}pp remain to inject.")
+    peak = season_peak if season_peak is not None else pct
+    if window_open:
+        if peak >= STORAGE_TARGET_PCT:
+            return f"The target window (1 October to 1 December) is open and the {STORAGE_TARGET_PCT:.0f}% target was met at {peak:.1f}%."
+        reached = "reached" if peak >= floor else "not reached"
+        return (f"The target window (1 October to 1 December) is open; this season's peak of {peak:.1f}% is short of "
+                f"{STORAGE_TARGET_PCT:.0f}%, and the {floor:.0f}% floor with the full flexibility was {reached}.")
+    if peak >= STORAGE_TARGET_PCT:
+        return f"The {STORAGE_TARGET_PCT:.0f}% target was met: stocks peaked at {peak:.1f}% before the window closed."
+    met_floor = "within" if peak >= floor else "below even"
+    return (f"The target window closed on 1 December with stocks peaking at {peak:.1f}%, short of "
+            f"{STORAGE_TARGET_PCT:.0f}% and {met_floor} the {floor:.0f}% allowed with the full flexibility.")
+
+
 def storage_status(
     pct: float,
     min_pct: float | None,
     mean_pct: float | None,
     region: str = "EU",
     today: date | None = None,
+    season_peak: float | None = None,
 ) -> tuple[str, str, str]:
     if mean_pct is None or min_pct is None:
         return ("ok", f"{region} storage at {pct:.1f}%; historical bands unavailable", "")
@@ -47,8 +78,7 @@ def storage_status(
                     f"next summer's refill requirement grows with every week of deficit. "
                 )
                 + f"A cold snap or LNG supply disruption could rapidly tighten balances. "
-                f"Watch the EU storage target ({STORAGE_TARGET_PCT:.0f}% on any day between 1 October and 1 December). "
-                f"The gap to target is significant."
+                + target_sentence(pct, today, season_peak)
             ),
         )
     elif gap_to_mean < -15:
@@ -56,9 +86,8 @@ def storage_status(
             "warn",
             f"{region} storage critically below the seasonal average: {pct:.1f}% versus {mean_pct:.1f}%",
             (
-                f"Storage is {abs(gap_to_mean):.1f}pp below the 5-year average for this date. "
-                f"While above the historical minimum, the pace of injection required to reach "
-                f"{STORAGE_TARGET_PCT:.0f}% within the EU target window (1 October to 1 December) is well above seasonal norms. "
+                f"Storage is {abs(gap_to_mean):.1f}pp below the 5-year average for this date, though above "
+                f"the historical minimum. " + target_sentence(pct, today, season_peak) + " "
                 + (
                     "Higher TTF prices are likely to incentivise LNG cargoes and pipeline volumes."
                     if injecting else
@@ -72,8 +101,11 @@ def storage_status(
             f"{region} storage below the seasonal average: {pct:.1f}% ({abs(gap_to_mean):.1f}pp below 5-year mean)",
             (
                 f"Storage is running {abs(gap_to_mean):.1f}pp below the 5-year seasonal average. "
-                f"Injection pace will need to exceed historical norms to reach winter targets. "
-                f"Near-term TTF prices are supported by refill demand."
+                + ("Injection pace will need to exceed historical norms to reach the winter target. "
+                   "Near-term TTF prices are supported by refill demand."
+                   if injecting else
+                   "Withdrawals start from a lower base than usual, which supports winter and "
+                   "summer-refill pricing.")
             ),
         )
     elif gap_to_mean > 10:
@@ -144,6 +176,33 @@ def storage_refill_pace(
             "below"
         )
     return out
+
+
+def storage_winter_path(pct: float, bands: pd.DataFrame, today: date) -> dict | None:
+    """Where stocks end the winter if withdrawals follow the 5-year average from today.
+
+    Applies from 1 November to 31 March. The 5-year average draw from today's day of year
+    to 1 April is taken from the seasonal bands and subtracted from today's fill. Returns
+    ``days`` (to 1 April), ``avg_draw_pp``, ``projected_pct``, ``norm_end_pct``,
+    ``min_end_pct`` and ``mean_today``; None outside the season or without bands.
+    """
+    if bands is None or bands.empty or 4 <= today.month <= 10:
+        return None
+    from data.gas_storage import calendar_doy
+    apr1 = date(today.year if today.month <= 3 else today.year + 1, 4, 1)
+    by = bands.set_index("day_of_year")
+    t_doy, a_doy = calendar_doy(today), calendar_doy(apr1)
+    if t_doy not in by.index or a_doy not in by.index:
+        return None
+    draw = float(by.loc[t_doy, "mean"]) - float(by.loc[a_doy, "mean"])
+    return {
+        "days": (apr1 - today).days,
+        "avg_draw_pp": draw,
+        "projected_pct": pct - draw,
+        "norm_end_pct": float(by.loc[a_doy, "mean"]),
+        "min_end_pct": float(by.loc[a_doy, "min"]),
+        "mean_today": float(by.loc[t_doy, "mean"]),
+    }
 
 
 # ── TTF Gas Price ────────────────────────────────────────────────────────────

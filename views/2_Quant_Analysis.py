@@ -66,8 +66,10 @@ def _run_decomp_cached(df: pd.DataFrame, window: int = 90):
 def _run_ols_cached(reg_df: pd.DataFrame):
     return run_full_ols(reg_df)
 
-@st.cache_data(ttl=1800, show_spinner=False)
+@st.cache_data(ttl=900, show_spinner=False)
 def _get_sentiment_l2():
+    # Short lifetime: right after a restart the headline archive is still being backfilled,
+    # and a long-lived early result would keep the scorecard on a few days of history.
     return get_sentiment_data()
 
 @st.cache_data(ttl=3600, show_spinner=False)
@@ -682,8 +684,9 @@ with tab_mc:
     st.markdown("### Storage Refill Monte Carlo Simulation")
     st.caption(
         "Empirical bootstrap simulation of 1,000 storage fill paths from the current "
-        "EU aggregate level to November 1. Daily injection rates are sampled from the "
-        "historical AGSI distribution by calendar month."
+        "EU aggregate level to the next 1 November, through the winter drawdown when it starts in "
+        "the withdrawal season. Daily net changes are sampled from the historical AGSI "
+        "distribution by calendar month."
     )
 
     if current_pct is None:
@@ -715,6 +718,8 @@ with tab_mc:
         )
 
         terminal    = paths[:, -1]
+        trough      = paths.min(axis=1)
+        _winter_run = pd.Timestamp(sim_dates[0]).month in (11, 12, 1, 2, 3)
         p_reach_80  = float(np.mean(terminal >= 80.0)) * 100
         p_reach_90  = float(np.mean(terminal >= 90.0)) * 100
         p50_end     = float(np.percentile(terminal, 50))
@@ -750,11 +755,21 @@ with tab_mc:
                 unsafe_allow_html=True,
             )
         with k4:
-            st.markdown(
-                kpi_card("Current EU Storage", f"{current_pct:.1f}%",
-                         delta_span("current fill level", "blue")),
-                unsafe_allow_html=True,
-            )
+            if _winter_run:
+                _tr50 = float(np.percentile(trough, 50))
+                _tr10 = float(np.percentile(trough, 10))
+                st.markdown(
+                    kpi_card("Winter low, P50", f"{_tr50:.1f}%",
+                             delta_span(f"P10 {_tr10:.1f}% · from {current_pct:.1f}% today",
+                                        "red" if _tr50 < 25 else ("amber" if _tr50 < 35 else "green"))),
+                    unsafe_allow_html=True,
+                )
+            else:
+                st.markdown(
+                    kpi_card("Current EU Storage", f"{current_pct:.1f}%",
+                             delta_span("current fill level", "blue")),
+                    unsafe_allow_html=True,
+                )
 
         # Fan chart
         C = {
@@ -802,7 +817,7 @@ with tab_mc:
             legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
             xaxis=dict(showgrid=True, gridcolor=C["grid"], title=None),
             yaxis=dict(title="Storage fill (%)", showgrid=True, gridcolor=C["grid"],
-                       range=[max(0, current_pct - 5), 102]),
+                       range=[max(0, float(np.min(p10)) - 5), 102]),
             hovermode="x unified",
         )
         st.plotly_chart(fig, width="stretch")
@@ -818,17 +833,18 @@ with tab_mc:
             st.markdown(f"""
             **Method:** Empirical bootstrap Monte Carlo with 1,000 paths.
 
-            **Injection rate sampling:** For each simulated calendar day, a daily injection increment
-            (percentage points of working gas volume per day) is drawn with replacement from the
-            empirical distribution observed in that calendar month, excluding the current year
-            to avoid look-ahead bias. Calibrated from {n_hist:,} AGSI EU aggregate observations
-            (approximately 5 years of history).
+            **Sampling:** For each simulated calendar day, a net daily change (injection minus
+            withdrawal, percentage points of working gas volume) is drawn with replacement from the
+            changes observed in that calendar month in earlier years, so a path that starts in
+            November first runs through the winter drawdown and then the summer refill. Calibrated
+            from {n_hist:,} AGSI EU aggregate observations.
 
-            **Injection season:** April 1 through October 31. Storage is held flat outside this window.
-
-            **Rate multiplier:** Scales all sampled daily increments uniformly. Allows stress-testing
-            of below-average (supply disruption, low LNG diversion) or above-average injection seasons.
+            **Rate multiplier:** Scales the injection draws (positive changes) only; withdrawals follow
+            history. Allows stress-testing of a slow (supply disruption, low LNG diversion) or fast refill.
             The random seed is fixed per multiplier value for reproducible scenario comparisons.
+
+            **Winter low:** in the withdrawal season the fourth meter shows the median and 10th
+            percentile of each path's lowest fill, the level the winter leaves for the refill.
 
             **Reference levels:**
             - **90% (green dashed):** EU filling target. Regulation (EU) 2022/1032 required 90% by
@@ -841,8 +857,9 @@ with tab_mc:
             **Percentile bands:** Outer band (P10-P90) contains 80% of paths. Inner band (P25-P75) is the
             interquartile range. The blue line is the P50 median path.
 
-            **Limitations:** Model assumes injection rates are IID within a given month across years.
-            Does not capture serial correlation, geopolitical supply disruptions, or demand-side shocks.
+            **Limitations:** Model assumes daily changes are IID within a given month across years, so
+            a cold spell (correlated large withdrawals) is under-represented, and draws do not depend on
+            the fill level. Does not capture geopolitical supply disruptions or demand-side shocks.
             Use alongside live market signals on the Monitor page.
             """)
 
@@ -1916,9 +1933,12 @@ with tab_wind:
     else:
         # ── Compute errors ────────────────────────────────────────────────────
         error_df = compute_errors(fc_df, act_df, fc_zones)
+        # Only zones where both a forecast and an actual exist produce an error series
+        fc_zones = [z for z in fc_zones if f"{z}_error_gwh" in error_df.columns
+                    and error_df[f"{z}_error_gwh"].notna().any()]
         rmse_df  = compute_rolling_rmse(error_df, fc_zones, window=7)
 
-        if error_df.empty:
+        if error_df.empty or not fc_zones:
             st.warning(
                 "Could not compute forecast errors: no overlapping dates between "
                 "forecast and actual data. This typically means the zones with "
@@ -1931,7 +1951,7 @@ with tab_wind:
             with kpi_cols[0]:
                 latest_date = error_df["date"].max()
                 st.markdown(
-                    kpi_card("Latest data", str(latest_date),
+                    kpi_card("Latest data", f"{pd.Timestamp(latest_date):%d %b %Y}",
                              delta_span(f"{len(error_df)} days", "blue")),
                     unsafe_allow_html=True,
                 )
@@ -2028,12 +2048,12 @@ with tab_wind:
         The NO2 price change is used as a proxy for intraday/next-day market volatility;
         a direct intraday continuous price series requires REMIT / Epex intraday data.
 
-        **ENTSO-E A69 vs B16/B19 availability:** A69 (forecasts) and B16/B19 (actuals) are
+        **ENTSO-E A69 vs B18/B19 availability:** A69 (forecasts) and B18/B19 (actuals) are
         separate document types that may be served from different ENTSO-E platform components.
         If A69 is unavailable, the tab shows a clear error banner rather than silent null data.
 
-        **Countries:** DE (Fraunhofer actuals, A69 forecast), DK1 (ENTSO-E both), NO (ENTSO-E both),
-        GB (ENTSO-E for both; availability may vary post-Brexit).
+        **Countries:** DE (Fraunhofer actuals, A69 forecast), DK1 and NO (ENTSO-E both). A zone is
+        shown only when both its forecast and its actual generation are published for the window.
         """)
 
     st.caption(

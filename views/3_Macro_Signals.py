@@ -16,7 +16,7 @@ st.set_page_config(
     initial_sidebar_state="collapsed",
 )
 
-from utils.helpers import apply_dark_theme, kpi_card, delta_span, commentary
+from utils.helpers import eur, apply_dark_theme, kpi_card, delta_span, commentary
 from utils.globe import globe_link
 from utils.theme import ACCENTS, CHART, PLOTLY_TEMPLATE, page_header, page_footer
 from data.prices import get_ttf_data
@@ -1055,8 +1055,8 @@ with tab_jkm:
             )
         with _jk3:
             st.markdown(
-                kpi_card("TTF minus JKM", f"€{_js['spread']:+.2f}/MWh",
-                         delta_span(f"{_js['regime']} · {_JKM_AVG_D}-day avg €{_js['avg']:+.2f}",
+                kpi_card("TTF minus JKM", f"{eur(_js['spread'], signed=True, decimals=2)}/MWh",
+                         delta_span(f"{_js['regime']} · {_JKM_AVG_D}-day avg {eur(_js['avg'], signed=True, decimals=2)}",
                                     "green" if _js["spread"] > 0 else "red")),
                 unsafe_allow_html=True,
             )
@@ -1133,15 +1133,15 @@ with tab_jkm:
         _jkm_text = (
             f"On {_js_date}, TTF settled at €{_js['ttf']:.2f}/MWh against JKM at "
             f"€{_js['jkm_eur_mwh']:.2f}/MWh (${_js['jkm_usd_mmbtu']:.3f}/MMBtu), a spread of "
-            f"€{_js['spread']:+.2f}/MWh ({_js['regime']}). Over the trailing {_JKM_AVG_D} days "
-            f"({_js['n_avg']} settlements) the spread averaged €{_js['avg']:+.2f}/MWh. "
+            f"{eur(_js['spread'], signed=True, decimals=2)}/MWh ({_js['regime']}). Over the trailing {_JKM_AVG_D} days "
+            f"({_js['n_avg']} settlements) the spread averaged {eur(_js['avg'], signed=True, decimals=2)}/MWh. "
         )
         if _js_pct_ok:
             _jkm_text += (
                 f"The latest reading ranks at the {_jkm_ordinal(int(round(_js['percentile'])))} percentile "
                 f"of the trailing one-year distribution, in which TTF priced above JKM on "
-                f"{_js['share_positive']:.0%} of settlements (range €{_js['window_min']:+.1f} to "
-                f"€{_js['window_max']:+.1f}/MWh). "
+                f"{_js['share_positive']:.0%} of settlements (range {eur(_js['window_min'], signed=True, decimals=1)} to "
+                f"{eur(_js['window_max'], signed=True, decimals=1)}/MWh). "
             )
         if _js["spread"] > 0:
             _jkm_text += (

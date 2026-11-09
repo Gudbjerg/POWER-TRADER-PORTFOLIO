@@ -1,62 +1,52 @@
 """
-Storage Refill Monte Carlo Simulation.
+Storage Monte Carlo: the EU fill path from today to the next 1 November.
 
-Empirical bootstrap: for each simulated calendar day, a daily injection rate
-is drawn with replacement from the historical AGSI distribution for that month.
-Injection season: April through October. Storage is held flat outside this window.
+Empirical bootstrap: for each simulated calendar day a net daily change (injection minus
+withdrawal, percentage points of working gas volume) is drawn with replacement from the
+historical AGSI changes observed in that calendar month. The path therefore runs through
+the winter drawdown when it starts in the withdrawal season (November to March) and
+through the summer refill afterwards, instead of holding stocks flat until April.
+The rate multiplier scales injections (positive changes) only; withdrawals follow history.
 """
 import numpy as np
 import pandas as pd
 from datetime import date, timedelta
 
-# Fallback injection rates (pct points/day) used when AGSI historical data
-# is insufficient. Values approximate long-run European seasonal averages.
+# Fallback net daily changes (pp/day) when AGSI history is insufficient: approximate
+# long-run EU averages, negative in the withdrawal months.
 _FALLBACK_RATES: dict[int, np.ndarray] = {
-    4:  np.array([0.28] * 30),
-    5:  np.array([0.38] * 31),
-    6:  np.array([0.33] * 30),
-    7:  np.array([0.28] * 31),
-    8:  np.array([0.22] * 31),
-    9:  np.array([0.18] * 30),
-    10: np.array([0.09] * 31),
+    1:  np.array([-0.45] * 31), 2: np.array([-0.40] * 28), 3: np.array([-0.25] * 31),
+    4:  np.array([0.15] * 30),  5: np.array([0.36] * 31),  6: np.array([0.33] * 30),
+    7:  np.array([0.28] * 31),  8: np.array([0.22] * 31),  9: np.array([0.16] * 30),
+    10: np.array([0.06] * 31), 11: np.array([-0.15] * 30), 12: np.array([-0.35] * 31),
 }
 
 
 def compute_monthly_stats(df: pd.DataFrame) -> dict:
     """
-    Extract empirical daily injection rates by calendar month from AGSI data.
+    Empirical net daily changes in fill (pp/day) by calendar month from AGSI data.
 
-    Filters to injection season months (April-October), excludes the current
-    year to avoid look-ahead bias, and retains only positive daily changes
-    (net injection days).
+    Excludes the current gas year's data from the current calendar year to avoid
+    look-ahead bias. Keeps every day, injection and withdrawal alike, so the draws are
+    net changes. Months with fewer than ten observations are left out (fallback used).
 
-    Parameters
-    ----------
-    df : pd.DataFrame
-        AGSI storage DataFrame with columns 'gasDayStart' and 'full'.
-        'full' is the fill level expressed as a percentage (0-100).
-
-    Returns
-    -------
-    dict[int, np.ndarray]
-        Maps month number (4-10) to an array of observed daily injection
-        amounts in percentage points per day.
+    Returns dict[int, np.ndarray]: month number (1-12) to the observed daily changes.
     """
     if df.empty or "full" not in df.columns or "gasDayStart" not in df.columns:
         return {}
 
     df = df.copy()
+    df["gasDayStart"] = pd.to_datetime(df["gasDayStart"])
     df = df.sort_values("gasDayStart").reset_index(drop=True)
-    current_year = date.today().year
-    df = df[df["gasDayStart"].dt.year < current_year]
-    df["month"] = df["gasDayStart"].dt.month
     df["delta"] = df["full"].diff()
-
-    injection_days = df[df["month"].between(4, 10) & (df["delta"] > 0)]
+    # A gap of more than one day would turn several days' change into one draw
+    gap = df["gasDayStart"].diff().dt.days
+    df = df[(gap == 1) & (df["gasDayStart"].dt.year < date.today().year)]
+    df["month"] = df["gasDayStart"].dt.month
 
     stats: dict = {}
-    for month in range(4, 11):
-        vals = injection_days[injection_days["month"] == month]["delta"].dropna().values
+    for month in range(1, 13):
+        vals = df.loc[df["month"] == month, "delta"].dropna().values
         if len(vals) >= 10:
             stats[month] = vals
     return stats
@@ -67,36 +57,18 @@ def run_monte_carlo(
     monthly_stats: dict,
     n_paths: int = 1000,
     rate_multiplier: float = 1.0,
+    today: date | None = None,
 ) -> tuple[np.ndarray, list]:
     """
-    Run an empirical bootstrap Monte Carlo simulation for gas storage refill.
+    Simulate EU storage fill from tomorrow to the next 1 November.
 
-    For each simulated day, a daily injection increment is drawn with
-    replacement from the historical distribution for that calendar month
-    and scaled by rate_multiplier. The random seed is fixed per multiplier
-    value for reproducibility. Storage is bounded between 0% and 100%.
+    Each day draws a net change from that month's empirical distribution; positive draws
+    (injection) are scaled by ``rate_multiplier``. Fill is bounded to 0-100%. The random
+    seed is fixed per multiplier for reproducible comparisons.
 
-    Parameters
-    ----------
-    current_pct : float
-        Current EU gas storage fill level as a percentage (0-100).
-    monthly_stats : dict
-        Output of compute_monthly_stats(). Empty dict triggers fallback rates.
-    n_paths : int
-        Number of simulation paths (default: 1,000).
-    rate_multiplier : float
-        Scalar applied to all sampled injection increments. Values below 1.0
-        simulate a slower-than-average refill season; above 1.0 an accelerated
-        season.
-
-    Returns
-    -------
-    paths : np.ndarray, shape (n_paths, n_days)
-        Storage fill level for each path on each simulated day.
-    dates : list[date]
-        Corresponding calendar dates (length n_days).
+    Returns (paths of shape (n_paths, n_days), list of dates).
     """
-    today = date.today()
+    today = today or date.today()
     target = date(today.year, 11, 1)
     if today >= target:
         target = date(today.year + 1, 11, 1)
@@ -114,13 +86,9 @@ def run_monte_carlo(
     paths = np.empty((n_paths, n_days), dtype=float)
 
     for j, sim_date in enumerate(dates):
-        month = sim_date.month
-        if 4 <= month <= 10:
-            pool = monthly_stats.get(month, _FALLBACK_RATES.get(month, np.array([0.2])))
-            increments = rng.choice(pool, size=n_paths, replace=True) * rate_multiplier
-        else:
-            increments = np.zeros(n_paths)
-
+        pool = monthly_stats.get(sim_date.month, _FALLBACK_RATES[sim_date.month])
+        draws = rng.choice(pool, size=n_paths, replace=True)
+        increments = np.where(draws > 0, draws * rate_multiplier, draws)
         prev = np.clip(prev + increments, 0.0, 100.0)
         paths[:, j] = prev
 
