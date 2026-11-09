@@ -1,0 +1,71 @@
+name: retrain
+
+# Retrains the Layer 4 models (LSTM and HMM) every quarter on the latest data, commits the
+# JSON weights to main, merges main into hf-deploy with the refreshed feature matrix and
+# deploys the Space. Needs three repository secrets: ENTSOE_API_KEY, AGSI_API_KEY and
+# HF_TOKEN (a Hugging Face token with write access). A run whose data or models fail the
+# checks in scripts/retrain_models.py stops before anything is committed.
+on:
+  schedule:
+    - cron: "23 4 2 1,4,7,10 *"     # 2 January, April, July and October, 04:23 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: retrain
+  cancel-in-progress: false
+
+jobs:
+  retrain:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      ENTSOE_API_KEY: ${{ secrets.ENTSOE_API_KEY }}
+      AGSI_API_KEY: ${{ secrets.AGSI_API_KEY }}
+      PTP_DISABLE_WARMUP: "1"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: pip
+      - name: Install dependencies
+        run: |
+          pip install torch --index-url https://download.pytorch.org/whl/cpu
+          pip install -r requirements.txt pytest huggingface_hub
+      - name: Start from the feature matrix the Space ships
+        run: |
+          mkdir -p models/data
+          git show origin/hf-deploy:models/data/features_raw_v2.csv > models/data/features_raw_v2.csv || true
+      - name: Retrain
+        run: python -m scripts.retrain_models
+      - name: Offline tests with the new weights
+        run: pytest -m "not network" -q
+      - name: Commit the weights to main
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add models/weights/*.json models/weights/*.csv
+          git diff --cached --quiet && { echo "no change"; exit 0; }
+          git commit -m "Quarterly retrain of the LSTM and HMM ($(date -u +%Y-%m-%d))"
+          git push origin HEAD:main
+      - name: Merge into hf-deploy with the refreshed feature matrix
+        run: |
+          MAIN_SHA=$(git rev-parse HEAD)
+          cp models/data/features_raw_v2.csv /tmp/features_raw_v2.csv
+          cp models/data/features_meta.json /tmp/features_meta.json
+          git checkout -B hf-deploy origin/hf-deploy
+          git merge --no-edit "$MAIN_SHA" -m "Merge branch 'main' into hf-deploy"
+          cp /tmp/features_raw_v2.csv models/data/features_raw_v2.csv
+          cp /tmp/features_meta.json models/data/features_meta.json
+          git add -f models/data/features_raw_v2.csv models/data/features_meta.json
+          git diff --cached --quiet || git commit -m "Refresh the shipped feature matrix ($(date -u +%Y-%m-%d))"
+          git push origin hf-deploy
+      - name: Deploy the Space
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: python -m scripts.deploy_space "Quarterly retrain ($(date -u +%Y-%m-%d))"
