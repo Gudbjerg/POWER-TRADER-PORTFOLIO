@@ -134,7 +134,7 @@ page_header(
     accent=ACCENTS["l3"],
 )
 
-tab_geo, tab_mix, tab_spill, tab_grid, tab_jkm = st.tabs([
+tab_geo, tab_mix, tab_spill, tab_grid, tab_jkm = st.tabs(on_change="rerun", key="macro_tabs", tabs=[
     "Geopolitical Overlay",
     "EU Gas Supply Mix",
     "Cross-Commodity Spillover",
@@ -147,122 +147,123 @@ tab_geo, tab_mix, tab_spill, tab_grid, tab_jkm = st.tabs([
 # TAB 1: GEOPOLITICAL EVENT OVERLAY
 # ════════════════════════════════════════════════════════════════════════════
 with tab_geo:
-    st.markdown("### TTF Gas Price with Geopolitical Event Timeline")
-    st.caption(
-        "Vertical lines mark key supply disruptions, geopolitical escalations, and policy shifts. "
-        "Red = geopolitical, amber = supply disruption, blue = policy, green = weather."
-    )
-
-    ttf_df = ttf["prices"]
-    if not ttf_df.empty:
-        chart_events = events_in_range(ttf_df["date"].min(), ttf_df["date"].max())
-    else:
-        chart_events = []
-
-    render_ttf_chart(ttf, events=chart_events)
-
-    # ── Momentum ribbon ───────────────────────────────────────────────────────
-    _mom_df = ttf["prices"].copy() if not ttf["prices"].empty else pd.DataFrame()
-    if not _mom_df.empty and len(_mom_df) >= 60:
-        _mom_df["date"] = pd.to_datetime(_mom_df["date"])
-        _mom_df = _mom_df.sort_values("date").reset_index(drop=True)
-        for _n in (5, 20, 60):
-            _mom_df[f"mom{_n}"] = (_mom_df["price"] / _mom_df["price"].shift(_n) - 1) * 100
-
-        _m5  = float(_mom_df["mom5"].dropna().iloc[-1])  if _mom_df["mom5"].notna().any()  else float("nan")
-        _m20 = float(_mom_df["mom20"].dropna().iloc[-1]) if _mom_df["mom20"].notna().any() else float("nan")
-        _m60 = float(_mom_df["mom60"].dropna().iloc[-1]) if _mom_df["mom60"].notna().any() else float("nan")
-
-        st.markdown("#### TTF Price Momentum (5 / 20 / 60-day)")
-        _mc1, _mc2, _mc3, _mc4 = st.columns(4)
-        with _mc1:
-            st.markdown(
-                kpi_card("5-day momentum", f"{_m5:+.1f}%" if not np.isnan(_m5) else "n/a", _mom_delta(_m5)),
-                unsafe_allow_html=True,
-            )
-        with _mc2:
-            st.markdown(
-                kpi_card("20-day momentum", f"{_m20:+.1f}%" if not np.isnan(_m20) else "n/a", _mom_delta(_m20)),
-                unsafe_allow_html=True,
-            )
-        with _mc3:
-            st.markdown(
-                kpi_card("60-day momentum", f"{_m60:+.1f}%" if not np.isnan(_m60) else "n/a", _mom_delta(_m60)),
-                unsafe_allow_html=True,
-            )
-        with _mc4:
-            _n_pos = sum(v > 0 for v in (_m5, _m20, _m60) if not np.isnan(v))
-            _trend = "Uptrend" if _n_pos == 3 else ("Downtrend" if _n_pos == 0 else "Mixed / consolidating")
-            _trend_color = "red" if _n_pos == 3 else ("green" if _n_pos == 0 else "blue")
-            st.markdown(
-                kpi_card("Trend alignment", _trend,
-                         delta_span(f"{_n_pos}/3 timeframes positive", _trend_color)),
-                unsafe_allow_html=True,
-            )
-
-        # Momentum line chart
-        _fig_mom = go.Figure()
-        for _n, _col, _lbl in [(5, "#c2391f", "5d"), (20, "#c2611a", "20d"), (60, "#2f45c6", "60d")]:
-            _col_name = f"mom{_n}"
-            _sub = _mom_df.dropna(subset=[_col_name])
-            _fig_mom.add_trace(go.Scatter(
-                x=_sub["date"], y=_sub[_col_name],
-                name=f"{_lbl} momentum",
-                line=dict(color=_col, width=1.5),
-                hovertemplate=f"{_lbl}: %{{y:+.1f}}%<extra></extra>",
-            ))
-        _fig_mom.add_hline(y=0, line=dict(color=CHART["zero"], width=1))
-        for _band, _opacity in [(5, 0.08), (10, 0.05)]:
-            _fig_mom.add_hrect(y0=_band, y1=50, fillcolor="rgba(194,57,31,{})".format(_opacity),
-                               line_width=0)
-            _fig_mom.add_hrect(y0=-50, y1=-_band, fillcolor="rgba(47,122,71,{})".format(_opacity),
-                               line_width=0)
-        _fig_mom.update_layout(
-            template=PLOTLY_TEMPLATE,
-            paper_bgcolor=CHART["bg"], plot_bgcolor=CHART["panel_bg"],
-            xaxis=dict(title=None, gridcolor=CHART["grid"]),
-            yaxis=dict(title="Return (%)", gridcolor=CHART["grid"],
-                       zeroline=False),
-            legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="left", x=0,
-                        font=dict(size=10)),
-            margin=dict(l=60, r=20, t=30, b=50),
-            height=300,
-            hovermode="x unified",
-        )
-        st.plotly_chart(_fig_mom, width="stretch")
+    if tab_geo.open:   # only the selected tab runs
+        st.markdown("### TTF Gas Price with Geopolitical Event Timeline")
         st.caption(
-            "Momentum = (current price / price N days ago − 1) × 100. "
-            "Red shading = historically elevated (+5/+10%). Green = historically cheap (−5/−10%)."
+            "Vertical lines mark key supply disruptions, geopolitical escalations, and policy shifts. "
+            "Red = geopolitical, amber = supply disruption, blue = policy, green = weather."
         )
 
-    st.divider()
-    st.markdown("#### Full Event Timeline")
-    cat_filter = st.multiselect(
-        "Filter by category",
-        options=["geopolitical", "supply", "policy", "weather"],
-        default=["geopolitical", "supply", "policy", "weather"],
-    )
+        ttf_df = ttf["prices"]
+        if not ttf_df.empty:
+            chart_events = events_in_range(ttf_df["date"].min(), ttf_df["date"].max())
+        else:
+            chart_events = []
 
-    filtered_events = [ev for ev in events_all if ev.get("category") in cat_filter]
-    filtered_events = sorted(filtered_events, key=lambda x: x["date"], reverse=True)
+        render_ttf_chart(ttf, events=chart_events)
 
-    for ev in filtered_events:
-        impact = ev.get("impact", "warn")
-        cat    = ev.get("category", "policy")
-        color  = CATEGORY_COLORS.get(cat, "#667b83")
-        date_s = ev["date"].strftime("%Y-%m-%d")
-        border_cls = {"critical": "commentary-critical", "warn": "commentary-warn"}.get(impact, "")
-        st.markdown(
-            f'<div class="commentary {border_cls}" style="border-left-color:{color};">'
-            f'<strong>{date_s}: {ev["label"]}</strong><br>'
-            f'<span style="color:#667b83;font-size:0.78rem;'
-            f'letter-spacing:.5px;">{cat}</span><br>'
-            f'{ev["description"]}</div>',
-            unsafe_allow_html=True,
+        # ── Momentum ribbon ───────────────────────────────────────────────────────
+        _mom_df = ttf["prices"].copy() if not ttf["prices"].empty else pd.DataFrame()
+        if not _mom_df.empty and len(_mom_df) >= 60:
+            _mom_df["date"] = pd.to_datetime(_mom_df["date"])
+            _mom_df = _mom_df.sort_values("date").reset_index(drop=True)
+            for _n in (5, 20, 60):
+                _mom_df[f"mom{_n}"] = (_mom_df["price"] / _mom_df["price"].shift(_n) - 1) * 100
+
+            _m5  = float(_mom_df["mom5"].dropna().iloc[-1])  if _mom_df["mom5"].notna().any()  else float("nan")
+            _m20 = float(_mom_df["mom20"].dropna().iloc[-1]) if _mom_df["mom20"].notna().any() else float("nan")
+            _m60 = float(_mom_df["mom60"].dropna().iloc[-1]) if _mom_df["mom60"].notna().any() else float("nan")
+
+            st.markdown("#### TTF Price Momentum (5 / 20 / 60-day)")
+            _mc1, _mc2, _mc3, _mc4 = st.columns(4)
+            with _mc1:
+                st.markdown(
+                    kpi_card("5-day momentum", f"{_m5:+.1f}%" if not np.isnan(_m5) else "n/a", _mom_delta(_m5)),
+                    unsafe_allow_html=True,
+                )
+            with _mc2:
+                st.markdown(
+                    kpi_card("20-day momentum", f"{_m20:+.1f}%" if not np.isnan(_m20) else "n/a", _mom_delta(_m20)),
+                    unsafe_allow_html=True,
+                )
+            with _mc3:
+                st.markdown(
+                    kpi_card("60-day momentum", f"{_m60:+.1f}%" if not np.isnan(_m60) else "n/a", _mom_delta(_m60)),
+                    unsafe_allow_html=True,
+                )
+            with _mc4:
+                _n_pos = sum(v > 0 for v in (_m5, _m20, _m60) if not np.isnan(v))
+                _trend = "Uptrend" if _n_pos == 3 else ("Downtrend" if _n_pos == 0 else "Mixed / consolidating")
+                _trend_color = "red" if _n_pos == 3 else ("green" if _n_pos == 0 else "blue")
+                st.markdown(
+                    kpi_card("Trend alignment", _trend,
+                             delta_span(f"{_n_pos}/3 timeframes positive", _trend_color)),
+                    unsafe_allow_html=True,
+                )
+
+            # Momentum line chart
+            _fig_mom = go.Figure()
+            for _n, _col, _lbl in [(5, "#c2391f", "5d"), (20, "#c2611a", "20d"), (60, "#2f45c6", "60d")]:
+                _col_name = f"mom{_n}"
+                _sub = _mom_df.dropna(subset=[_col_name])
+                _fig_mom.add_trace(go.Scatter(
+                    x=_sub["date"], y=_sub[_col_name],
+                    name=f"{_lbl} momentum",
+                    line=dict(color=_col, width=1.5),
+                    hovertemplate=f"{_lbl}: %{{y:+.1f}}%<extra></extra>",
+                ))
+            _fig_mom.add_hline(y=0, line=dict(color=CHART["zero"], width=1))
+            for _band, _opacity in [(5, 0.08), (10, 0.05)]:
+                _fig_mom.add_hrect(y0=_band, y1=50, fillcolor="rgba(194,57,31,{})".format(_opacity),
+                                   line_width=0)
+                _fig_mom.add_hrect(y0=-50, y1=-_band, fillcolor="rgba(47,122,71,{})".format(_opacity),
+                                   line_width=0)
+            _fig_mom.update_layout(
+                template=PLOTLY_TEMPLATE,
+                paper_bgcolor=CHART["bg"], plot_bgcolor=CHART["panel_bg"],
+                xaxis=dict(title=None, gridcolor=CHART["grid"]),
+                yaxis=dict(title="Return (%)", gridcolor=CHART["grid"],
+                           zeroline=False),
+                legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="left", x=0,
+                            font=dict(size=10)),
+                margin=dict(l=60, r=20, t=30, b=50),
+                height=300,
+                hovermode="x unified",
+            )
+            st.plotly_chart(_fig_mom, width="stretch")
+            st.caption(
+                "Momentum = (current price / price N days ago − 1) × 100. "
+                "Red shading = historically elevated (+5/+10%). Green = historically cheap (−5/−10%)."
+            )
+
+        st.divider()
+        st.markdown("#### Full Event Timeline")
+        cat_filter = st.multiselect(
+            "Filter by category",
+            options=["geopolitical", "supply", "policy", "weather"],
+            default=["geopolitical", "supply", "policy", "weather"],
         )
 
-    with st.expander("About this timeline", expanded=False):
-        st.markdown("""
+        filtered_events = [ev for ev in events_all if ev.get("category") in cat_filter]
+        filtered_events = sorted(filtered_events, key=lambda x: x["date"], reverse=True)
+
+        for ev in filtered_events:
+            impact = ev.get("impact", "warn")
+            cat    = ev.get("category", "policy")
+            color  = CATEGORY_COLORS.get(cat, "#667b83")
+            date_s = ev["date"].strftime("%Y-%m-%d")
+            border_cls = {"critical": "commentary-critical", "warn": "commentary-warn"}.get(impact, "")
+            st.markdown(
+                f'<div class="commentary {border_cls}" style="border-left-color:{color};">'
+                f'<strong>{date_s}: {ev["label"]}</strong><br>'
+                f'<span style="color:#667b83;font-size:0.78rem;'
+                f'letter-spacing:.5px;">{cat}</span><br>'
+                f'{ev["description"]}</div>',
+                unsafe_allow_html=True,
+            )
+
+        with st.expander("About this timeline", expanded=False):
+            st.markdown("""
         Events are manually curated from public sources including ENTSO-E announcements,
         GIE supply reports, Reuters Energy, and Montel News. They cover four categories:
 
@@ -280,85 +281,86 @@ with tab_geo:
 # TAB 2: EU GAS SUPPLY MIX
 # ════════════════════════════════════════════════════════════════════════════
 with tab_mix:
-    st.markdown("### EU Gas Supply Mix (2020-2026)")
-    globe_link("north_sea", "Norwegian export pipelines on the 3D globe")
-    st.caption(
-        "Approximate EU gas import supply shares by origin. "
-        "Based on GIE, Eurostat, and IEA data. "
-        "Q1-Q2 2026 estimate: Norway ~27%, USA ~29%, Algeria ~12%, Russia ~3%, Qatar ~8%, other ~21%."
-    )
+    if tab_mix.open:   # only the selected tab runs
+        st.markdown("### EU Gas Supply Mix (2020-2026)")
+        globe_link("north_sea", "Norwegian export pipelines on the 3D globe")
+        st.caption(
+            "Approximate EU gas import supply shares by origin. "
+            "Based on GIE, Eurostat, and IEA data. "
+            "Q1-Q2 2026 estimate: Norway ~27%, USA ~29%, Algeria ~12%, Russia ~3%, Qatar ~8%, other ~21%."
+        )
 
-    _mix = {
-        "year":    [2020,  2021,  2022,  2023,  2024,  2025,  2026],
-        "Norway":  [28.0,  27.0,  33.0,  34.0,  31.0,  29.0,  27.0],
-        "USA":     [5.0,   7.0,   15.0,  19.0,  22.0,  27.0,  29.0],
-        "Russia":  [40.0,  40.0,  20.0,  8.0,   4.0,   3.0,   3.0],
-        "Algeria": [8.0,   9.0,   10.0,  11.0,  12.0,  13.0,  12.0],
-        "Qatar":   [5.0,   5.0,   6.0,   7.0,   8.0,   8.0,   8.0],
-        "Other":   [14.0,  12.0,  16.0,  21.0,  23.0,  20.0,  21.0],
-    }
-    mix_df = pd.DataFrame(_mix)
+        _mix = {
+            "year":    [2020,  2021,  2022,  2023,  2024,  2025,  2026],
+            "Norway":  [28.0,  27.0,  33.0,  34.0,  31.0,  29.0,  27.0],
+            "USA":     [5.0,   7.0,   15.0,  19.0,  22.0,  27.0,  29.0],
+            "Russia":  [40.0,  40.0,  20.0,  8.0,   4.0,   3.0,   3.0],
+            "Algeria": [8.0,   9.0,   10.0,  11.0,  12.0,  13.0,  12.0],
+            "Qatar":   [5.0,   5.0,   6.0,   7.0,   8.0,   8.0,   8.0],
+            "Other":   [14.0,  12.0,  16.0,  21.0,  23.0,  20.0,  21.0],
+        }
+        mix_df = pd.DataFrame(_mix)
 
-    MIX_COLORS = {
-        "Norway":  "#0e7a7e",
-        "USA":     "#2f45c6",
-        "Russia":  "#c2391f",
-        "Algeria": "#a86a12",
-        "Qatar":   "#6e4a9e",
-        "Other":   "#667b83",
-    }
-    C = {
-        "bg": CHART["bg"], "panel_bg": CHART["panel_bg"],
-        "grid": CHART["grid"], "text": CHART["text"],
-    }
+        MIX_COLORS = {
+            "Norway":  "#0e7a7e",
+            "USA":     "#2f45c6",
+            "Russia":  "#c2391f",
+            "Algeria": "#a86a12",
+            "Qatar":   "#6e4a9e",
+            "Other":   "#667b83",
+        }
+        C = {
+            "bg": CHART["bg"], "panel_bg": CHART["panel_bg"],
+            "grid": CHART["grid"], "text": CHART["text"],
+        }
 
-    fig_mix = go.Figure()
-    for supplier in ["Norway", "USA", "Algeria", "Qatar", "Other", "Russia"]:
-        fig_mix.add_trace(go.Scatter(
-            x=mix_df["year"],
-            y=mix_df[supplier],
-            name=supplier,
-            stackgroup="one",
-            mode="lines",
-            line=dict(width=0.5, color=MIX_COLORS[supplier]),
-            fillcolor=MIX_COLORS[supplier],
-            opacity=0.85,
-            hovertemplate=f"{supplier}: %{{y:.1f}}%<extra></extra>",
-        ))
+        fig_mix = go.Figure()
+        for supplier in ["Norway", "USA", "Algeria", "Qatar", "Other", "Russia"]:
+            fig_mix.add_trace(go.Scatter(
+                x=mix_df["year"],
+                y=mix_df[supplier],
+                name=supplier,
+                stackgroup="one",
+                mode="lines",
+                line=dict(width=0.5, color=MIX_COLORS[supplier]),
+                fillcolor=MIX_COLORS[supplier],
+                opacity=0.85,
+                hovertemplate=f"{supplier}: %{{y:.1f}}%<extra></extra>",
+            ))
 
-    fig_mix.add_vline(
-        x=2022, line_dash="dash", line_color="rgba(245,247,244,0.85)", line_width=1.5,
-        annotation_text="Russia invades Ukraine", annotation_position="top left",
-        annotation_font=dict(size=9, color="#f5f7f4"), annotation_textangle=-90,
-    )
-    fig_mix.update_layout(
-        template=PLOTLY_TEMPLATE,
-        paper_bgcolor=C["bg"], plot_bgcolor=C["panel_bg"],
-        font=dict(color=C["text"], size=12),
-        margin=dict(l=10, r=10, t=10, b=10),
-        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
-        xaxis=dict(showgrid=True, gridcolor=C["grid"], title=None,
-                   tickmode="array", tickvals=list(range(2020, 2027))),
-        yaxis=dict(title="Share of EU gas imports (%)", showgrid=True,
-                   gridcolor=C["grid"], range=[0, 105]),
-        hovermode="x unified",
-    )
-    st.plotly_chart(fig_mix, width="stretch")
+        fig_mix.add_vline(
+            x=2022, line_dash="dash", line_color="rgba(245,247,244,0.85)", line_width=1.5,
+            annotation_text="Russia invades Ukraine", annotation_position="top left",
+            annotation_font=dict(size=9, color="#f5f7f4"), annotation_textangle=-90,
+        )
+        fig_mix.update_layout(
+            template=PLOTLY_TEMPLATE,
+            paper_bgcolor=C["bg"], plot_bgcolor=C["panel_bg"],
+            font=dict(color=C["text"], size=12),
+            margin=dict(l=10, r=10, t=10, b=10),
+            legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+            xaxis=dict(showgrid=True, gridcolor=C["grid"], title=None,
+                       tickmode="array", tickvals=list(range(2020, 2027))),
+            yaxis=dict(title="Share of EU gas imports (%)", showgrid=True,
+                       gridcolor=C["grid"], range=[0, 105]),
+            hovermode="x unified",
+        )
+        st.plotly_chart(fig_mix, width="stretch")
 
-    st.markdown(
-        commentary(
-            "Russia's share of EU gas imports fell from approximately 40% in 2021 to 3% in Q1 2026, "
-            "a structural shift driven by the 2022 invasion embargo and pipeline abandonment. "
-            "US LNG replaced the majority of this volume, rising from 7% to 29%. "
-            "This concentration in US LNG creates a new geopolitical risk vector: US tariff policy "
-            "and Hormuz Strait transit risk are now material factors for European gas supply security.",
-            "warn",
-        ),
-        unsafe_allow_html=True,
-    )
+        st.markdown(
+            commentary(
+                "Russia's share of EU gas imports fell from approximately 40% in 2021 to 3% in Q1 2026, "
+                "a structural shift driven by the 2022 invasion embargo and pipeline abandonment. "
+                "US LNG replaced the majority of this volume, rising from 7% to 29%. "
+                "This concentration in US LNG creates a new geopolitical risk vector: US tariff policy "
+                "and Hormuz Strait transit risk are now material factors for European gas supply security.",
+                "warn",
+            ),
+            unsafe_allow_html=True,
+        )
 
-    with st.expander("Data notes", expanded=False):
-        st.markdown("""
+        with st.expander("Data notes", expanded=False):
+            st.markdown("""
         Supply shares are approximate annual estimates based on GIE ALSI terminal flow data,
         Eurostat energy import statistics, and IEA Gas Market Report publications.
         The 2026 figure is a Q1 estimate. Quarterly figures vary around annual averages.
@@ -371,111 +373,112 @@ with tab_mix:
 # TAB 3: CROSS-COMMODITY SPILLOVER
 # ════════════════════════════════════════════════════════════════════════════
 with tab_spill:
-    st.markdown("### Cross-Commodity Spillover: Gas to Agriculture")
-    st.caption(
-        "Gas price transmission chain: TTF gas drives European nitrogen fertiliser production costs, "
-        "which flow through to global wheat and corn prices. "
-        "All series normalised to 100 at the earliest common date."
-    )
-
-    comm_df = commodities["prices"]
-    fetched = commodities["fetched_at"]
-
-    if comm_df.empty:
-        st.warning(
-            "Commodity price data unavailable. Requires yfinance and internet access. "
-            "Tickers: TTF=F (gas), ZW=F (wheat), ZC=F (corn)."
+    if tab_spill.open:   # only the selected tab runs
+        st.markdown("### Cross-Commodity Spillover: Gas to Agriculture")
+        st.caption(
+            "Gas price transmission chain: TTF gas drives European nitrogen fertiliser production costs, "
+            "which flow through to global wheat and corn prices. "
+            "All series normalised to 100 at the earliest common date."
         )
-    else:
-        COMM_COLORS = {"TTF": "#c2611a", "Wheat": "#a86a12", "Corn": "#2f7a47"}
-        C = {
-            "bg": CHART["bg"], "panel_bg": CHART["panel_bg"],
-            "grid": CHART["grid"], "text": CHART["text"],
-        }
 
-        # Normalised price index chart
-        fig_comm = go.Figure()
-        for comm in ["TTF", "Wheat", "Corn"]:
-            sub = comm_df[comm_df["commodity"] == comm].sort_values("date")
-            if sub.empty:
-                continue
-            fig_comm.add_trace(go.Scatter(
-                x=sub["date"], y=sub["price_norm"],
-                name=comm,
-                line=dict(color=COMM_COLORS.get(comm, "#667b83"), width=2),
-                hovertemplate=f"{comm}: %{{y:.1f}}<extra></extra>",
-            ))
+        comm_df = commodities["prices"]
+        fetched = commodities["fetched_at"]
 
-        fig_comm.update_layout(
-            title=dict(text="Normalised Price Index (base = 100 at start date)", font=dict(size=12)),
-            template=PLOTLY_TEMPLATE,
-            paper_bgcolor=C["bg"], plot_bgcolor=C["panel_bg"],
-            font=dict(color=C["text"], size=12),
-            margin=dict(l=10, r=10, t=40, b=10),
-            legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
-            xaxis=dict(showgrid=True, gridcolor=C["grid"], title=None),
-            yaxis=dict(title="Index (100 = start date)", showgrid=True, gridcolor=C["grid"]),
-            hovermode="x unified",
-        )
-        st.plotly_chart(fig_comm, width="stretch")
+        if comm_df.empty:
+            st.warning(
+                "Commodity price data unavailable. Requires yfinance and internet access. "
+                "Tickers: TTF=F (gas), ZW=F (wheat), ZC=F (corn)."
+            )
+        else:
+            COMM_COLORS = {"TTF": "#c2611a", "Wheat": "#a86a12", "Corn": "#2f7a47"}
+            C = {
+                "bg": CHART["bg"], "panel_bg": CHART["panel_bg"],
+                "grid": CHART["grid"], "text": CHART["text"],
+            }
 
-        # Rolling correlations
-        st.markdown("#### Rolling 90-Day Pearson Correlations")
-        wide = comm_df.pivot_table(index="date", columns="commodity", values="price_norm")
-        wide = wide.sort_index().dropna()
-
-        if len(wide) >= 90:
-            pairs = [("TTF", "Wheat"), ("TTF", "Corn"), ("Wheat", "Corn")]
-            pair_colors = {"TTF-Wheat": "#a86a12", "TTF-Corn": "#2f7a47", "Wheat-Corn": "#6e4a9e"}
-
-            fig_corr = go.Figure()
-            for a, b in pairs:
-                if a not in wide.columns or b not in wide.columns:
+            # Normalised price index chart
+            fig_comm = go.Figure()
+            for comm in ["TTF", "Wheat", "Corn"]:
+                sub = comm_df[comm_df["commodity"] == comm].sort_values("date")
+                if sub.empty:
                     continue
-                roll_corr = wide[a].rolling(90).corr(wide[b])
-                label = f"{a}-{b}"
-                fig_corr.add_trace(go.Scatter(
-                    x=wide.index, y=roll_corr,
-                    name=label,
-                    line=dict(color=pair_colors.get(label, "#667b83"), width=1.8),
-                    hovertemplate=f"{label}: %{{y:.2f}}<extra></extra>",
+                fig_comm.add_trace(go.Scatter(
+                    x=sub["date"], y=sub["price_norm"],
+                    name=comm,
+                    line=dict(color=COMM_COLORS.get(comm, "#667b83"), width=2),
+                    hovertemplate=f"{comm}: %{{y:.1f}}<extra></extra>",
                 ))
-            fig_corr.add_hline(y=0, line_dash="solid",
-                               line_color=CHART["zero"], line_width=0.8)
-            fig_corr.add_hline(y=0.5, line_dash="dot",
-                               line_color=CHART["axis"], line_width=0.8,
-                               annotation_text="0.5", annotation_font=dict(size=9))
-            fig_corr.update_layout(
+
+            fig_comm.update_layout(
+                title=dict(text="Normalised Price Index (base = 100 at start date)", font=dict(size=12)),
                 template=PLOTLY_TEMPLATE,
                 paper_bgcolor=C["bg"], plot_bgcolor=C["panel_bg"],
                 font=dict(color=C["text"], size=12),
-                margin=dict(l=10, r=10, t=10, b=10),
+                margin=dict(l=10, r=10, t=40, b=10),
                 legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
                 xaxis=dict(showgrid=True, gridcolor=C["grid"], title=None),
-                yaxis=dict(title="Pearson correlation", showgrid=True,
-                           gridcolor=C["grid"], range=[-1, 1]),
+                yaxis=dict(title="Index (100 = start date)", showgrid=True, gridcolor=C["grid"]),
                 hovermode="x unified",
-                height=250,
             )
-            st.plotly_chart(fig_corr, width="stretch")
+            st.plotly_chart(fig_comm, width="stretch")
 
-            # Latest KPIs
-            c1, c2, c3 = st.columns(3)
-            for col_st, (a, b) in zip([c1, c2, c3], pairs):
-                if a in wide.columns and b in wide.columns:
-                    val = float(wide[a].rolling(90).corr(wide[b]).iloc[-1])
-                    color = "green" if abs(val) >= 0.5 else ("amber" if abs(val) >= 0.3 else "blue")
-                    with col_st:
-                        st.markdown(
-                            kpi_card(f"Corr: {a}-{b}", f"{val:.2f}",
-                                     delta_span("90-day rolling Pearson", color)),
-                            unsafe_allow_html=True,
-                        )
-        else:
-            st.caption("Insufficient history for rolling correlations (requires at least 90 overlapping days).")
+            # Rolling correlations
+            st.markdown("#### Rolling 90-Day Pearson Correlations")
+            wide = comm_df.pivot_table(index="date", columns="commodity", values="price_norm")
+            wide = wide.sort_index().dropna()
 
-        with st.expander("Transmission mechanism", expanded=True):
-            st.markdown("""
+            if len(wide) >= 90:
+                pairs = [("TTF", "Wheat"), ("TTF", "Corn"), ("Wheat", "Corn")]
+                pair_colors = {"TTF-Wheat": "#a86a12", "TTF-Corn": "#2f7a47", "Wheat-Corn": "#6e4a9e"}
+
+                fig_corr = go.Figure()
+                for a, b in pairs:
+                    if a not in wide.columns or b not in wide.columns:
+                        continue
+                    roll_corr = wide[a].rolling(90).corr(wide[b])
+                    label = f"{a}-{b}"
+                    fig_corr.add_trace(go.Scatter(
+                        x=wide.index, y=roll_corr,
+                        name=label,
+                        line=dict(color=pair_colors.get(label, "#667b83"), width=1.8),
+                        hovertemplate=f"{label}: %{{y:.2f}}<extra></extra>",
+                    ))
+                fig_corr.add_hline(y=0, line_dash="solid",
+                                   line_color=CHART["zero"], line_width=0.8)
+                fig_corr.add_hline(y=0.5, line_dash="dot",
+                                   line_color=CHART["axis"], line_width=0.8,
+                                   annotation_text="0.5", annotation_font=dict(size=9))
+                fig_corr.update_layout(
+                    template=PLOTLY_TEMPLATE,
+                    paper_bgcolor=C["bg"], plot_bgcolor=C["panel_bg"],
+                    font=dict(color=C["text"], size=12),
+                    margin=dict(l=10, r=10, t=10, b=10),
+                    legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+                    xaxis=dict(showgrid=True, gridcolor=C["grid"], title=None),
+                    yaxis=dict(title="Pearson correlation", showgrid=True,
+                               gridcolor=C["grid"], range=[-1, 1]),
+                    hovermode="x unified",
+                    height=250,
+                )
+                st.plotly_chart(fig_corr, width="stretch")
+
+                # Latest KPIs
+                c1, c2, c3 = st.columns(3)
+                for col_st, (a, b) in zip([c1, c2, c3], pairs):
+                    if a in wide.columns and b in wide.columns:
+                        val = float(wide[a].rolling(90).corr(wide[b]).iloc[-1])
+                        color = "green" if abs(val) >= 0.5 else ("amber" if abs(val) >= 0.3 else "blue")
+                        with col_st:
+                            st.markdown(
+                                kpi_card(f"Corr: {a}-{b}", f"{val:.2f}",
+                                         delta_span("90-day rolling Pearson", color)),
+                                unsafe_allow_html=True,
+                            )
+            else:
+                st.caption("Insufficient history for rolling correlations (requires at least 90 overlapping days).")
+
+            with st.expander("Transmission mechanism", expanded=True):
+                st.markdown("""
             **Gas to fertiliser:** Nitrogen fertilisers (ammonium nitrate, urea) are produced via the
             Haber-Bosch process, which consumes natural gas both as a hydrogen feedstock and as process
             energy. Gas accounts for approximately 70-80% of fertiliser production costs at European plants.
@@ -498,130 +501,130 @@ with tab_spill:
             TTF spike above 50 EUR/MWh would reactivate it.
             """)
 
-    if fetched:
-        st.caption(f"Last updated: {fetched.strftime('%Y-%m-%d %H:%M UTC')}")
-    st.caption(
-        "Sources: ICE/Yahoo Finance (TTF=F, ZW=F, ZC=F) | "
-        "GIE ALSI | IEA Gas Market Report | Eurostat"
-    )
+        if fetched:
+            st.caption(f"Last updated: {fetched.strftime('%Y-%m-%d %H:%M UTC')}")
+        st.caption(
+            "Sources: ICE/Yahoo Finance (TTF=F, ZW=F, ZC=F) | "
+            "GIE ALSI | IEA Gas Market Report | Eurostat"
+        )
 
-    # ── NEW1: Copper–Power Grid Investment Linkage ────────────────────────────
-    st.divider()
-    st.markdown("#### Copper–Power Grid Investment Linkage")
-    st.caption(
-        "LME copper (HG=F) vs European gas price (TTF=F, used as power cost proxy). "
-        "Copper is a leading indicator for power grid capex: grid expansion requires copper wiring, "
-        "transformers, and cabling. Rolling 90-day correlation and 6-month copper change "
-        "signal the strength of the grid-investment transmission channel."
-    )
+        # ── NEW1: Copper–Power Grid Investment Linkage ────────────────────────────
+        st.divider()
+        st.markdown("#### Copper–Power Grid Investment Linkage")
+        st.caption(
+            "LME copper (HG=F) vs European gas price (TTF=F, used as power cost proxy). "
+            "Copper is a leading indicator for power grid capex: grid expansion requires copper wiring, "
+            "transformers, and cabling. Rolling 90-day correlation and 6-month copper change "
+            "signal the strength of the grid-investment transmission channel."
+        )
 
-    with st.spinner("Loading copper and gas prices…"):
-        _cu_wide = _fetch_7x7_prices(days=210)
+        with st.spinner("Loading copper and gas prices…"):
+            _cu_wide = _fetch_7x7_prices(days=210)
 
-    if _cu_wide.empty or "Copper" not in _cu_wide.columns or "TTF" not in _cu_wide.columns:
-        st.caption("Copper or TTF data unavailable from Yahoo Finance.")
-    else:
-        _cu = _cu_wide[["TTF", "Copper"]].dropna()
-        if len(_cu) >= 90:
-            # Normalised index (base 100)
-            _cu_norm = _cu / _cu.iloc[0] * 100
-
-            _fig_cu = go.Figure()
-            _fig_cu.add_trace(go.Scatter(
-                x=_cu_norm.index, y=_cu_norm["TTF"],
-                name="TTF gas (EUR/MWh, power proxy)",
-                line=dict(color="#c2611a", width=1.8),
-                hovertemplate="TTF index: %{y:.1f}<extra></extra>",
-            ))
-            _fig_cu.add_trace(go.Scatter(
-                x=_cu_norm.index, y=_cu_norm["Copper"],
-                name="LME Copper (USD/lb, HG=F)",
-                line=dict(color="#2f45c6", width=1.8),
-                hovertemplate="Copper index: %{y:.1f}<extra></extra>",
-            ))
-            _fig_cu.update_layout(
-                template=PLOTLY_TEMPLATE,
-                paper_bgcolor=CHART["bg"], plot_bgcolor=CHART["panel_bg"],
-                height=220,
-                margin=dict(l=50, r=20, t=10, b=35),
-                legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1,
-                            font=dict(size=10)),
-                xaxis=dict(gridcolor=CHART["grid"], tickfont=dict(size=10, color=CHART["muted"])),
-                yaxis=dict(title="Index (100 = start)", gridcolor=CHART["grid"],
-                           tickfont=dict(size=10, color=CHART["muted"]), zeroline=False),
-                hovermode="x unified",
-            )
-            st.plotly_chart(_fig_cu, width="stretch")
-
-            # Rolling 90-day correlation chart
-            _cu_lr = np.log(_cu / _cu.shift(1)).dropna()
-            _roll_corr_cu = _cu_lr["TTF"].rolling(90).corr(_cu_lr["Copper"]).dropna()
-
-            _fig_cu_corr = go.Figure()
-            _fig_cu_corr.add_trace(go.Scatter(
-                x=_roll_corr_cu.index, y=_roll_corr_cu,
-                name="90-day rolling Pearson",
-                line=dict(color="#6e4a9e", width=1.8),
-                fill="tozeroy", fillcolor="rgba(110,74,158,0.07)",
-                hovertemplate="ρ(TTF,Copper): %{y:.2f}<extra></extra>",
-            ))
-            _fig_cu_corr.add_hline(y=0, line=dict(color=CHART["zero"], width=1))
-            _fig_cu_corr.add_hline(y=0.5, line=dict(color="#2f7a47", width=1, dash="dot"),
-                                   annotation_text="  0.5", annotation_font=dict(color="#2f7a47", size=9))
-            _fig_cu_corr.add_hline(y=-0.5, line=dict(color="#c2391f", width=1, dash="dot"),
-                                   annotation_text="  −0.5", annotation_font=dict(color="#c2391f", size=9))
-            _fig_cu_corr.update_layout(
-                template=PLOTLY_TEMPLATE,
-                paper_bgcolor=CHART["bg"], plot_bgcolor=CHART["panel_bg"],
-                height=160,
-                margin=dict(l=50, r=60, t=5, b=35),
-                xaxis=dict(gridcolor=CHART["grid"], tickfont=dict(size=10, color=CHART["muted"])),
-                yaxis=dict(title="Pearson ρ", gridcolor=CHART["grid"],
-                           tickfont=dict(size=10, color=CHART["muted"]), range=[-1, 1]),
-                showlegend=False, hovermode="x unified",
-            )
-            st.plotly_chart(_fig_cu_corr, width="stretch")
-
-            # KPI row
-            _cu_corr_now = float(_roll_corr_cu.iloc[-1])
-            _cu_corr_color = "green" if abs(_cu_corr_now) >= 0.5 else ("amber" if abs(_cu_corr_now) >= 0.3 else "blue")
-
-            # 6-month copper change
-            _cu_6m_idx = max(0, len(_cu) - 126)
-            _cu_6m_chg = (_cu["Copper"].iloc[-1] / _cu["Copper"].iloc[_cu_6m_idx] - 1) * 100
-            _cu_6m_color = "red" if _cu_6m_chg > 15 else ("green" if _cu_6m_chg > 5 else "amber" if _cu_6m_chg < -5 else "blue")
-            _cu_signal = (
-                "strong grid demand signal" if _cu_6m_chg > 15
-                else "moderate upward pressure" if _cu_6m_chg > 5
-                else "weak / no signal" if abs(_cu_6m_chg) <= 5
-                else "easing"
-            )
-
-            _kc1, _kc2, _kc3 = st.columns(3)
-            with _kc1:
-                st.markdown(
-                    kpi_card("90-day TTF–Copper ρ", f"{_cu_corr_now:+.2f}",
-                             delta_span("rolling Pearson", _cu_corr_color)),
-                    unsafe_allow_html=True,
-                )
-            with _kc2:
-                st.markdown(
-                    kpi_card("6-month copper change", f"{_cu_6m_chg:+.1f}%",
-                             delta_span(_cu_signal, _cu_6m_color)),
-                    unsafe_allow_html=True,
-                )
-            with _kc3:
-                _cu_latest_usd = float(_cu["Copper"].iloc[-1])
-                st.markdown(
-                    kpi_card("LME Copper (latest)", f"${_cu_latest_usd:.3f}/lb",
-                             delta_span("HG=F front-month", "blue")),
-                    unsafe_allow_html=True,
-                )
+        if _cu_wide.empty or "Copper" not in _cu_wide.columns or "TTF" not in _cu_wide.columns:
+            st.caption("Copper or TTF data unavailable from Yahoo Finance.")
         else:
-            st.caption("Insufficient copper history (requires ≥90 days).")
+            _cu = _cu_wide[["TTF", "Copper"]].dropna()
+            if len(_cu) >= 90:
+                # Normalised index (base 100)
+                _cu_norm = _cu / _cu.iloc[0] * 100
 
-        with st.expander("Grid investment linkage: methodology", expanded=False):
-            st.markdown("""
+                _fig_cu = go.Figure()
+                _fig_cu.add_trace(go.Scatter(
+                    x=_cu_norm.index, y=_cu_norm["TTF"],
+                    name="TTF gas (EUR/MWh, power proxy)",
+                    line=dict(color="#c2611a", width=1.8),
+                    hovertemplate="TTF index: %{y:.1f}<extra></extra>",
+                ))
+                _fig_cu.add_trace(go.Scatter(
+                    x=_cu_norm.index, y=_cu_norm["Copper"],
+                    name="LME Copper (USD/lb, HG=F)",
+                    line=dict(color="#2f45c6", width=1.8),
+                    hovertemplate="Copper index: %{y:.1f}<extra></extra>",
+                ))
+                _fig_cu.update_layout(
+                    template=PLOTLY_TEMPLATE,
+                    paper_bgcolor=CHART["bg"], plot_bgcolor=CHART["panel_bg"],
+                    height=220,
+                    margin=dict(l=50, r=20, t=10, b=35),
+                    legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1,
+                                font=dict(size=10)),
+                    xaxis=dict(gridcolor=CHART["grid"], tickfont=dict(size=10, color=CHART["muted"])),
+                    yaxis=dict(title="Index (100 = start)", gridcolor=CHART["grid"],
+                               tickfont=dict(size=10, color=CHART["muted"]), zeroline=False),
+                    hovermode="x unified",
+                )
+                st.plotly_chart(_fig_cu, width="stretch")
+
+                # Rolling 90-day correlation chart
+                _cu_lr = np.log(_cu / _cu.shift(1)).dropna()
+                _roll_corr_cu = _cu_lr["TTF"].rolling(90).corr(_cu_lr["Copper"]).dropna()
+
+                _fig_cu_corr = go.Figure()
+                _fig_cu_corr.add_trace(go.Scatter(
+                    x=_roll_corr_cu.index, y=_roll_corr_cu,
+                    name="90-day rolling Pearson",
+                    line=dict(color="#6e4a9e", width=1.8),
+                    fill="tozeroy", fillcolor="rgba(110,74,158,0.07)",
+                    hovertemplate="ρ(TTF,Copper): %{y:.2f}<extra></extra>",
+                ))
+                _fig_cu_corr.add_hline(y=0, line=dict(color=CHART["zero"], width=1))
+                _fig_cu_corr.add_hline(y=0.5, line=dict(color="#2f7a47", width=1, dash="dot"),
+                                       annotation_text="  0.5", annotation_font=dict(color="#2f7a47", size=9))
+                _fig_cu_corr.add_hline(y=-0.5, line=dict(color="#c2391f", width=1, dash="dot"),
+                                       annotation_text="  −0.5", annotation_font=dict(color="#c2391f", size=9))
+                _fig_cu_corr.update_layout(
+                    template=PLOTLY_TEMPLATE,
+                    paper_bgcolor=CHART["bg"], plot_bgcolor=CHART["panel_bg"],
+                    height=160,
+                    margin=dict(l=50, r=60, t=5, b=35),
+                    xaxis=dict(gridcolor=CHART["grid"], tickfont=dict(size=10, color=CHART["muted"])),
+                    yaxis=dict(title="Pearson ρ", gridcolor=CHART["grid"],
+                               tickfont=dict(size=10, color=CHART["muted"]), range=[-1, 1]),
+                    showlegend=False, hovermode="x unified",
+                )
+                st.plotly_chart(_fig_cu_corr, width="stretch")
+
+                # KPI row
+                _cu_corr_now = float(_roll_corr_cu.iloc[-1])
+                _cu_corr_color = "green" if abs(_cu_corr_now) >= 0.5 else ("amber" if abs(_cu_corr_now) >= 0.3 else "blue")
+
+                # 6-month copper change
+                _cu_6m_idx = max(0, len(_cu) - 126)
+                _cu_6m_chg = (_cu["Copper"].iloc[-1] / _cu["Copper"].iloc[_cu_6m_idx] - 1) * 100
+                _cu_6m_color = "red" if _cu_6m_chg > 15 else ("green" if _cu_6m_chg > 5 else "amber" if _cu_6m_chg < -5 else "blue")
+                _cu_signal = (
+                    "strong grid demand signal" if _cu_6m_chg > 15
+                    else "moderate upward pressure" if _cu_6m_chg > 5
+                    else "weak / no signal" if abs(_cu_6m_chg) <= 5
+                    else "easing"
+                )
+
+                _kc1, _kc2, _kc3 = st.columns(3)
+                with _kc1:
+                    st.markdown(
+                        kpi_card("90-day TTF–Copper ρ", f"{_cu_corr_now:+.2f}",
+                                 delta_span("rolling Pearson", _cu_corr_color)),
+                        unsafe_allow_html=True,
+                    )
+                with _kc2:
+                    st.markdown(
+                        kpi_card("6-month copper change", f"{_cu_6m_chg:+.1f}%",
+                                 delta_span(_cu_signal, _cu_6m_color)),
+                        unsafe_allow_html=True,
+                    )
+                with _kc3:
+                    _cu_latest_usd = float(_cu["Copper"].iloc[-1])
+                    st.markdown(
+                        kpi_card("LME Copper (latest)", f"${_cu_latest_usd:.3f}/lb",
+                                 delta_span("HG=F front-month", "blue")),
+                        unsafe_allow_html=True,
+                    )
+            else:
+                st.caption("Insufficient copper history (requires ≥90 days).")
+
+            with st.expander("Grid investment linkage: methodology", expanded=False):
+                st.markdown("""
             **Why copper leads power grid investment:**
             Copper is the primary conductor in high-voltage transmission lines, transformers, and
             EV charging infrastructure. European grid operators (ENTSO-E TYNDPs, national TSO
@@ -644,101 +647,101 @@ with tab_spill:
             (positive) and inflation/cost shocks (negative: high gas crushes industrial copper demand).
             """)
 
-    # ── NEW2: Aluminium Smelter Stress Indicator ──────────────────────────────
-    st.divider()
-    st.markdown("#### Aluminium Smelter Stress Indicator")
-    st.caption(
-        "European aluminium smelters are among the most electricity-intensive industrial users. "
-        "This indicator estimates power cost as a percentage of smelter revenue using TTF as a "
-        "European power price proxy and LME aluminium (ALI=F) as the revenue reference."
-    )
+        # ── NEW2: Aluminium Smelter Stress Indicator ──────────────────────────────
+        st.divider()
+        st.markdown("#### Aluminium Smelter Stress Indicator")
+        st.caption(
+            "European aluminium smelters are among the most electricity-intensive industrial users. "
+            "This indicator estimates power cost as a percentage of smelter revenue using TTF as a "
+            "European power price proxy and LME aluminium (ALI=F) as the revenue reference."
+        )
 
-    with st.spinner("Loading aluminium and gas prices…"):
-        _al_wide = _fetch_7x7_prices(days=365)
+        with st.spinner("Loading aluminium and gas prices…"):
+            _al_wide = _fetch_7x7_prices(days=365)
 
-    if _al_wide.empty or "Alum" not in _al_wide.columns or "TTF" not in _al_wide.columns:
-        st.caption("Aluminium or TTF data unavailable from Yahoo Finance.")
-    else:
-        _al = _al_wide[["TTF", "Alum"]].dropna()
-        if len(_al) < 30:
-            st.caption("Insufficient aluminium history (requires ≥30 days).")
+        if _al_wide.empty or "Alum" not in _al_wide.columns or "TTF" not in _al_wide.columns:
+            st.caption("Aluminium or TTF data unavailable from Yahoo Finance.")
         else:
-            # power_cost_EUR/t = TTF × intensity × elec_factor
-            # revenue_EUR/t    = ALI_USD / EURUSD_approx
-            # stress_pct       = power_cost / revenue × 100
-            _pc = _al["TTF"] * ALUM_ELEC_INTENSITY_MWH * ALUM_TTF_TO_ELEC_FACTOR
-            _rv = _al["Alum"] / ALUM_EURUSD_APPROX
-            _stress = (_pc / _rv * 100).rename("stress_pct")
-
-            _latest_stress = float(_stress.iloc[-1])
-            if _latest_stress >= ALUM_STRESS_CRITICAL:
-                _stress_label, _stress_color = "Critical", "red"
-            elif _latest_stress >= ALUM_STRESS_ELEVATED:
-                _stress_label, _stress_color = "Elevated", "amber"
+            _al = _al_wide[["TTF", "Alum"]].dropna()
+            if len(_al) < 30:
+                st.caption("Insufficient aluminium history (requires ≥30 days).")
             else:
-                _stress_label, _stress_color = "Normal", "green"
+                # power_cost_EUR/t = TTF × intensity × elec_factor
+                # revenue_EUR/t    = ALI_USD / EURUSD_approx
+                # stress_pct       = power_cost / revenue × 100
+                _pc = _al["TTF"] * ALUM_ELEC_INTENSITY_MWH * ALUM_TTF_TO_ELEC_FACTOR
+                _rv = _al["Alum"] / ALUM_EURUSD_APPROX
+                _stress = (_pc / _rv * 100).rename("stress_pct")
 
-            # Stress time series chart
-            _fig_al = go.Figure()
-            _fig_al.add_trace(go.Scatter(
-                x=_stress.index, y=_stress.values,
-                name="Power cost % of revenue",
-                line=dict(color="#a86a12", width=1.8),
-                fill="tozeroy", fillcolor="rgba(168,106,18,0.07)",
-                hovertemplate="Stress: %{y:.1f}%<extra></extra>",
-            ))
-            _fig_al.add_hline(
-                y=ALUM_STRESS_ELEVATED,
-                line=dict(color="#a86a12", width=1, dash="dot"),
-                annotation_text=f"  {ALUM_STRESS_ELEVATED:.0f}% ELEVATED",
-                annotation_font=dict(color="#a86a12", size=9),
-                annotation_position="right",
-            )
-            _fig_al.add_hline(
-                y=ALUM_STRESS_CRITICAL,
-                line=dict(color="#c2391f", width=1, dash="dot"),
-                annotation_text=f"  {ALUM_STRESS_CRITICAL:.0f}% CRITICAL",
-                annotation_font=dict(color="#c2391f", size=9),
-                annotation_position="right",
-            )
-            _fig_al.update_layout(
-                template=PLOTLY_TEMPLATE,
-                paper_bgcolor=CHART["bg"], plot_bgcolor=CHART["panel_bg"],
-                height=230,
-                margin=dict(l=50, r=100, t=10, b=35),
-                xaxis=dict(gridcolor=CHART["grid"], tickfont=dict(size=10, color=CHART["muted"])),
-                yaxis=dict(title="Power cost %", gridcolor=CHART["grid"],
-                           tickfont=dict(size=10, color=CHART["muted"]), zeroline=False),
-                showlegend=False, hovermode="x unified",
-            )
-            st.plotly_chart(_fig_al, width="stretch")
+                _latest_stress = float(_stress.iloc[-1])
+                if _latest_stress >= ALUM_STRESS_CRITICAL:
+                    _stress_label, _stress_color = "Critical", "red"
+                elif _latest_stress >= ALUM_STRESS_ELEVATED:
+                    _stress_label, _stress_color = "Elevated", "amber"
+                else:
+                    _stress_label, _stress_color = "Normal", "green"
 
-            # KPI row
-            _al1, _al2, _al3 = st.columns(3)
-            with _al1:
-                st.markdown(
-                    kpi_card("Smelter stress", f"{_latest_stress:.1f}%",
-                             delta_span(_stress_label, _stress_color)),
-                    unsafe_allow_html=True,
+                # Stress time series chart
+                _fig_al = go.Figure()
+                _fig_al.add_trace(go.Scatter(
+                    x=_stress.index, y=_stress.values,
+                    name="Power cost % of revenue",
+                    line=dict(color="#a86a12", width=1.8),
+                    fill="tozeroy", fillcolor="rgba(168,106,18,0.07)",
+                    hovertemplate="Stress: %{y:.1f}%<extra></extra>",
+                ))
+                _fig_al.add_hline(
+                    y=ALUM_STRESS_ELEVATED,
+                    line=dict(color="#a86a12", width=1, dash="dot"),
+                    annotation_text=f"  {ALUM_STRESS_ELEVATED:.0f}% ELEVATED",
+                    annotation_font=dict(color="#a86a12", size=9),
+                    annotation_position="right",
                 )
-            with _al2:
-                _al_latest_usd = float(_al["Alum"].iloc[-1])
-                st.markdown(
-                    kpi_card("LME Aluminium", f"${_al_latest_usd:,.0f}/t",
-                             delta_span("ALI=F front-month", "blue")),
-                    unsafe_allow_html=True,
+                _fig_al.add_hline(
+                    y=ALUM_STRESS_CRITICAL,
+                    line=dict(color="#c2391f", width=1, dash="dot"),
+                    annotation_text=f"  {ALUM_STRESS_CRITICAL:.0f}% CRITICAL",
+                    annotation_font=dict(color="#c2391f", size=9),
+                    annotation_position="right",
                 )
-            with _al3:
-                _ttf_for_al = float(_al["TTF"].iloc[-1])
-                _power_cost_t = float(_pc.iloc[-1])
-                st.markdown(
-                    kpi_card("Implied power cost", f"€{_power_cost_t:,.0f}/t",
-                             delta_span(f"TTF {_ttf_for_al:.1f} × {ALUM_ELEC_INTENSITY_MWH}×{ALUM_TTF_TO_ELEC_FACTOR}", "blue")),
-                    unsafe_allow_html=True,
+                _fig_al.update_layout(
+                    template=PLOTLY_TEMPLATE,
+                    paper_bgcolor=CHART["bg"], plot_bgcolor=CHART["panel_bg"],
+                    height=230,
+                    margin=dict(l=50, r=100, t=10, b=35),
+                    xaxis=dict(gridcolor=CHART["grid"], tickfont=dict(size=10, color=CHART["muted"])),
+                    yaxis=dict(title="Power cost %", gridcolor=CHART["grid"],
+                               tickfont=dict(size=10, color=CHART["muted"]), zeroline=False),
+                    showlegend=False, hovermode="x unified",
                 )
+                st.plotly_chart(_fig_al, width="stretch")
 
-        with st.expander("Smelter stress: methodology", expanded=False):
-            st.markdown(f"""
+                # KPI row
+                _al1, _al2, _al3 = st.columns(3)
+                with _al1:
+                    st.markdown(
+                        kpi_card("Smelter stress", f"{_latest_stress:.1f}%",
+                                 delta_span(_stress_label, _stress_color)),
+                        unsafe_allow_html=True,
+                    )
+                with _al2:
+                    _al_latest_usd = float(_al["Alum"].iloc[-1])
+                    st.markdown(
+                        kpi_card("LME Aluminium", f"${_al_latest_usd:,.0f}/t",
+                                 delta_span("ALI=F front-month", "blue")),
+                        unsafe_allow_html=True,
+                    )
+                with _al3:
+                    _ttf_for_al = float(_al["TTF"].iloc[-1])
+                    _power_cost_t = float(_pc.iloc[-1])
+                    st.markdown(
+                        kpi_card("Implied power cost", f"€{_power_cost_t:,.0f}/t",
+                                 delta_span(f"TTF {_ttf_for_al:.1f} × {ALUM_ELEC_INTENSITY_MWH}×{ALUM_TTF_TO_ELEC_FACTOR}", "blue")),
+                        unsafe_allow_html=True,
+                    )
+
+            with st.expander("Smelter stress: methodology", expanded=False):
+                st.markdown(f"""
             **Electricity intensity:** European primary aluminium smelters consume approximately
             {ALUM_ELEC_INTENSITY_MWH} MWh of electricity per tonne of aluminium produced via the
             Hall-Héroult electrolytic process. This is the dominant variable cost, accounting for
@@ -766,149 +769,150 @@ with tab_spill:
             indicator would have been in CRITICAL territory for much of Q3/Q4 2022.
             """)
 
-    st.caption("Sources: ICE/Yahoo Finance (HG=F LME Copper, ALI=F LME Aluminium, TTF=F gas)")
+        st.caption("Sources: ICE/Yahoo Finance (HG=F LME Copper, ALI=F LME Aluminium, TTF=F gas)")
 
 
 # ════════════════════════════════════════════════════════════════════════════
 # TAB 4: 7×7 CORRELATION GRID
 # ════════════════════════════════════════════════════════════════════════════
 with tab_grid:
-    st.markdown("### 7×7 Cross-Commodity Correlation Grid")
-    st.caption(
-        "90-day rolling Pearson correlations of daily log-returns across TTF gas, Brent crude, "
-        "Henry Hub gas, EU carbon (EUA), copper, aluminium, and the Baltic Dry Index. "
-        "All data via Yahoo Finance. Signals update on page load."
-    )
-
-    with st.spinner("Loading cross-commodity prices…"):
-        _w7 = _fetch_7x7_prices(days=180)
-
-    _loaded  = list(_w7.columns) if not _w7.empty else []
-    _missing = [k for k in _TICKERS_7X7 if k not in _loaded]
-    if _missing:
+    if tab_grid.open:   # only the selected tab runs
+        st.markdown("### 7×7 Cross-Commodity Correlation Grid")
         st.caption(
-            f"Assets unavailable from Yahoo Finance: {', '.join(_missing)}. "
-            f"Grid shows {len(_loaded)} of 7 assets."
+            "90-day rolling Pearson correlations of daily log-returns across TTF gas, Brent crude, "
+            "Henry Hub gas, EU carbon (EUA), copper, aluminium, and the Baltic Dry Index. "
+            "All data via Yahoo Finance. Signals update on page load."
         )
 
-    if _w7.empty or len(_loaded) < 2:
-        st.warning(
-            "Insufficient cross-commodity data. "
-            "Requires internet access and yfinance (pip install yfinance)."
-        )
-    else:
-        _ll_pairs = _compute_lead_lag(_w7, max_lag=10, window=90)
+        with st.spinner("Loading cross-commodity prices…"):
+            _w7 = _fetch_7x7_prices(days=180)
 
-        # ── KPI row ──────────────────────────────────────────────────────────
-        _strong_pairs    = [r for r in _ll_pairs if abs(r["best_corr"]) >= 0.5]
-        _best            = _ll_pairs[0] if _ll_pairs else None
-        _best_lag_signal = next(
-            (r for r in _ll_pairs if r["best_lag"] != 0 and abs(r["best_corr"]) >= 0.4), None
-        )
-
-        _kc1, _kc2, _kc3 = st.columns(3)
-        with _kc1:
-            if _best:
-                _bc_col = "red" if _best["best_corr"] > 0 else "green"
-                st.markdown(
-                    kpi_card(
-                        "Strongest pair (90d ρ)",
-                        _best["pair"],
-                        delta_span(f"ρ = {_best['best_corr']:+.2f}", _bc_col),
-                    ),
-                    unsafe_allow_html=True,
-                )
-            else:
-                st.markdown(kpi_card("Strongest pair", "n/a", delta_span("–", "blue")),
-                            unsafe_allow_html=True)
-        with _kc2:
-            st.markdown(
-                kpi_card(
-                    "Strong pairs (|ρ| ≥ 0.5)",
-                    str(len(_strong_pairs)),
-                    delta_span(f"of {len(_ll_pairs)} total pairs", "blue"),
-                ),
-                unsafe_allow_html=True,
+        _loaded  = list(_w7.columns) if not _w7.empty else []
+        _missing = [k for k in _TICKERS_7X7 if k not in _loaded]
+        if _missing:
+            st.caption(
+                f"Assets unavailable from Yahoo Finance: {', '.join(_missing)}. "
+                f"Grid shows {len(_loaded)} of 7 assets."
             )
-        with _kc3:
-            if _best_lag_signal:
-                _ll_col = "red" if _best_lag_signal["best_corr"] > 0 else "green"
+
+        if _w7.empty or len(_loaded) < 2:
+            st.warning(
+                "Insufficient cross-commodity data. "
+                "Requires internet access and yfinance (pip install yfinance)."
+            )
+        else:
+            _ll_pairs = _compute_lead_lag(_w7, max_lag=10, window=90)
+
+            # ── KPI row ──────────────────────────────────────────────────────────
+            _strong_pairs    = [r for r in _ll_pairs if abs(r["best_corr"]) >= 0.5]
+            _best            = _ll_pairs[0] if _ll_pairs else None
+            _best_lag_signal = next(
+                (r for r in _ll_pairs if r["best_lag"] != 0 and abs(r["best_corr"]) >= 0.4), None
+            )
+
+            _kc1, _kc2, _kc3 = st.columns(3)
+            with _kc1:
+                if _best:
+                    _bc_col = "red" if _best["best_corr"] > 0 else "green"
+                    st.markdown(
+                        kpi_card(
+                            "Strongest pair (90d ρ)",
+                            _best["pair"],
+                            delta_span(f"ρ = {_best['best_corr']:+.2f}", _bc_col),
+                        ),
+                        unsafe_allow_html=True,
+                    )
+                else:
+                    st.markdown(kpi_card("Strongest pair", "n/a", delta_span("–", "blue")),
+                                unsafe_allow_html=True)
+            with _kc2:
                 st.markdown(
                     kpi_card(
-                        "Best lead-lag signal",
-                        _best_lag_signal["lag_label"],
-                        delta_span(f"ρ = {_best_lag_signal['best_corr']:+.2f}", _ll_col),
+                        "Strong pairs (|ρ| ≥ 0.5)",
+                        str(len(_strong_pairs)),
+                        delta_span(f"of {len(_ll_pairs)} total pairs", "blue"),
                     ),
                     unsafe_allow_html=True,
                 )
-            else:
-                st.markdown(
-                    kpi_card("Best lead-lag signal", "No lagged signal ≥ 0.4", delta_span("–", "blue")),
-                    unsafe_allow_html=True,
-                )
+            with _kc3:
+                if _best_lag_signal:
+                    _ll_col = "red" if _best_lag_signal["best_corr"] > 0 else "green"
+                    st.markdown(
+                        kpi_card(
+                            "Best lead-lag signal",
+                            _best_lag_signal["lag_label"],
+                            delta_span(f"ρ = {_best_lag_signal['best_corr']:+.2f}", _ll_col),
+                        ),
+                        unsafe_allow_html=True,
+                    )
+                else:
+                    st.markdown(
+                        kpi_card("Best lead-lag signal", "No lagged signal ≥ 0.4", delta_span("–", "blue")),
+                        unsafe_allow_html=True,
+                    )
 
-        # ── Correlation heatmap ───────────────────────────────────────────────
-        st.markdown("#### 90-Day Correlation Matrix")
-        _ret90  = np.log(_w7 / _w7.shift(1)).iloc[-90:].dropna(how="all")
-        _cm     = _ret90.corr()
-        _assets = list(_cm.columns)
-        _z_vals = _cm.values.tolist()
-        _z_text = [
-            [f"{v:.2f}" if not np.isnan(v) else "" for v in row]
-            for row in _cm.values
-        ]
+            # ── Correlation heatmap ───────────────────────────────────────────────
+            st.markdown("#### 90-Day Correlation Matrix")
+            _ret90  = np.log(_w7 / _w7.shift(1)).iloc[-90:].dropna(how="all")
+            _cm     = _ret90.corr()
+            _assets = list(_cm.columns)
+            _z_vals = _cm.values.tolist()
+            _z_text = [
+                [f"{v:.2f}" if not np.isnan(v) else "" for v in row]
+                for row in _cm.values
+            ]
 
-        _fig_hm = go.Figure(go.Heatmap(
-            z=_z_vals,
-            x=_assets,
-            y=_assets,
-            text=_z_text,
-            texttemplate="%{text}",
-            colorscale=[
-                [0.00, "#2166ac"],
-                [0.25, "#4f86b0"],
-                [0.50, "#f5f7f4"],
-                [0.75, "#c2391f"],
-                [1.00, "#b2182b"],
-            ],
-            zmin=-1, zmax=1,
-            showscale=True,
-            colorbar=dict(
-                title="ρ",
-                tickvals=[-1, -0.5, 0, 0.5, 1],
-                ticktext=["-1", "-0.5", "0", "+0.5", "+1"],
-                thickness=12,
-                len=0.8,
-                tickfont=dict(size=10),
-            ),
-            hoverongaps=False,
-            hovertemplate="%{y} / %{x}: %{z:.3f}<extra></extra>",
-        ))
-        _fig_hm.update_layout(
-            template=PLOTLY_TEMPLATE,
-            paper_bgcolor=CHART["bg"],
-            plot_bgcolor=CHART["panel_bg"],
-            font=dict(color=CHART["text"], size=11),
-            margin=dict(l=10, r=10, t=10, b=10),
-            height=420,
-            xaxis=dict(side="bottom", tickfont=dict(size=11)),
-            yaxis=dict(tickfont=dict(size=11), autorange="reversed"),
-        )
-        st.plotly_chart(_fig_hm, width="stretch")
-        st.caption(
-            "Computed over the 90 most recent trading days using daily log-returns. "
-            "Diagonal = 1.0 (self-correlation, shown for reference)."
-        )
+            _fig_hm = go.Figure(go.Heatmap(
+                z=_z_vals,
+                x=_assets,
+                y=_assets,
+                text=_z_text,
+                texttemplate="%{text}",
+                colorscale=[
+                    [0.00, "#2166ac"],
+                    [0.25, "#4f86b0"],
+                    [0.50, "#f5f7f4"],
+                    [0.75, "#c2391f"],
+                    [1.00, "#b2182b"],
+                ],
+                zmin=-1, zmax=1,
+                showscale=True,
+                colorbar=dict(
+                    title="ρ",
+                    tickvals=[-1, -0.5, 0, 0.5, 1],
+                    ticktext=["-1", "-0.5", "0", "+0.5", "+1"],
+                    thickness=12,
+                    len=0.8,
+                    tickfont=dict(size=10),
+                ),
+                hoverongaps=False,
+                hovertemplate="%{y} / %{x}: %{z:.3f}<extra></extra>",
+            ))
+            _fig_hm.update_layout(
+                template=PLOTLY_TEMPLATE,
+                paper_bgcolor=CHART["bg"],
+                plot_bgcolor=CHART["panel_bg"],
+                font=dict(color=CHART["text"], size=11),
+                margin=dict(l=10, r=10, t=10, b=10),
+                height=420,
+                xaxis=dict(side="bottom", tickfont=dict(size=11)),
+                yaxis=dict(tickfont=dict(size=11), autorange="reversed"),
+            )
+            st.plotly_chart(_fig_hm, width="stretch")
+            st.caption(
+                "Computed over the 90 most recent trading days using daily log-returns. "
+                "Diagonal = 1.0 (self-correlation, shown for reference)."
+            )
 
-        # ── Lead-lag table ────────────────────────────────────────────────────
-        st.markdown("#### Lead-Lag Analysis: Top 15 Pairs by |rho|")
-        st.caption(
-            "For each pair the lag τ ∈ [−10d, +10d] maximising |ρ| is reported. "
-            "Positive τ = left asset leads right asset by τ days."
-        )
-        _top15 = _ll_pairs[:15]
-        if _top15:
-            _ll_css = """
+            # ── Lead-lag table ────────────────────────────────────────────────────
+            st.markdown("#### Lead-Lag Analysis: Top 15 Pairs by |rho|")
+            st.caption(
+                "For each pair the lag τ ∈ [−10d, +10d] maximising |ρ| is reported. "
+                "Positive τ = left asset leads right asset by τ days."
+            )
+            _top15 = _ll_pairs[:15]
+            if _top15:
+                _ll_css = """
             <style>
             .ll-tbl{width:100%;border-collapse:collapse;font-size:0.80rem;color:#3a5560;}
             .ll-tbl th{background:#d3dbd6;color:#667b83;font-weight:600;
@@ -919,44 +923,44 @@ with tab_grid:
             .cb-fill{height:6px;border-radius:3px;}
             </style>
             """
-            _rows = ""
-            for _r in _top15:
-                _bc  = _r["best_corr"]
-                _ct  = _r["contemp"]
-                _lag = _r["best_lag"]
-                _bar_w = int(abs(_bc) * 100)
-                _bar_c = "#c2391f" if _bc > 0 else "#4f86b0"
-                _bc_c  = "#c2391f" if _bc > 0 else "#4f86b0"
-                _lag_c = "#2f45c6" if _lag != 0 else "#667b83"
-                _ct_s  = f"{_ct:+.2f}" if not np.isnan(_ct) else "–"
-                _rows += (
-                    f"<tr>"
-                    f"<td>{_r['pair']}</td>"
-                    f"<td><span style='color:{_bc_c};font-weight:600;'>{_bc:+.3f}</span>"
-                    f"<span class='cb-wrap'><span class='cb-fill' "
-                    f"style='width:{_bar_w}px;background:{_bar_c};'></span></span></td>"
-                    f"<td><span style='color:{_lag_c};'>{_lag:+d}d</span></td>"
-                    f"<td>{_r['lag_label']}</td>"
-                    f"<td>{_ct_s}</td>"
-                    f"</tr>"
+                _rows = ""
+                for _r in _top15:
+                    _bc  = _r["best_corr"]
+                    _ct  = _r["contemp"]
+                    _lag = _r["best_lag"]
+                    _bar_w = int(abs(_bc) * 100)
+                    _bar_c = "#c2391f" if _bc > 0 else "#4f86b0"
+                    _bc_c  = "#c2391f" if _bc > 0 else "#4f86b0"
+                    _lag_c = "#2f45c6" if _lag != 0 else "#667b83"
+                    _ct_s  = f"{_ct:+.2f}" if not np.isnan(_ct) else "–"
+                    _rows += (
+                        f"<tr>"
+                        f"<td>{_r['pair']}</td>"
+                        f"<td><span style='color:{_bc_c};font-weight:600;'>{_bc:+.3f}</span>"
+                        f"<span class='cb-wrap'><span class='cb-fill' "
+                        f"style='width:{_bar_w}px;background:{_bar_c};'></span></span></td>"
+                        f"<td><span style='color:{_lag_c};'>{_lag:+d}d</span></td>"
+                        f"<td>{_r['lag_label']}</td>"
+                        f"<td>{_ct_s}</td>"
+                        f"</tr>"
+                    )
+                st.markdown(
+                    _ll_css
+                    + "<table class='ll-tbl'><thead><tr>"
+                    + "<th>Pair</th>"
+                    + "<th>Best ρ (optimal lag)</th>"
+                    + "<th>Lag</th>"
+                    + "<th>Lead direction</th>"
+                    + "<th>Contemp ρ</th>"
+                    + f"</tr></thead><tbody>{_rows}</tbody></table>",
+                    unsafe_allow_html=True,
                 )
-            st.markdown(
-                _ll_css
-                + "<table class='ll-tbl'><thead><tr>"
-                + "<th>Pair</th>"
-                + "<th>Best ρ (optimal lag)</th>"
-                + "<th>Lag</th>"
-                + "<th>Lead direction</th>"
-                + "<th>Contemp ρ</th>"
-                + f"</tr></thead><tbody>{_rows}</tbody></table>",
-                unsafe_allow_html=True,
-            )
-        else:
-            st.caption("No pairs with sufficient data to rank.")
+            else:
+                st.caption("No pairs with sufficient data to rank.")
 
-        # ── Methodology expander ──────────────────────────────────────────────
-        with st.expander("Methodology and asset definitions", expanded=False):
-            st.markdown("""
+            # ── Methodology expander ──────────────────────────────────────────────
+            with st.expander("Methodology and asset definitions", expanded=False):
+                st.markdown("""
             **Asset universe**
 
             | Label  | Ticker  | Description |
@@ -993,10 +997,10 @@ with tab_grid:
             ρ does not imply causation. Always validate against a structural mechanism before trading.
             """)
 
-    st.caption(
-        "Sources: Yahoo Finance (TTF=F, BZ=F, NG=F, CO2.L, HG=F, ALI=F, BDRY) | "
-        "90-day rolling window | Updated on page load"
-    )
+        st.caption(
+            "Sources: Yahoo Finance (TTF=F, BZ=F, NG=F, CO2.L, HG=F, ALI=F, BDRY) | "
+            "90-day rolling window | Updated on page load"
+        )
 
 
 # ════════════════════════════════════════════════════════════════════════════
@@ -1005,161 +1009,162 @@ with tab_grid:
 # (models/lng_arbitrage.py), KPI row, three-panel chart, commentary, expanders.
 # ════════════════════════════════════════════════════════════════════════════
 with tab_jkm:
-    globe_link("lng_routes", "LNG chokepoints on the 3D globe")
-    from plotly.subplots import make_subplots as _jkm_subplots
-    from data.lng_prices import load_ttf_jkm as _jkm_load
-    from models.lng_arbitrage import (
-        spread_summary as _jkm_summary, ordinal as _jkm_ordinal, MWH_PER_MMBTU as _JKM_MWH,
-    )
-    from config.settings import (
-        LNG_AVG_WINDOW_DAYS as _JKM_AVG_D,
-        LNG_PCTL_WINDOW_DAYS as _JKM_PCT_D,
-        LNG_PCTL_MIN_OBS as _JKM_PCT_MIN,
-        LNG_FX_MAX_AGE_DAYS as _JKM_FX_AGE,
-    )
-
-    st.markdown("### TTF vs JKM: Inter-Basin LNG Price Spread")
-    st.caption(
-        "European (TTF) and North Asian (JKM) gas benchmarks on a common EUR/MWh basis. "
-        "Spread = TTF minus JKM: positive means a Europe premium for flexible LNG cargoes, "
-        "negative an Asia premium. Front-month futures via Yahoo Finance; JKM converted from USD/MMBtu."
-    )
-
-    with st.spinner("Loading TTF, JKM and EUR/USD…"):
-        _jkm_data = _jkm_load()
-    _jkm_df = _jkm_data.get("frame", pd.DataFrame())
-
-    if _jkm_df.empty:
-        st.warning(
-            "TTF vs JKM spread unavailable"
-            + (f" ({_jkm_data['error']})" if _jkm_data.get("error") else "")
-            + ". Requires Yahoo Finance tickers TTF=F, JKM=F and EURUSD=X."
+    if tab_jkm.open:   # only the selected tab runs
+        globe_link("lng_routes", "LNG chokepoints on the 3D globe")
+        from plotly.subplots import make_subplots as _jkm_subplots
+        from data.lng_prices import load_ttf_jkm as _jkm_load
+        from models.lng_arbitrage import (
+            spread_summary as _jkm_summary, ordinal as _jkm_ordinal, MWH_PER_MMBTU as _JKM_MWH,
         )
-    else:
-        _js = _jkm_summary(_jkm_df)
-        _js_pct_ok = bool(np.isfinite(_js["percentile"]))
-        _js_date = _js["latest_date"].strftime("%d %b %Y")
-
-        _jk1, _jk2, _jk3, _jk4 = st.columns(4)
-        with _jk1:
-            st.markdown(
-                kpi_card("TTF front month", f"€{_js['ttf']:.2f}/MWh",
-                         delta_span(f"settlement {_js_date}", "blue")),
-                unsafe_allow_html=True,
-            )
-        with _jk2:
-            st.markdown(
-                kpi_card("JKM front month", f"€{_js['jkm_eur_mwh']:.2f}/MWh",
-                         delta_span(f"${_js['jkm_usd_mmbtu']:.3f}/MMBtu at EURUSD {_js['eurusd']:.4f}", "blue")),
-                unsafe_allow_html=True,
-            )
-        with _jk3:
-            st.markdown(
-                kpi_card("TTF minus JKM", f"{eur(_js['spread'], signed=True, decimals=2)}/MWh",
-                         delta_span(f"{_js['regime']} · {_JKM_AVG_D}-day avg {eur(_js['avg'], signed=True, decimals=2)}",
-                                    "green" if _js["spread"] > 0 else "red")),
-                unsafe_allow_html=True,
-            )
-        with _jk4:
-            if _js_pct_ok:
-                _jkm_pct_i = int(round(_js["percentile"]))
-                _jkm_pct_col = "amber" if (_jkm_pct_i >= 90 or _jkm_pct_i <= 10) else "blue"
-                st.markdown(
-                    kpi_card("1-year percentile", _jkm_ordinal(_jkm_pct_i),
-                             delta_span(f"TTF above JKM on {_js['share_positive']:.0%} of "
-                                        f"{_js['n_window']} settlements", _jkm_pct_col)),
-                    unsafe_allow_html=True,
-                )
-            else:
-                st.markdown(
-                    kpi_card("1-year percentile", "n/a",
-                             delta_span(f"needs ≥{_JKM_PCT_MIN} settlements in window", "amber")),
-                    unsafe_allow_html=True,
-                )
-
-        # Three panels: levels, spread, rolling percentile
-        _jfig = _jkm_subplots(
-            rows=3, cols=1, shared_xaxes=True, vertical_spacing=0.05,
-            row_heights=[0.44, 0.30, 0.26],
+        from config.settings import (
+            LNG_AVG_WINDOW_DAYS as _JKM_AVG_D,
+            LNG_PCTL_WINDOW_DAYS as _JKM_PCT_D,
+            LNG_PCTL_MIN_OBS as _JKM_PCT_MIN,
+            LNG_FX_MAX_AGE_DAYS as _JKM_FX_AGE,
         )
-        _jfig.add_trace(go.Scatter(
-            x=_jkm_df["date"], y=_jkm_df["ttf"], name="TTF (EUR/MWh)",
-            line=dict(color="#c2611a", width=1.6),
-            hovertemplate="TTF: €%{y:.2f}/MWh<extra></extra>",
-        ), row=1, col=1)
-        _jfig.add_trace(go.Scatter(
-            x=_jkm_df["date"], y=_jkm_df["jkm_eur_mwh"], name="JKM (EUR/MWh, converted)",
-            line=dict(color="#2f45c6", width=1.6),
-            customdata=_jkm_df[["jkm_usd_mmbtu"]].to_numpy(),
-            hovertemplate="JKM: €%{y:.2f}/MWh ($%{customdata[0]:.3f}/MMBtu)<extra></extra>",
-        ), row=1, col=1)
-        _jfig.add_trace(go.Bar(
-            x=_jkm_df["date"], y=_jkm_df["spread"], name="TTF minus JKM", showlegend=False,
-            marker_color=["#2f7a47" if v > 0 else "#c2391f" for v in _jkm_df["spread"]],
-            hovertemplate="TTF minus JKM: €%{y:+.2f}/MWh<extra></extra>",
-        ), row=2, col=1)
-        _jfig.add_trace(go.Scatter(
-            x=_jkm_df["date"], y=_jkm_df["percentile"], name="Rolling 1-year percentile",
-            line=dict(color="#a86a12", width=1.5),
-            hovertemplate="Percentile: %{y:.0f}<extra></extra>",
-        ), row=3, col=1)
-        _jfig.add_hline(y=0, line=dict(color="rgba(19,47,56,0.25)", width=1), row=2, col=1)
-        for _jl in (10, 90):
-            _jfig.add_hline(y=_jl, line=dict(color="rgba(19,47,56,0.2)", width=1, dash="dot"), row=3, col=1)
-        _jfig.update_layout(
-            template=PLOTLY_TEMPLATE,
-            paper_bgcolor="#f5f7f4", plot_bgcolor="#f5f7f4",
-            font=dict(color="#3a5560", size=12),
-            height=560,
-            margin=dict(l=60, r=20, t=30, b=40),
-            legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1, font=dict(size=10)),
-            hovermode="x unified",
-            bargap=0,
-        )
-        _jfig.update_xaxes(gridcolor="rgba(19,47,56,0.06)")
-        _jfig.update_yaxes(gridcolor="rgba(19,47,56,0.06)", zeroline=False)
-        _jfig.update_yaxes(title_text="EUR/MWh", row=1, col=1)
-        _jfig.update_yaxes(title_text="Spread", row=2, col=1)
-        _jfig.update_yaxes(title_text="Pctl", range=[0, 100], row=3, col=1)
-        st.plotly_chart(_jfig, width="stretch")
+
+        st.markdown("### TTF vs JKM: Inter-Basin LNG Price Spread")
         st.caption(
-            f"{len(_jkm_df):,} common settlement dates from {_jkm_df['date'].iloc[0]:%d %b %Y} to "
-            f"{_jkm_df['date'].iloc[-1]:%d %b %Y}. Bars: green when TTF is above JKM, red when below. "
-            f"Percentile: rank of each spread within its trailing {_JKM_PCT_D}-day window "
-            f"(dotted lines at the 10th and 90th percentiles)."
+            "European (TTF) and North Asian (JKM) gas benchmarks on a common EUR/MWh basis. "
+            "Spread = TTF minus JKM: positive means a Europe premium for flexible LNG cargoes, "
+            "negative an Asia premium. Front-month futures via Yahoo Finance; JKM converted from USD/MMBtu."
         )
 
-        # Commentary: every number is computed from the aligned series
-        _jkm_text = (
-            f"On {_js_date}, TTF settled at €{_js['ttf']:.2f}/MWh against JKM at "
-            f"€{_js['jkm_eur_mwh']:.2f}/MWh (${_js['jkm_usd_mmbtu']:.3f}/MMBtu), a spread of "
-            f"{eur(_js['spread'], signed=True, decimals=2)}/MWh ({_js['regime']}). Over the trailing {_JKM_AVG_D} days "
-            f"({_js['n_avg']} settlements) the spread averaged {eur(_js['avg'], signed=True, decimals=2)}/MWh. "
-        )
-        if _js_pct_ok:
-            _jkm_text += (
-                f"The latest reading ranks at the {_jkm_ordinal(int(round(_js['percentile'])))} percentile "
-                f"of the trailing one-year distribution, in which TTF priced above JKM on "
-                f"{_js['share_positive']:.0%} of settlements (range {eur(_js['window_min'], signed=True, decimals=1)} to "
-                f"{eur(_js['window_max'], signed=True, decimals=1)}/MWh). "
-            )
-        if _js["spread"] > 0:
-            _jkm_text += (
-                "With TTF above JKM, Europe is outbidding Asia for flexible cargoes on a headline basis, "
-                "which supports deliveries into European terminals and LNG send-out; the incentive is "
-                "effective only to the extent the premium exceeds the shipping cost differential between "
-                "the two destinations."
-            )
-        elif _js["spread"] < 0:
-            _jkm_text += (
-                "With JKM above TTF, the Asian premium tends to pull flexible cargoes away from Europe, "
-                "a headwind for European LNG send-out and storage injection unless the gap is smaller "
-                "than the shipping cost differential between the two destinations."
-            )
-        st.markdown(commentary(_jkm_text, "warn" if _js["spread"] < 0 else "ok"), unsafe_allow_html=True)
+        with st.spinner("Loading TTF, JKM and EUR/USD…"):
+            _jkm_data = _jkm_load()
+        _jkm_df = _jkm_data.get("frame", pd.DataFrame())
 
-        with st.expander("Interpretation: cargo competition between basins", expanded=True):
-            st.markdown("""
+        if _jkm_df.empty:
+            st.warning(
+                "TTF vs JKM spread unavailable"
+                + (f" ({_jkm_data['error']})" if _jkm_data.get("error") else "")
+                + ". Requires Yahoo Finance tickers TTF=F, JKM=F and EURUSD=X."
+            )
+        else:
+            _js = _jkm_summary(_jkm_df)
+            _js_pct_ok = bool(np.isfinite(_js["percentile"]))
+            _js_date = _js["latest_date"].strftime("%d %b %Y")
+
+            _jk1, _jk2, _jk3, _jk4 = st.columns(4)
+            with _jk1:
+                st.markdown(
+                    kpi_card("TTF front month", f"€{_js['ttf']:.2f}/MWh",
+                             delta_span(f"settlement {_js_date}", "blue")),
+                    unsafe_allow_html=True,
+                )
+            with _jk2:
+                st.markdown(
+                    kpi_card("JKM front month", f"€{_js['jkm_eur_mwh']:.2f}/MWh",
+                             delta_span(f"${_js['jkm_usd_mmbtu']:.3f}/MMBtu at EURUSD {_js['eurusd']:.4f}", "blue")),
+                    unsafe_allow_html=True,
+                )
+            with _jk3:
+                st.markdown(
+                    kpi_card("TTF minus JKM", f"{eur(_js['spread'], signed=True, decimals=2)}/MWh",
+                             delta_span(f"{_js['regime']} · {_JKM_AVG_D}-day avg {eur(_js['avg'], signed=True, decimals=2)}",
+                                        "green" if _js["spread"] > 0 else "red")),
+                    unsafe_allow_html=True,
+                )
+            with _jk4:
+                if _js_pct_ok:
+                    _jkm_pct_i = int(round(_js["percentile"]))
+                    _jkm_pct_col = "amber" if (_jkm_pct_i >= 90 or _jkm_pct_i <= 10) else "blue"
+                    st.markdown(
+                        kpi_card("1-year percentile", _jkm_ordinal(_jkm_pct_i),
+                                 delta_span(f"TTF above JKM on {_js['share_positive']:.0%} of "
+                                            f"{_js['n_window']} settlements", _jkm_pct_col)),
+                        unsafe_allow_html=True,
+                    )
+                else:
+                    st.markdown(
+                        kpi_card("1-year percentile", "n/a",
+                                 delta_span(f"needs ≥{_JKM_PCT_MIN} settlements in window", "amber")),
+                        unsafe_allow_html=True,
+                    )
+
+            # Three panels: levels, spread, rolling percentile
+            _jfig = _jkm_subplots(
+                rows=3, cols=1, shared_xaxes=True, vertical_spacing=0.05,
+                row_heights=[0.44, 0.30, 0.26],
+            )
+            _jfig.add_trace(go.Scatter(
+                x=_jkm_df["date"], y=_jkm_df["ttf"], name="TTF (EUR/MWh)",
+                line=dict(color="#c2611a", width=1.6),
+                hovertemplate="TTF: €%{y:.2f}/MWh<extra></extra>",
+            ), row=1, col=1)
+            _jfig.add_trace(go.Scatter(
+                x=_jkm_df["date"], y=_jkm_df["jkm_eur_mwh"], name="JKM (EUR/MWh, converted)",
+                line=dict(color="#2f45c6", width=1.6),
+                customdata=_jkm_df[["jkm_usd_mmbtu"]].to_numpy(),
+                hovertemplate="JKM: €%{y:.2f}/MWh ($%{customdata[0]:.3f}/MMBtu)<extra></extra>",
+            ), row=1, col=1)
+            _jfig.add_trace(go.Bar(
+                x=_jkm_df["date"], y=_jkm_df["spread"], name="TTF minus JKM", showlegend=False,
+                marker_color=["#2f7a47" if v > 0 else "#c2391f" for v in _jkm_df["spread"]],
+                hovertemplate="TTF minus JKM: €%{y:+.2f}/MWh<extra></extra>",
+            ), row=2, col=1)
+            _jfig.add_trace(go.Scatter(
+                x=_jkm_df["date"], y=_jkm_df["percentile"], name="Rolling 1-year percentile",
+                line=dict(color="#a86a12", width=1.5),
+                hovertemplate="Percentile: %{y:.0f}<extra></extra>",
+            ), row=3, col=1)
+            _jfig.add_hline(y=0, line=dict(color="rgba(19,47,56,0.25)", width=1), row=2, col=1)
+            for _jl in (10, 90):
+                _jfig.add_hline(y=_jl, line=dict(color="rgba(19,47,56,0.2)", width=1, dash="dot"), row=3, col=1)
+            _jfig.update_layout(
+                template=PLOTLY_TEMPLATE,
+                paper_bgcolor="#f5f7f4", plot_bgcolor="#f5f7f4",
+                font=dict(color="#3a5560", size=12),
+                height=560,
+                margin=dict(l=60, r=20, t=30, b=40),
+                legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1, font=dict(size=10)),
+                hovermode="x unified",
+                bargap=0,
+            )
+            _jfig.update_xaxes(gridcolor="rgba(19,47,56,0.06)")
+            _jfig.update_yaxes(gridcolor="rgba(19,47,56,0.06)", zeroline=False)
+            _jfig.update_yaxes(title_text="EUR/MWh", row=1, col=1)
+            _jfig.update_yaxes(title_text="Spread", row=2, col=1)
+            _jfig.update_yaxes(title_text="Pctl", range=[0, 100], row=3, col=1)
+            st.plotly_chart(_jfig, width="stretch")
+            st.caption(
+                f"{len(_jkm_df):,} common settlement dates from {_jkm_df['date'].iloc[0]:%d %b %Y} to "
+                f"{_jkm_df['date'].iloc[-1]:%d %b %Y}. Bars: green when TTF is above JKM, red when below. "
+                f"Percentile: rank of each spread within its trailing {_JKM_PCT_D}-day window "
+                f"(dotted lines at the 10th and 90th percentiles)."
+            )
+
+            # Commentary: every number is computed from the aligned series
+            _jkm_text = (
+                f"On {_js_date}, TTF settled at €{_js['ttf']:.2f}/MWh against JKM at "
+                f"€{_js['jkm_eur_mwh']:.2f}/MWh (${_js['jkm_usd_mmbtu']:.3f}/MMBtu), a spread of "
+                f"{eur(_js['spread'], signed=True, decimals=2)}/MWh ({_js['regime']}). Over the trailing {_JKM_AVG_D} days "
+                f"({_js['n_avg']} settlements) the spread averaged {eur(_js['avg'], signed=True, decimals=2)}/MWh. "
+            )
+            if _js_pct_ok:
+                _jkm_text += (
+                    f"The latest reading ranks at the {_jkm_ordinal(int(round(_js['percentile'])))} percentile "
+                    f"of the trailing one-year distribution, in which TTF priced above JKM on "
+                    f"{_js['share_positive']:.0%} of settlements (range {eur(_js['window_min'], signed=True, decimals=1)} to "
+                    f"{eur(_js['window_max'], signed=True, decimals=1)}/MWh). "
+                )
+            if _js["spread"] > 0:
+                _jkm_text += (
+                    "With TTF above JKM, Europe is outbidding Asia for flexible cargoes on a headline basis, "
+                    "which supports deliveries into European terminals and LNG send-out; the incentive is "
+                    "effective only to the extent the premium exceeds the shipping cost differential between "
+                    "the two destinations."
+                )
+            elif _js["spread"] < 0:
+                _jkm_text += (
+                    "With JKM above TTF, the Asian premium tends to pull flexible cargoes away from Europe, "
+                    "a headwind for European LNG send-out and storage injection unless the gap is smaller "
+                    "than the shipping cost differential between the two destinations."
+                )
+            st.markdown(commentary(_jkm_text, "warn" if _js["spread"] < 0 else "ok"), unsafe_allow_html=True)
+
+            with st.expander("Interpretation: cargo competition between basins", expanded=True):
+                st.markdown("""
             **Positive spread (TTF above JKM):** European buyers outbid North Asian buyers for
             flexible, destination-free cargoes (for example US free-on-board volumes). Cargoes
             are drawn towards North-West European regasification terminals, which supports LNG
@@ -1182,8 +1187,8 @@ with tab_jkm:
             constraints instead.
             """)
 
-        with st.expander("Methodology and data caveats", expanded=False):
-            st.markdown(f"""
+            with st.expander("Methodology and data caveats", expanded=False):
+                st.markdown(f"""
             **Series:** TTF front month (Yahoo Finance `TTF=F`, EUR/MWh, through the platform's
             existing TTF loader); JKM front month (`JKM=F`, Platts JKM LNG futures, USD/MMBtu);
             EUR/USD (`EURUSD=X`, USD per EUR). Daily closes, about three years of history.
@@ -1209,10 +1214,10 @@ with tab_jkm:
               contract terms are not modelled.
             """)
 
-    st.caption(
-        "Sources: Yahoo Finance (TTF=F ICE Endex TTF; JKM=F Platts JKM LNG futures; EURUSD=X)"
-        + (f" | Updated {_jkm_data['fetched_at']:%Y-%m-%d %H:%M} UTC" if _jkm_data.get("fetched_at") else "")
-    )
+        st.caption(
+            "Sources: Yahoo Finance (TTF=F ICE Endex TTF; JKM=F Platts JKM LNG futures; EURUSD=X)"
+            + (f" | Updated {_jkm_data['fetched_at']:%Y-%m-%d %H:%M} UTC" if _jkm_data.get("fetched_at") else "")
+        )
 # ── end TAB 5: TTF vs JKM ─────────────────────────────────────────────────────
 
 
